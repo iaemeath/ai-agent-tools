@@ -32,6 +32,7 @@
   import type { CostSummary } from "$lib/tauri/commands";
   import { ExternalLink, GitBranch as GithubIcon, X as XIcon } from "lucide-svelte";
   import logoUrl from "$lib/assets/logo.png";
+  import { i18n } from "$lib/i18n";
 
   let showAbout = $state(false);
   let appVersion = $state("...");
@@ -88,7 +89,7 @@
     <img src={logoUrl} alt="Glyphic" class="w-8 h-8 rounded-lg" />
     <div>
       <h1 class="text-sm font-semibold text-text-primary">Glyphic</h1>
-      <p class="text-xs text-text-muted">AI Config Manager</p>
+      <p class="text-xs text-text-muted">{i18n.t('sidebar.tagline')}</p>
     </div>
   </button>
 
@@ -108,7 +109,7 @@
             <IconComponent size={18} />
           {/if}
         </span>
-        <span>{item.label}</span>
+        <span>{i18n.t(item.labelKey)}</span>
       </button>
     {/each}
   </nav>
@@ -117,7 +118,7 @@
   {#if costSummary}
     <div class="px-4 py-2 border-t border-border" title="Estimated API-equivalent cost — not actual billing">
       <div class="flex items-center justify-between text-xs mb-1">
-        <span class="text-text-muted">Today</span>
+        <span class="text-text-muted">{i18n.t('sidebar.today')}</span>
         <span
           class="font-medium {costSummary.daily_exceeded
             ? 'text-danger'
@@ -127,7 +128,7 @@
         </span>
       </div>
       <div class="flex items-center justify-between text-xs mb-1.5">
-        <span class="text-text-muted">This month</span>
+        <span class="text-text-muted">{i18n.t('sidebar.thisMonth')}</span>
         <span class="font-medium text-text-primary"
           >${costSummary.this_month.toFixed(2)}</span
         >
@@ -145,7 +146,7 @@
         </div>
       {/if}
       {#if costSummary.daily_exceeded || costSummary.monthly_exceeded}
-        <p class="text-[10px] text-danger mt-1">Budget exceeded!</p>
+        <p class="text-[10px] text-danger mt-1">{i18n.t('sidebar.budgetExceeded')}</p>
       {/if}
     </div>
   {/if}
@@ -158,10 +159,10 @@
     >
       {#if currentTheme === "dark"}
         <Sun size={16} />
-        <span>Light Mode</span>
+        <span>{i18n.t('theme.light')}</span>
       {:else}
         <Moon size={16} />
-        <span>Dark Mode</span>
+        <span>{i18n.t('theme.dark')}</span>
       {/if}
     </button>
   </div>
@@ -179,8 +180,8 @@
 
       <img src={logoUrl} alt="Glyphic" class="w-20 h-20 rounded-2xl mx-auto mb-4" />
       <h2 class="text-xl font-bold text-text-primary">Glyphic</h2>
-      <p class="text-sm text-text-muted mt-1">AI Config Manager for Claude Code</p>
-      <p class="text-xs text-text-muted mt-1">Version {appVersion}</p>
+      <p class="text-sm text-text-muted mt-1">{i18n.t('about.tagline')}</p>
+      <p class="text-xs text-text-muted mt-1">{i18n.t('about.version')} {appVersion}</p>
 
       <div class="mt-6 space-y-2">
         <a
@@ -205,9 +206,9 @@
 
       <div class="mt-6 pt-4 border-t border-border">
         <p class="text-xs text-text-muted">
-          Built by <a href="https://caioricciuti.com" target="_blank" rel="noopener" class="text-accent hover:underline">Caio Ricciuti</a>
+          {i18n.t('about.builtBy')} <a href="https://caioricciuti.com" target="_blank" rel="noopener" class="text-accent hover:underline">Caio Ricciuti</a>
         </p>
-        <p class="text-[10px] text-text-muted mt-1">AGPL-3.0 License</p>
+        <p class="text-[10px] text-text-muted mt-1">{i18n.t('about.license')}</p>
       </div>
     </div>
   </div>
