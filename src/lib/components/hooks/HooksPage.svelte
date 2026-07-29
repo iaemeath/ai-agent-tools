@@ -7,6 +7,7 @@
   import ConfirmDialog from "$lib/components/shared/ConfirmDialog.svelte";
   import ProjectPicker from "$lib/components/shared/ProjectPicker.svelte";
   import { getSelectedProjectPath } from "$lib/stores/project-context.svelte";
+  import { i18n } from "$lib/i18n";
   import { Plus, Zap, LayoutGrid } from "lucide-svelte";
   import TemplateGallery from "$lib/components/shared/TemplateGallery.svelte";
 
@@ -75,9 +76,9 @@
     saving = true; saveMessage = null;
     try {
       await api.hooks.set(scope, rawHooks, needsProject ? projectPath ?? undefined : undefined);
-      saveMessage = "Saved!";
+      saveMessage = i18n.t('shared.saved');
       setTimeout(() => (saveMessage = null), 2000);
-    } catch (e) { saveMessage = `Error: ${e}`; }
+    } catch (e) { saveMessage = `${i18n.t('shared.error')}: ${e}`; }
     finally { saving = false; }
   }
 
@@ -139,8 +140,8 @@
 
 <ConfirmDialog
   open={deleteTarget !== null}
-  title="Delete Hook"
-  message="This hook will be removed. Save to apply changes."
+  title={i18n.t('hooks.deleteTitle')}
+  message={i18n.t('hooks.deleteMsg')}
   onconfirm={confirmDeleteHook}
   oncancel={() => (deleteTarget = null)}
 />
@@ -150,7 +151,7 @@
   <div class="flex items-center justify-between px-6 py-3 border-b border-border shrink-0">
     <div class="flex items-center gap-3">
       <div class="flex gap-1 bg-bg-tertiary rounded-lg p-1">
-        {#each [{ id: "global" as const, label: "Global" }, { id: "project" as const, label: "Project" }] as tab}
+        {#each [{ id: "global" as const, label: i18n.t('shared.global') }, { id: "project" as const, label: i18n.t('shared.project') }] as tab}
           <button
             class="px-4 py-1.5 text-sm rounded-md transition-colors {scope === tab.id ? 'bg-bg-secondary text-text-primary' : 'text-text-muted hover:text-text-secondary'}"
             onclick={() => { scope = tab.id; loadHooks(); }}
@@ -163,26 +164,26 @@
     </div>
     <div class="flex items-center gap-3">
       {#if saveMessage}
-        <span class="text-xs {saveMessage.startsWith('Error') ? 'text-danger' : 'text-success'}">{saveMessage}</span>
+        <span class="text-xs {saveMessage.startsWith(i18n.t('shared.error')) ? 'text-danger' : 'text-success'}">{saveMessage}</span>
       {/if}
       <button
         class="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-tertiary border border-border rounded-md text-text-secondary hover:border-accent/30 hover:text-accent transition-colors"
         onclick={() => (galleryOpen = true)}
       >
         <LayoutGrid size={14} />
-        Templates
+        {i18n.t('shared.templates')}
       </button>
       <button
         class="px-4 py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-md transition-colors disabled:opacity-50"
         onclick={saveHooks} disabled={saving}
-      >{saving ? "Saving..." : "Save"}</button>
+      >{saving ? i18n.t('shared.saving') : i18n.t('shared.save')}</button>
     </div>
   </div>
 
   {#if needsProject && !projectPath}
-    <div class="flex items-center justify-center flex-1 text-sm text-text-muted">Select a project</div>
+    <div class="flex items-center justify-center flex-1 text-sm text-text-muted">{i18n.t('shared.selectProject')}</div>
   {:else if loading}
-    <div class="flex items-center justify-center flex-1 text-sm text-text-muted">Loading...</div>
+    <div class="flex items-center justify-center flex-1 text-sm text-text-muted">{i18n.t('shared.loading')}</div>
   {:else}
     <div class="flex flex-1 min-h-0">
       <!-- Event Sidebar -->
@@ -212,8 +213,8 @@
         {#if !selectedEvent}
           <div class="flex flex-col items-center justify-center h-full text-text-muted">
             <Zap size={32} class="opacity-20 mb-3" />
-            <p class="text-sm">Select an event to configure hooks</p>
-            <p class="text-xs mt-1">Hooks run automatically when events occur in Claude Code</p>
+            <p class="text-sm">{i18n.t('hooks.empty')}</p>
+            <p class="text-xs mt-1">{i18n.t('hooks.emptyHint')}</p>
           </div>
         {:else}
           <div>
@@ -239,11 +240,11 @@
             <div class="bg-bg-secondary border border-accent/30 rounded-lg p-4 space-y-3">
               <div class="grid grid-cols-2 gap-3">
                 <label class="block">
-                  <span class="text-xs text-text-muted">Matcher <span class="text-text-muted">(e.g. Bash, Edit, * for all)</span></span>
+                  <span class="text-xs text-text-muted">{i18n.t('hooks.matcher')} <span class="text-text-muted">{i18n.t('hooks.matcherHint')}</span></span>
                   <input type="text" class="w-full mt-1 px-3 py-1.5 text-sm bg-bg-tertiary border border-border rounded-md text-text-primary font-mono focus:outline-none focus:border-accent" placeholder="*" bind:value={newMatcher} />
                 </label>
                 <div>
-                  <span class="text-xs text-text-muted">Type</span>
+                  <span class="text-xs text-text-muted">{i18n.t('shared.type')}</span>
                   <div class="flex gap-1 mt-1" role="group" aria-label="Hook type">
                     {#each (["command", "http", "prompt", "agent"] as const) as type}
                       <button class="px-2.5 py-1.5 text-xs rounded-md transition-colors {newType === type ? 'bg-accent text-white' : 'bg-bg-tertiary text-text-muted'}" onclick={() => (newType = type)}>{type}</button>
@@ -252,12 +253,12 @@
                 </div>
               </div>
               <label class="block">
-                <span class="text-xs text-text-muted">{newType === "command" ? "Command" : newType === "http" ? "URL" : "Prompt"}</span>
+                <span class="text-xs text-text-muted">{newType === "command" ? i18n.t('hooks.command') : newType === "http" ? i18n.t('hooks.url') : i18n.t('hooks.prompt')}</span>
                 <input type="text" class="w-full mt-1 px-3 py-1.5 text-sm bg-bg-tertiary border border-border rounded-md text-text-primary font-mono focus:outline-none focus:border-accent" placeholder={newType === "command" ? "/path/to/script.sh" : newType === "http" ? "https://..." : "Describe what to check..."} bind:value={newValue} />
               </label>
               <div class="flex justify-end gap-2">
-                <button class="px-4 py-1.5 text-sm text-text-muted hover:text-text-secondary" onclick={() => (showAddForm = false)}>Cancel</button>
-                <button class="px-4 py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-md" onclick={addFromForm}>Add</button>
+                <button class="px-4 py-1.5 text-sm text-text-muted hover:text-text-secondary" onclick={() => (showAddForm = false)}>{i18n.t('shared.cancel')}</button>
+                <button class="px-4 py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-md" onclick={addFromForm}>{i18n.t('shared.add')}</button>
               </div>
             </div>
           {:else}
@@ -266,7 +267,7 @@
               onclick={() => (showAddForm = true)}
             >
               <Plus size={16} />
-              Add Hook to {selectedEvent}
+              {i18n.t('hooks.addHookTo', { event: selectedEvent })}
             </button>
           {/if}
 

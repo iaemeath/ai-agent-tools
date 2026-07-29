@@ -5,24 +5,30 @@
 
   const PAGE_TITLE_KEYS: Record<Page, TranslationKey> = {
     skills: "nav.skills",
-    agents: "nav.agents",
     mcp: "nav.mcp",
     hooks: "nav.hooks",
+    agents: "nav.agents",
+    commands: "nav.commands",
     plugins: "nav.plugins",
-    rules: "nav.rules",
     instructions: "nav.instructions",
+    rules: "nav.rules",
     settings: "nav.settings",
+    projects: "nav.projects",
+    library: "nav.library",
   };
 
   const PAGE_DESC_KEYS: Record<Page, TranslationKey> = {
     skills: "desc.skills",
-    agents: "desc.agents",
     mcp: "desc.mcp",
     hooks: "desc.hooks",
+    agents: "desc.agents",
+    commands: "desc.commands",
     plugins: "desc.plugins",
-    rules: "desc.rules",
     instructions: "desc.instructions",
+    rules: "desc.rules",
     settings: "desc.settings",
+    projects: "desc.projects",
+    library: "desc.library",
   };
 
   const currentPage = $derived(getCurrentPage());

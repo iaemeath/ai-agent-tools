@@ -23,7 +23,7 @@ fn rules_dir_for_scope(scope: &str, project_path: Option<&str>) -> Result<PathBu
     }
 }
 
-fn parse_rule_frontmatter(content: &str) -> (Vec<String>, String) {
+pub(crate) fn parse_rule_frontmatter(content: &str) -> (Vec<String>, String) {
     if !content.starts_with("---") {
         return (vec![], content.to_string());
     }

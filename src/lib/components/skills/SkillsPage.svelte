@@ -6,6 +6,7 @@
   import ConfirmDialog from "$lib/components/shared/ConfirmDialog.svelte";
   import { getSelectedProjectPath } from "$lib/stores/project-context.svelte";
   import { renderMarkdown } from "$lib/utils/markdown";
+  import { i18n } from "$lib/i18n";
   import {
     Sparkles, Bot, Plus, Search, X, Trash2,
     Zap, Server, Brain, Shield, Wrench, BookOpen,
@@ -126,7 +127,7 @@
       const pp = needsProject ? projectPath ?? undefined : undefined;
       if (kind === "skills") await api.skills.write(scope, name, editContent, pp);
       else await api.agents.write(scope, name, editContent, pp);
-      saveMessage = "Saved!";
+      saveMessage = i18n.t("shared.saved");
       setTimeout(() => (saveMessage = null), 2000);
       await loadItems();
       if (isNew) {
@@ -134,7 +135,7 @@
         editing = false;
         isNew = false;
       }
-    } catch (e) { saveMessage = `Error: ${e}`; }
+    } catch (e) { saveMessage = `${i18n.t("shared.error")}: ${e}`; }
     finally { saving = false; }
   }
 
@@ -155,8 +156,8 @@
 
 <ConfirmDialog
   open={deleteDialogOpen}
-  title="Delete {isAgent ? 'Agent' : 'Skill'}"
-  message="This {isAgent ? 'agent' : 'skill'} and all supporting files will be permanently deleted."
+  title={isAgent ? i18n.t('skills.deleteTitleAgent') : i18n.t('skills.deleteTitleSkill')}
+  message={isAgent ? i18n.t('skills.deleteMsgAgent') : i18n.t('skills.deleteMsgSkill')}
   onconfirm={deleteItem}
   oncancel={() => (deleteDialogOpen = false)}
 />
@@ -167,24 +168,24 @@
     <!-- Tabs -->
     <div class="p-3 border-b border-border space-y-2">
       <div class="flex gap-1 bg-bg-tertiary rounded-lg p-1">
-        <button class="flex-1 px-2 py-1 text-[10px] rounded transition-colors {scope === 'global' ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => { scope = "global"; loadItems(); }}>Global</button>
-        <button class="flex-1 px-2 py-1 text-[10px] rounded transition-colors {scope === 'project' ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => { scope = "project"; loadItems(); }}>Project</button>
+        <button class="flex-1 px-2 py-1 text-[10px] rounded transition-colors {scope === 'global' ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => { scope = "global"; loadItems(); }}>{i18n.t('shared.global')}</button>
+        <button class="flex-1 px-2 py-1 text-[10px] rounded transition-colors {scope === 'project' ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => { scope = "project"; loadItems(); }}>{i18n.t('shared.project')}</button>
       </div>
       {#if needsProject}
         <ProjectPicker onselect={loadItems} />
       {/if}
       <div class="relative">
         <Search size={14} class="absolute left-2.5 top-2 text-text-muted" />
-        <input type="text" class="w-full pl-8 pr-3 py-1.5 text-xs bg-bg-tertiary border border-border rounded-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent" placeholder="Search..." bind:value={searchQuery} />
+        <input type="text" class="w-full pl-8 pr-3 py-1.5 text-xs bg-bg-tertiary border border-border rounded-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent" placeholder={i18n.t('shared.search')} bind:value={searchQuery} />
       </div>
     </div>
 
     <!-- Item list -->
     <div class="flex-1 overflow-y-auto py-1">
       {#if loading}
-        <p class="text-xs text-text-muted px-3 py-4 text-center">Loading...</p>
+        <p class="text-xs text-text-muted px-3 py-4 text-center">{i18n.t('shared.loading')}</p>
       {:else if needsProject && !projectPath}
-        <p class="text-xs text-text-muted px-3 py-4 text-center">Select a project</p>
+        <p class="text-xs text-text-muted px-3 py-4 text-center">{i18n.t('shared.selectProject')}</p>
       {:else}
         {#each filteredItems as item}
           {@const parsed = parseFrontmatter(item.content)}
@@ -232,14 +233,14 @@
         onclick={startCreate}
       >
         <Plus size={14} />
-        Create
+        {i18n.t('shared.create')}
       </button>
       <button
         class="flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-bg-tertiary border border-border rounded-md text-text-secondary hover:border-accent/30 hover:text-accent transition-colors"
         onclick={() => (galleryOpen = true)}
       >
         <LayoutGrid size={14} />
-        Templates
+        {i18n.t('shared.templates')}
       </button>
     </div>
   </div>
@@ -253,7 +254,7 @@
           <div class="flex items-center gap-3">
             {#if isNew}
               <label class="block">
-                <span class="text-xs text-text-muted">Name</span>
+                <span class="text-xs text-text-muted">{i18n.t('shared.name')}</span>
                 <input type="text" class="ml-2 px-3 py-1 text-sm bg-bg-tertiary border border-border rounded-md text-text-primary font-mono focus:outline-none focus:border-accent" placeholder="my-{kind === 'skills' ? 'skill' : 'agent'}" bind:value={editName} />
               </label>
             {:else}
@@ -262,13 +263,13 @@
           </div>
           <div class="flex items-center gap-2">
             {#if saveMessage}
-              <span class="text-xs {saveMessage.startsWith('Error') ? 'text-danger' : 'text-success'}">{saveMessage}</span>
+              <span class="text-xs {saveMessage.startsWith(i18n.t('shared.error')) ? 'text-danger' : 'text-success'}">{saveMessage}</span>
             {/if}
             <div class="flex gap-1 bg-bg-tertiary rounded-lg p-0.5">
-              <button class="px-2 py-1 text-[10px] rounded {!previewMode ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => (previewMode = false)}>Edit</button>
-              <button class="px-2 py-1 text-[10px] rounded {previewMode ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => (previewMode = true)}>Preview</button>
+              <button class="px-2 py-1 text-[10px] rounded {!previewMode ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => (previewMode = false)}>{i18n.t('shared.edit')}</button>
+              <button class="px-2 py-1 text-[10px] rounded {previewMode ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => (previewMode = true)}>{i18n.t('shared.preview')}</button>
             </div>
-            <button class="px-4 py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-md disabled:opacity-50" onclick={save} disabled={saving || (isNew && !editName.trim())}>{saving ? "..." : "Save"}</button>
+            <button class="px-4 py-1.5 text-sm bg-accent hover:bg-accent-hover text-white rounded-md disabled:opacity-50" onclick={save} disabled={saving || (isNew && !editName.trim())}>{saving ? "..." : i18n.t('shared.save')}</button>
             <button class="p-1 text-text-muted hover:text-text-primary" onclick={() => { editing = false; isNew = false; }} aria-label="Close">
               <X size={16} />
             </button>
@@ -321,9 +322,9 @@
           </div>
           <div class="flex items-center gap-2">
             <button class="px-3 py-1.5 text-xs bg-bg-tertiary border border-border rounded-md text-text-secondary hover:border-accent/30" onclick={startEdit}>
-              Edit
+              {i18n.t('shared.edit')}
             </button>
-            <button class="p-1.5 text-text-muted hover:text-danger rounded" onclick={() => (deleteDialogOpen = true)} aria-label="Delete">
+            <button class="p-1.5 text-text-muted hover:text-danger rounded" onclick={() => (deleteDialogOpen = true)} aria-label={i18n.t('shared.delete')}>
               <Trash2 size={14} />
             </button>
           </div>
@@ -336,7 +337,7 @@
             <div class="bg-bg-secondary border border-border rounded-lg p-3">
               <div class="flex items-center gap-2 text-xs text-text-muted mb-1">
                 <Terminal size={12} />
-                <span>Model</span>
+                <span>{i18n.t('skills.model')}</span>
               </div>
               <p class="text-sm font-medium text-info">{selectedParsed.meta.model}</p>
             </div>
@@ -347,7 +348,7 @@
             <div class="bg-bg-secondary border border-border rounded-lg p-3">
               <div class="flex items-center gap-2 text-xs text-text-muted mb-1">
                 <Zap size={12} />
-                <span>Effort</span>
+                <span>{i18n.t('skills.effort')}</span>
               </div>
               <p class="text-sm font-medium text-warning">{selectedParsed.meta.effort}</p>
             </div>
@@ -358,7 +359,7 @@
             <div class="bg-bg-secondary border border-border rounded-lg p-3">
               <div class="flex items-center gap-2 text-xs text-text-muted mb-1">
                 <Wrench size={12} />
-                <span>Tools</span>
+                <span>{i18n.t('skills.tools')}</span>
               </div>
               <div class="flex flex-wrap gap-1">
                 {#each String(selectedParsed.meta.tools).split(",").map(t => t.trim()) as tool}
@@ -373,7 +374,7 @@
             <div class="bg-bg-secondary border border-border rounded-lg p-3">
               <div class="flex items-center gap-2 text-xs text-text-muted mb-1">
                 <Shield size={12} />
-                <span>Permissions</span>
+                <span>{i18n.t('skills.permissions')}</span>
               </div>
               <p class="text-sm font-medium text-accent">{selectedParsed.meta.permissions}</p>
             </div>
@@ -384,7 +385,7 @@
             <div class="bg-bg-secondary border border-border rounded-lg p-3">
               <div class="flex items-center gap-2 text-xs text-text-muted mb-1">
                 <Brain size={12} />
-                <span>Memory</span>
+                <span>{i18n.t('skills.memory')}</span>
               </div>
               <p class="text-sm font-medium text-success">{selectedParsed.meta.memory} scope</p>
             </div>
@@ -395,7 +396,7 @@
             <div class="bg-bg-secondary border border-border rounded-lg p-3">
               <div class="flex items-center gap-2 text-xs text-text-muted mb-1">
                 <GitFork size={12} />
-                <span>Context</span>
+                <span>{i18n.t('skills.context')}</span>
               </div>
               <p class="text-sm font-medium text-accent">{selectedParsed.meta.context}
                 {#if selectedParsed.meta.agent}
@@ -414,13 +415,13 @@
                 {:else}
                   <Eye size={12} />
                 {/if}
-                <span>Invocation</span>
+                <span>{i18n.t('skills.invocation')}</span>
               </div>
               <p class="text-sm text-text-secondary">
                 {#if selectedParsed.meta["disable-model-invocation"]}
-                  Manual only (/<span class="text-accent">{selected.name}</span>)
+                  {i18n.t('skills.manualOnly')} (/<span class="text-accent">{selected.name}</span>)
                 {:else if selectedParsed.meta["user-invocable"] === false}
-                  Auto only (Claude invokes)
+                  {i18n.t('skills.autoOnly')} (Claude invokes)
                 {:else}
                   /<span class="text-accent">{selected.name}</span>
                   {#if selectedParsed.meta["argument-hint"]}
@@ -436,11 +437,11 @@
             <div class="bg-bg-secondary border border-border rounded-lg p-3">
               <div class="flex items-center gap-2 text-xs text-text-muted mb-1">
                 <BookOpen size={12} />
-                <span>Preloaded Skills</span>
+                <span>{i18n.t('skills.preloadedSkills')}</span>
               </div>
               <div class="flex flex-wrap gap-1">
                 {#each (Array.isArray(selectedParsed.meta.skills) ? selectedParsed.meta.skills : [String(selectedParsed.meta.skills)]) as skill}
-                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-warning/10 text-warning">{skill}</span>
+                  <span class="text-[10px] px-1 py-0.5 rounded bg-warning/10 text-warning">{skill}</span>
                 {/each}
               </div>
             </div>
@@ -451,7 +452,7 @@
             <div class="bg-bg-secondary border border-border rounded-lg p-3">
               <div class="flex items-center gap-2 text-xs text-text-muted mb-1">
                 <Server size={12} />
-                <span>Inline MCP</span>
+                <span>{i18n.t('skills.inlineMcp')}</span>
               </div>
               <p class="text-sm text-accent">Configured</p>
             </div>
@@ -461,7 +462,7 @@
         <!-- Connections visualization -->
         {#if selectedParsed.meta.skills || selectedParsed.meta.mcp || selectedParsed.meta.memory || selectedParsed.meta.hooks}
           <div class="bg-bg-secondary border border-border rounded-lg p-4">
-            <h3 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">Connections</h3>
+            <h3 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">{i18n.t('skills.connections')}</h3>
             <div class="flex items-center gap-2 flex-wrap">
               <div class="px-3 py-1.5 rounded-lg border-2 {isAgent ? 'border-accent bg-accent/5' : 'border-warning bg-warning/5'}">
                 <span class="text-sm font-medium {isAgent ? 'text-accent' : 'text-warning'}">{selected.name}</span>
@@ -495,7 +496,7 @@
 
         <!-- Content preview -->
         <div class="bg-bg-secondary border border-border rounded-lg p-4">
-          <h3 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">Instructions</h3>
+          <h3 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">{i18n.t('skills.instructions')}</h3>
           <div class="md-preview text-sm">
             {@html renderMarkdown(selectedParsed.body || "_No content_")}
           </div>
@@ -506,15 +507,13 @@
       <div class="flex-1 flex flex-col items-center justify-center text-text-muted">
         {#if isAgent}
           <Bot size={32} class="opacity-20 mb-3" />
+          <p class="text-sm">{i18n.t('skills.emptyAgent')}</p>
+          <p class="text-xs mt-1">{i18n.t('skills.emptyHintAgent')}</p>
         {:else}
           <Sparkles size={32} class="opacity-20 mb-3" />
+          <p class="text-sm">{i18n.t('skills.emptySkill')}</p>
+          <p class="text-xs mt-1">{i18n.t('skills.emptyHintSkill')}</p>
         {/if}
-        <p class="text-sm">Select a {isAgent ? "agent" : "skill"} or create a new one</p>
-        <p class="text-xs mt-1">
-          {isAgent
-            ? "Agents are specialized AI assistants with isolated contexts"
-            : "Skills extend Claude's capabilities with custom commands"}
-        </p>
       </div>
     {/if}
   </div>

@@ -10,6 +10,9 @@
   import PluginsPage from "$lib/components/plugins/PluginsPage.svelte";
   import RulesPage from "$lib/components/rules/RulesPage.svelte";
   import InstructionsPage from "$lib/components/instructions/InstructionsPage.svelte";
+  import CommandsPage from "$lib/components/commands/CommandsPage.svelte";
+  import LibraryPage from "$lib/components/library/LibraryPage.svelte";
+  import ProjectsPage from "$lib/components/projects/ProjectsPage.svelte";
   import SettingsPage from "$lib/components/settings/SettingsPage.svelte";
   import { getCurrentPage } from "$lib/stores/navigation.svelte";
 
@@ -41,6 +44,12 @@
         <RulesPage />
       {:else if currentPage === "instructions"}
         <InstructionsPage />
+      {:else if currentPage === "commands"}
+        <CommandsPage />
+      {:else if currentPage === "library"}
+        <LibraryPage />
+      {:else if currentPage === "projects"}
+        <ProjectsPage />
       {:else if currentPage === "settings"}
         <SettingsPage />
       {/if}

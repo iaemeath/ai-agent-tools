@@ -144,8 +144,37 @@ pub fn global_agents_dir() -> PathBuf {
     claude_home().join("agents")
 }
 
+pub fn global_commands_dir() -> PathBuf {
+    claude_home().join("commands")
+}
+
 pub fn global_rules_dir() -> PathBuf {
     claude_home().join("rules")
+}
+
+/// Canonical resource library — the single source of truth that gets symlinked
+/// into global/project config layers. Lives under `~/.claude/library/`; Claude
+/// Code only reads its own known subdirs, so this is invisible to CC.
+pub fn library_dir() -> PathBuf {
+    claude_home().join("library")
+}
+
+/// Kind-specific subdir under the library. `kind` must be skills|agents|rules.
+pub fn library_kind_dir(kind: &str) -> Result<PathBuf, String> {
+    match kind {
+        "skills" => Ok(library_dir().join("skills")),
+        "agents" => Ok(library_dir().join("agents")),
+        "rules" => Ok(library_dir().join("rules")),
+        "commands" => Ok(library_dir().join("commands")),
+        "mcp" => Ok(library_dir().join("mcp")),
+        "hooks" => Ok(library_dir().join("hooks")),
+        _ => Err(format!("invalid library kind: {kind}")),
+    }
+}
+
+/// JSON registry of user-added (custom) project paths for the Projects page.
+pub fn projects_registry_path() -> PathBuf {
+    library_dir().join("projects.json")
 }
 
 pub fn project_hash_to_path(hash: &str) -> String {

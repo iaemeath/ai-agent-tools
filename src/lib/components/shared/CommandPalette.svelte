@@ -12,9 +12,12 @@
     Shield,
     Puzzle,
     Bot,
+    FolderOpen,
+    Library,
     Sun,
     Moon,
     Search,
+    Terminal,
     Command as CommandIcon,
   } from "lucide-svelte";
 
@@ -32,6 +35,9 @@
     shield: Shield,
     puzzle: Puzzle,
     bot: Bot,
+    folderOpen: FolderOpen,
+    library: Library,
+    terminal: Terminal,
   };
 
   interface PaletteAction {

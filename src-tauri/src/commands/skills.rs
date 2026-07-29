@@ -1,7 +1,7 @@
 use crate::paths;
 use serde::Serialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Serialize)]
 pub struct SkillInfo {
@@ -30,6 +30,28 @@ fn agents_dir_for_scope(scope: &str, project_path: Option<&str>) -> Result<PathB
             Ok(PathBuf::from(pp).join(".claude").join("agents"))
         }
         _ => Err(format!("invalid scope: {scope}")),
+    }
+}
+
+/// Remove a definition path safely. If it is a symlink (a deployment pointing
+/// back into the library), remove only the link itself — never follow it into
+/// the canonical source. Guards `delete_skill`/`delete_agent` against wiping a
+/// library item when the user removes a deployed entry from a layer.
+fn remove_definition_dir(path: &Path) -> Result<(), String> {
+    let meta = match fs::symlink_metadata(path) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(format!("failed to stat {}: {e}", path.display())),
+    };
+    if meta.file_type().is_symlink() {
+        fs::remove_file(path)
+            .map_err(|e| format!("failed to remove symlink {}: {e}", path.display()))
+    } else if meta.is_dir() {
+        fs::remove_dir_all(path)
+            .map_err(|e| format!("failed to delete: {e}"))
+    } else {
+        fs::remove_file(path)
+            .map_err(|e| format!("failed to delete: {e}"))
     }
 }
 
@@ -120,11 +142,7 @@ pub fn delete_skill(
 ) -> Result<(), String> {
     let dir = skills_dir_for_scope(&scope, project_path.as_deref())?;
     let skill_dir = dir.join(crate::paths::sanitize_component(&name)?);
-    if skill_dir.exists() {
-        fs::remove_dir_all(&skill_dir)
-            .map_err(|e| format!("failed to delete skill: {e}"))?;
-    }
-    Ok(())
+    remove_definition_dir(&skill_dir)
 }
 
 #[tauri::command]
@@ -135,9 +153,5 @@ pub fn delete_agent(
 ) -> Result<(), String> {
     let dir = agents_dir_for_scope(&scope, project_path.as_deref())?;
     let agent_dir = dir.join(crate::paths::sanitize_component(&name)?);
-    if agent_dir.exists() {
-        fs::remove_dir_all(&agent_dir)
-            .map_err(|e| format!("failed to delete agent: {e}"))?;
-    }
-    Ok(())
+    remove_definition_dir(&agent_dir)
 }

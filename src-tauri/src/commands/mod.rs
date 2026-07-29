@@ -1,8 +1,10 @@
 pub mod hooks;
 pub mod instructions;
+pub mod library;
 pub mod mcp;
 pub mod plugins;
 pub mod projects;
 pub mod rules;
 pub mod settings;
 pub mod skills;
+pub mod slash_commands;

@@ -30,6 +30,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 show_window(&window);
@@ -102,6 +103,10 @@ pub fn run() {
             commands::settings::get_claude_capabilities,
             // Projects
             commands::projects::list_projects,
+            commands::projects::list_all_projects,
+            commands::projects::add_project,
+            commands::projects::remove_project,
+            commands::projects::open_folder,
             // Hooks
             commands::hooks::get_hooks,
             commands::hooks::set_hooks,
@@ -125,12 +130,23 @@ pub fn run() {
             commands::rules::list_rules,
             commands::rules::write_rule,
             commands::rules::delete_rule,
+            // Commands (slash commands)
+            commands::slash_commands::list_commands,
+            commands::slash_commands::write_command,
+            commands::slash_commands::delete_command,
             // Plugins
             commands::plugins::get_installed_plugins,
             commands::plugins::get_blocked_plugins,
             commands::plugins::get_marketplace_plugins,
             commands::plugins::get_install_counts,
             commands::plugins::install_plugin,
+            // Library (canonical resource store + symlink deploy)
+            commands::library::list_library,
+            commands::library::write_library_item,
+            commands::library::delete_library_item,
+            commands::library::list_deployments,
+            commands::library::deploy_library_item,
+            commands::library::undeploy_library_item,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

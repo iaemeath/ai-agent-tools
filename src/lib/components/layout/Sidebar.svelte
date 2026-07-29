@@ -16,8 +16,11 @@
     Shield,
     Puzzle,
     Bot,
+    FolderOpen,
+    Library,
     Sun,
     Moon,
+    Terminal,
   } from "lucide-svelte";
   import { getTheme, toggleTheme } from "$lib/stores/theme.svelte";
   import { ExternalLink, GitBranch as GithubIcon, X as XIcon } from "lucide-svelte";
@@ -38,6 +41,9 @@
     shield: Shield,
     puzzle: Puzzle,
     bot: Bot,
+    folderOpen: FolderOpen,
+    library: Library,
+    terminal: Terminal,
   };
 
   const currentTheme = $derived(getTheme());

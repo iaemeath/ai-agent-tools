@@ -10,6 +10,38 @@ import type {
   HookEventConfig,
 } from "$lib/types";
 
+export type LibraryKind = "skills" | "agents" | "rules" | "commands" | "mcp" | "hooks";
+export type DeployScope = "global" | "project";
+
+export interface LibraryItem {
+  kind: string;
+  name: string;
+  path: string;
+  content: string;
+  pathsFilter: string[];
+}
+
+export interface Deployment {
+  scope: string;
+  projectPath: string | null;
+  projectName: string | null;
+}
+
+export interface ManagedProject {
+  path: string;
+  name: string;
+  source: string; // "scanned" | "registered"
+  exists: boolean;
+  hasMemory: boolean;
+}
+
+export interface CommandInfo {
+  name: string;
+  path: string;
+  scope: string;
+  content: string;
+}
+
 export const api = {
   settings: {
     read: (scope: SettingsScope, projectPath?: string) =>
@@ -22,6 +54,10 @@ export const api = {
 
   projects: {
     list: () => invoke<ProjectInfo[]>("list_projects"),
+    listAll: () => invoke<ManagedProject[]>("list_all_projects"),
+    add: (path: string) => invoke<ManagedProject>("add_project", { path }),
+    remove: (path: string) => invoke<void>("remove_project", { path }),
+    openFolder: (path: string) => invoke<void>("open_folder", { path }),
   },
 
   hooks: {
@@ -81,6 +117,29 @@ export const api = {
       invoke<void>("write_rule", { scope, projectPath, filename, pathsFilter, content }),
     delete: (scope: string, filename: string, projectPath?: string) =>
       invoke<void>("delete_rule", { scope, projectPath, filename }),
+  },
+
+  commands: {
+    list: (scope: string, projectPath?: string) =>
+      invoke<CommandInfo[]>("list_commands", { scope, projectPath }),
+    write: (scope: string, name: string, content: string, projectPath?: string) =>
+      invoke<void>("write_command", { scope, projectPath, name, content }),
+    delete: (scope: string, name: string, projectPath?: string) =>
+      invoke<void>("delete_command", { scope, projectPath, name }),
+  },
+
+  library: {
+    list: (kind: LibraryKind) => invoke<LibraryItem[]>("list_library", { kind }),
+    write: (kind: LibraryKind, name: string, content: string, pathsFilter?: string[]) =>
+      invoke<void>("write_library_item", { kind, name, content, pathsFilter }),
+    delete: (kind: LibraryKind, name: string) =>
+      invoke<void>("delete_library_item", { kind, name }),
+    deployments: (kind: LibraryKind, name: string) =>
+      invoke<Deployment[]>("list_deployments", { kind, name }),
+    deploy: (kind: LibraryKind, name: string, scope: DeployScope, projectPath?: string) =>
+      invoke<void>("deploy_library_item", { kind, name, scope, projectPath }),
+    undeploy: (kind: LibraryKind, name: string, scope: DeployScope, projectPath?: string) =>
+      invoke<void>("undeploy_library_item", { kind, name, scope, projectPath }),
   },
 
   plugins: {

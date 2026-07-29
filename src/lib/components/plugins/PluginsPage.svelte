@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { api } from "$lib/tauri/commands";
   import ConfirmDialog from "$lib/components/shared/ConfirmDialog.svelte";
+  import { i18n } from "$lib/i18n";
   import { Puzzle, Download, Search, Trash2, Package, Star, Clock, Shield } from "lucide-svelte";
 
   interface InstalledPlugin {
@@ -99,11 +100,11 @@
     actionMessage = null;
     try {
       await api.plugins.install(fullName);
-      actionMessage = `Installed ${fullName.split("@")[0]}!`;
+      actionMessage = i18n.t('plugins.installedMsg', { name: fullName.split("@")[0] });
       setTimeout(() => (actionMessage = null), 3000);
       await loadData();
     } catch (e) {
-      actionMessage = `Error: ${e}`;
+      actionMessage = `${i18n.t('shared.error')}: ${e}`;
       setTimeout(() => (actionMessage = null), 5000);
     } finally {
       installing = null;
@@ -115,11 +116,11 @@
     const name = uninstallingPlugin;
     try {
       await api.plugins.install(`uninstall ${name}`); // Use the install command with "uninstall" — hack but works
-      actionMessage = `Uninstalled ${name}!`;
+      actionMessage = i18n.t('plugins.uninstalledMsg', { name });
       setTimeout(() => (actionMessage = null), 3000);
       await loadData();
     } catch (e) {
-      actionMessage = `Error: ${e}`;
+      actionMessage = `${i18n.t('shared.error')}: ${e}`;
     } finally {
       uninstallingPlugin = null;
     }
@@ -133,7 +134,7 @@
 
   function formatDate(dateStr: string): string {
     if (!dateStr) return "";
-    return new Date(dateStr).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" });
+    return new Date(dateStr).toLocaleDateString(i18n.locale === 'zh-CN' ? 'zh-CN' : 'en', { month: "short", day: "numeric", year: "numeric" });
   }
 
   onMount(loadData);
@@ -141,9 +142,9 @@
 
 <ConfirmDialog
   open={uninstallingPlugin !== null}
-  title="Uninstall Plugin"
-  message="'{uninstallingPlugin}' will be removed."
-  confirmLabel="Uninstall"
+  title={i18n.t('plugins.uninstallTitle')}
+  message={i18n.t('plugins.uninstallMsg', { name: uninstallingPlugin ?? '' })}
+  confirmLabel={i18n.t('plugins.uninstall')}
   onconfirm={uninstallPlugin}
   oncancel={() => (uninstallingPlugin = null)}
 />
@@ -153,13 +154,13 @@
   <div class="flex items-center justify-between">
     <div class="flex gap-1 bg-bg-tertiary rounded-lg p-1">
       <button class="px-4 py-1.5 text-sm rounded-md transition-colors {activeTab === 'installed' ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => { activeTab = "installed"; search = ""; }}>
-        Installed
+        {i18n.t('plugins.installed')}
         {#if installed.length > 0}
           <span class="ml-1 text-xs text-accent">{installed.length}</span>
         {/if}
       </button>
       <button class="px-4 py-1.5 text-sm rounded-md transition-colors {activeTab === 'marketplace' ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => { activeTab = "marketplace"; search = ""; }}>
-        Marketplace
+        {i18n.t('plugins.marketplace')}
         {#if installCounts.length > 0}
           <span class="ml-1 text-xs text-text-muted">{installCounts.length}</span>
         {/if}
@@ -167,12 +168,12 @@
     </div>
     <div class="flex items-center gap-3">
       {#if actionMessage}
-        <span class="text-xs {actionMessage.startsWith('Error') ? 'text-danger' : 'text-success'}">{actionMessage}</span>
+        <span class="text-xs {actionMessage.startsWith(i18n.t('shared.error')) ? 'text-danger' : 'text-success'}">{actionMessage}</span>
       {/if}
       {#if blocked.length > 0}
         <span class="text-xs text-text-muted flex items-center gap-1">
           <Shield size={12} />
-          {blocked.length} blocked
+          {i18n.t('plugins.blockedCount', { n: blocked.length })}
         </span>
       {/if}
     </div>
@@ -181,11 +182,11 @@
   <!-- Search -->
   <div class="relative">
     <Search size={14} class="absolute left-3 top-2.5 text-text-muted" />
-    <input type="text" class="w-full pl-9 pr-3 py-2 text-sm bg-bg-secondary border border-border rounded-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent" placeholder="Search {activeTab === 'installed' ? 'installed' : 'marketplace'} plugins..." bind:value={search} />
+    <input type="text" class="w-full pl-9 pr-3 py-2 text-sm bg-bg-secondary border border-border rounded-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent" placeholder={activeTab === 'installed' ? i18n.t('plugins.searchInstalled') : i18n.t('plugins.searchMarketplace')} bind:value={search} />
   </div>
 
   {#if loading}
-    <p class="text-sm text-text-muted">Loading...</p>
+    <p class="text-sm text-text-muted">{i18n.t('shared.loading')}</p>
   {:else if activeTab === "installed"}
     <!-- Installed plugins -->
     {#if filteredInstalled.length > 0}
@@ -205,7 +206,7 @@
               <button
                 class="p-1.5 text-text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
                 onclick={() => (uninstallingPlugin = `${plugin.name}@${plugin.marketplace}`)}
-                aria-label="Uninstall"
+                aria-label={i18n.t('plugins.uninstall')}
               >
                 <Trash2 size={14} />
               </button>
@@ -221,7 +222,7 @@
               </span>
               <span class="px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted">{plugin.scope}</span>
               {#if isBlocked(plugin.name)}
-                <span class="px-1.5 py-0.5 rounded bg-danger/10 text-danger">blocked</span>
+                <span class="px-1.5 py-0.5 rounded bg-danger/10 text-danger">{i18n.t('plugins.blockedBadge')}</span>
               {/if}
             </div>
           </div>
@@ -230,8 +231,8 @@
     {:else}
       <div class="bg-bg-secondary border border-border rounded-lg p-12 text-center">
         <Puzzle size={32} class="mx-auto mb-3 opacity-20 text-text-muted" />
-        <p class="text-sm text-text-muted mb-1">{search ? "No matching plugins" : "No plugins installed"}</p>
-        <p class="text-xs text-text-muted">Browse the marketplace to discover plugins</p>
+        <p class="text-sm text-text-muted mb-1">{search ? i18n.t('plugins.noMatch') : i18n.t('plugins.noneInstalled')}</p>
+        <p class="text-xs text-text-muted">{i18n.t('plugins.noneHint')}</p>
       </div>
     {/if}
 
@@ -239,7 +240,7 @@
     {#if blocked.length > 0}
       <div>
         <h3 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
-          <Shield size={12} /> Blocked
+          <Shield size={12} /> {i18n.t('plugins.blockedHeader')}
         </h3>
         <div class="space-y-1">
           {#each blocked as b}
@@ -270,19 +271,19 @@
               </div>
               <p class="text-xs text-text-muted mt-2">
                 <Download size={10} class="inline" />
-                {formatInstalls(plugin.unique_installs)} installs
+                {i18n.t('plugins.installs', { n: formatInstalls(plugin.unique_installs) })}
               </p>
             </div>
             <div class="mt-3">
               {#if alreadyInstalled}
-                <span class="text-xs text-success">Installed</span>
+                <span class="text-xs text-success">{i18n.t('plugins.installedBadge')}</span>
               {:else}
                 <button
                   class="w-full py-1.5 text-xs bg-accent hover:bg-accent-hover text-white rounded-md transition-colors disabled:opacity-50"
                   onclick={() => installPlugin(plugin.plugin)}
                   disabled={installing === plugin.plugin}
                 >
-                  {installing === plugin.plugin ? "Installing..." : "Install"}
+                  {installing === plugin.plugin ? i18n.t('plugins.installing') : i18n.t('plugins.install')}
                 </button>
               {/if}
             </div>
@@ -292,7 +293,7 @@
     {:else}
       <div class="bg-bg-secondary border border-border rounded-lg p-12 text-center">
         <Search size={32} class="mx-auto mb-3 opacity-20 text-text-muted" />
-        <p class="text-sm text-text-muted">{search ? "No plugins match your search" : "No marketplace data available"}</p>
+        <p class="text-sm text-text-muted">{search ? i18n.t('plugins.noMarketMatch') : i18n.t('plugins.noMarketData')}</p>
       </div>
     {/if}
   {/if}
