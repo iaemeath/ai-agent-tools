@@ -12,6 +12,14 @@ fn parse_json_array(s: Option<String>) -> Option<Vec<String>> {
 
 const RULE_SELECT_FIELDS: &str = "id, name, description, content, paths, tags, source, source_path, is_symlink, symlink_target, is_favorite, created_at, updated_at";
 
+/// Same fields as `RULE_SELECT_FIELDS`, but every column is qualified with the
+/// `rules` table alias `r.`. REQUIRED for any query that JOINs `rules` against
+/// another table that also exposes `id` / `created_at` / `updated_at`
+/// (global_rules, project_rules). Without it SQLite raises
+/// "ambiguous column name: created_at" — the bare `r.{RULE_SELECT_FIELDS}` trick
+/// only prefixes the *first* field (`r.id`), leaving the rest unqualified.
+const RULE_SELECT_FIELDS_QUALIFIED: &str = "r.id, r.name, r.description, r.content, r.paths, r.tags, r.source, r.source_path, r.is_symlink, r.symlink_target, r.is_favorite, r.created_at, r.updated_at";
+
 fn row_to_rule(row: &rusqlite::Row) -> rusqlite::Result<Rule> {
     Ok(Rule {
         id: row.get(0)?,
@@ -206,11 +214,11 @@ pub fn get_global_rules(db: State<'_, Arc<Mutex<Database>>>) -> Result<Vec<Globa
     let db = db.lock().map_err(|e| e.to_string())?;
     let query = format!(
         "SELECT gr.id, gr.rule_id, gr.is_enabled,
-                r.{}
+                {}
          FROM global_rules gr
          JOIN rules r ON gr.rule_id = r.id
          ORDER BY r.name",
-        RULE_SELECT_FIELDS
+        RULE_SELECT_FIELDS_QUALIFIED
     );
     let mut stmt = db.conn().prepare(&query).map_err(|e| e.to_string())?;
 
@@ -290,11 +298,11 @@ pub fn toggle_global_rule(
         .map_err(|e| e.to_string())?;
 
     let query = format!(
-        "SELECT r.{}
+        "SELECT {}
          FROM global_rules gr
          JOIN rules r ON gr.rule_id = r.id
          WHERE gr.id = ?",
-        RULE_SELECT_FIELDS
+        RULE_SELECT_FIELDS_QUALIFIED
     );
     let mut stmt = db_guard.conn().prepare(&query).map_err(|e| e.to_string())?;
     let rule: Rule = stmt
@@ -322,12 +330,12 @@ pub fn get_project_rules(
     let db = db.lock().map_err(|e| e.to_string())?;
     let query = format!(
         "SELECT pr.id, pr.rule_id, pr.is_enabled,
-                r.{}
+                {}
          FROM project_rules pr
          JOIN rules r ON pr.rule_id = r.id
          WHERE pr.project_id = ?
          ORDER BY r.name",
-        RULE_SELECT_FIELDS
+        RULE_SELECT_FIELDS_QUALIFIED
     );
     let mut stmt = db.conn().prepare(&query).map_err(|e| e.to_string())?;
 
@@ -438,12 +446,12 @@ pub fn toggle_project_rule(
     // Get the project path and rule
     let (project_path, rule): (String, Rule) = {
         let query = format!(
-            "SELECT p.path, r.{}
+            "SELECT p.path, {}
              FROM project_rules pr
              JOIN rules r ON pr.rule_id = r.id
              JOIN projects p ON pr.project_id = p.id
              WHERE pr.id = ?",
-            RULE_SELECT_FIELDS
+            RULE_SELECT_FIELDS_QUALIFIED
         );
         let mut stmt = db_guard.conn().prepare(&query).map_err(|e| e.to_string())?;
         stmt.query_row([assignment_id], |row| {

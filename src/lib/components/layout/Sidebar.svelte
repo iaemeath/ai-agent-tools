@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { Library, FolderOpen, Settings, Bot, Zap, Terminal, Sparkles, PanelBottom, Shield, FileText, Plug, PanelLeftClose, PanelLeftOpen, BookOpen, History } from 'lucide-svelte';
+	import { Library, FolderOpen, Settings, Bot, Zap, Terminal, Sparkles, FileText, Plug, PanelLeftClose, PanelLeftOpen, BookOpen, History } from 'lucide-svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { getVersion } from '@tauri-apps/api/app';
 	import { i18n } from '$lib/stores';
@@ -61,6 +61,15 @@
 
 	const navGroups: NavGroup[] = $derived([
 		{
+			label: i18n.t('nav.core'),
+			items: [
+				{ href: '/rules', label: i18n.t('nav.rules'), icon: BookOpen },
+				{ href: '/memory', label: i18n.t('nav.instruction'), icon: FileText },
+				{ href: '/projects', label: i18n.t('nav.projects'), icon: FolderOpen },
+				{ href: '/sessions', label: i18n.t('nav.sessions'), icon: History }
+			]
+		},
+		{
 			label: i18n.t('nav.tools'),
 			items: [
 				{ href: '/skills', label: i18n.t('nav.skills'), icon: Sparkles },
@@ -69,22 +78,6 @@
 				{ href: '/subagents', label: i18n.t('nav.agents'), icon: Bot },
 				{ href: '/commands', label: i18n.t('nav.commands'), icon: Terminal },
 				{ href: '/plugins', label: i18n.t('nav.plugins'), icon: Plug }
-			]
-		},
-		{
-			label: i18n.t('nav.core'),
-			items: [
-				{ href: '/rules', label: i18n.t('nav.rules'), icon: BookOpen },
-				{ href: '/memory', label: i18n.t('nav.instruction'), icon: FileText }
-			]
-		},
-		{
-			label: i18n.t('nav.configure'),
-			items: [
-				{ href: '/projects', label: i18n.t('nav.projects'), icon: FolderOpen },
-				{ href: '/sessions', label: i18n.t('nav.sessions'), icon: History },
-				{ href: '/statusline', label: i18n.t('nav.statusLine'), icon: PanelBottom },
-				{ href: '/permissions', label: i18n.t('nav.permissions'), icon: Shield }
 			]
 		}
 	]);

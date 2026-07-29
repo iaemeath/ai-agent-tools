@@ -1,10 +1,15 @@
 use anyhow::Result;
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-/// Permission scope determines which settings file to read/write
+/// Permission scope determines which settings file to read/write.
+///
+/// NOTE: This module previously held the "permission rules" feature
+/// (allow/deny/ask/defaultMode/additionalDirectories management). That feature
+/// has been removed. What remains is the **shared scope infrastructure**
+/// (`PermissionScope` + `resolve_settings_path`) consumed by the settings layer
+/// — `claude_settings`, hooks, plugins, and (future) skill overrides.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PermissionScope {
@@ -13,49 +18,7 @@ pub enum PermissionScope {
     Local,
 }
 
-/// Permissions from a single scope
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ScopedPermissions {
-    pub scope: String,
-    pub allow: Vec<String>,
-    pub deny: Vec<String>,
-    pub ask: Vec<String>,
-    pub default_mode: Option<String>,
-    pub additional_directories: Vec<String>,
-}
-
-/// All permissions across all three scopes
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AllPermissions {
-    pub user: ScopedPermissions,
-    pub project: Option<ScopedPermissions>,
-    pub local: Option<ScopedPermissions>,
-}
-
-/// Read an existing settings.json file or return an empty object
-fn read_settings_file(path: &Path) -> Result<Value> {
-    if path.exists() {
-        let content = std::fs::read_to_string(path)?;
-        Ok(serde_json::from_str(&content).unwrap_or(json!({})))
-    } else {
-        Ok(json!({}))
-    }
-}
-
-/// Write settings.json file, preserving other settings
-fn write_settings_file(path: &Path, settings: &Value) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    crate::utils::backup::backup_file(path)?;
-    let content = serde_json::to_string_pretty(settings)?;
-    std::fs::write(path, content)?;
-    Ok(())
-}
-
-/// Resolve the settings file path for a given scope
+/// Resolve the settings file path for a given scope.
 pub fn resolve_settings_path(
     scope: &PermissionScope,
     project_path: Option<&Path>,
@@ -79,373 +42,25 @@ pub fn resolve_settings_path(
     }
 }
 
-/// Read permissions from a single settings file
-pub fn read_permissions_from_file(path: &Path, scope: &str) -> Result<ScopedPermissions> {
-    let settings = read_settings_file(path)?;
-
-    let permissions = settings.get("permissions").cloned().unwrap_or(json!({}));
-
-    let allow = extract_string_array(&permissions, "allow");
-    let deny = extract_string_array(&permissions, "deny");
-    let ask = extract_string_array(&permissions, "ask");
-
-    let default_mode = permissions
-        .get("defaultMode")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    let additional_directories = extract_string_array(&permissions, "additionalDirectories");
-
-    Ok(ScopedPermissions {
-        scope: scope.to_string(),
-        allow,
-        deny,
-        ask,
-        default_mode,
-        additional_directories,
-    })
-}
-
-/// Read permissions from all three scopes
-pub fn read_all_permissions(project_path: Option<&Path>) -> Result<AllPermissions> {
-    // User scope (always available)
-    let user_path = resolve_settings_path(&PermissionScope::User, None)?;
-    let user = read_permissions_from_file(&user_path, "user")?;
-
-    // Project + Local scopes (only if project path provided)
-    let (project, local) = if let Some(pp) = project_path {
-        let project_path_buf = resolve_settings_path(&PermissionScope::Project, Some(pp))?;
-        let local_path = resolve_settings_path(&PermissionScope::Local, Some(pp))?;
-
-        let project_perms = if project_path_buf.exists() {
-            Some(read_permissions_from_file(&project_path_buf, "project")?)
-        } else {
-            Some(ScopedPermissions {
-                scope: "project".to_string(),
-                allow: vec![],
-                deny: vec![],
-                ask: vec![],
-                default_mode: None,
-                additional_directories: vec![],
-            })
-        };
-
-        let local_perms = if local_path.exists() {
-            Some(read_permissions_from_file(&local_path, "local")?)
-        } else {
-            Some(ScopedPermissions {
-                scope: "local".to_string(),
-                allow: vec![],
-                deny: vec![],
-                ask: vec![],
-                default_mode: None,
-                additional_directories: vec![],
-            })
-        };
-
-        (project_perms, local_perms)
-    } else {
-        (None, None)
-    };
-
-    Ok(AllPermissions {
-        user,
-        project,
-        local,
-    })
-}
-
-/// Write permission rules for a specific category (allow/deny/ask) to a settings file
-pub fn write_permission_rules(
-    scope: &PermissionScope,
-    project_path: Option<&Path>,
-    category: &str,
-    rules: &[String],
-) -> Result<()> {
-    let path = resolve_settings_path(scope, project_path)?;
-    let mut settings = read_settings_file(&path)?;
-
-    // Ensure permissions object exists
-    if settings.get("permissions").is_none() {
-        settings["permissions"] = json!({});
-    }
-
-    if rules.is_empty() {
-        // Remove the category key if empty
-        if let Some(perms) = settings
-            .get_mut("permissions")
-            .and_then(|v| v.as_object_mut())
-        {
-            perms.remove(category);
-            // If permissions object is now empty, remove it
-            if perms.is_empty() {
-                if let Some(obj) = settings.as_object_mut() {
-                    obj.remove("permissions");
-                }
-            }
-        }
-    } else {
-        settings["permissions"][category] = json!(rules);
-    }
-
-    write_settings_file(&path, &settings)
-}
-
-/// Write the defaultMode setting
-pub fn write_default_mode(
-    scope: &PermissionScope,
-    project_path: Option<&Path>,
-    mode: Option<&str>,
-) -> Result<()> {
-    let path = resolve_settings_path(scope, project_path)?;
-    let mut settings = read_settings_file(&path)?;
-
-    match mode {
-        Some(m) => {
-            if settings.get("permissions").is_none() {
-                settings["permissions"] = json!({});
-            }
-            settings["permissions"]["defaultMode"] = json!(m);
-        }
-        None => {
-            // Remove defaultMode
-            if let Some(perms) = settings
-                .get_mut("permissions")
-                .and_then(|v| v.as_object_mut())
-            {
-                perms.remove("defaultMode");
-            }
-        }
-    }
-
-    write_settings_file(&path, &settings)
-}
-
-/// Write additionalDirectories setting
-pub fn write_additional_directories(
-    scope: &PermissionScope,
-    project_path: Option<&Path>,
-    dirs: &[String],
-) -> Result<()> {
-    let path = resolve_settings_path(scope, project_path)?;
-    let mut settings = read_settings_file(&path)?;
-
-    if dirs.is_empty() {
-        if let Some(perms) = settings
-            .get_mut("permissions")
-            .and_then(|v| v.as_object_mut())
-        {
-            perms.remove("additionalDirectories");
-        }
-    } else {
-        if settings.get("permissions").is_none() {
-            settings["permissions"] = json!({});
-        }
-        settings["permissions"]["additionalDirectories"] = json!(dirs);
-    }
-
-    write_settings_file(&path, &settings)
-}
-
-/// Helper: extract a string array from a JSON value by key
-fn extract_string_array(value: &Value, key: &str) -> Vec<String> {
-    value
-        .get(key)
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|item| item.as_str().map(|s| s.to_string()))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_read_permissions_from_empty_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("settings.json");
-        std::fs::write(&path, "{}").unwrap();
-
-        let perms = read_permissions_from_file(&path, "user").unwrap();
-        assert!(perms.allow.is_empty());
-        assert!(perms.deny.is_empty());
-        assert!(perms.ask.is_empty());
-        assert!(perms.default_mode.is_none());
+    fn test_permission_scope_serialization() {
+        assert_eq!(
+            serde_json::to_string(&PermissionScope::User).unwrap(),
+            "\"user\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PermissionScope::Project).unwrap(),
+            "\"project\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PermissionScope::Local).unwrap(),
+            "\"local\""
+        );
     }
-
-    #[test]
-    fn test_read_permissions_with_rules() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("settings.json");
-        std::fs::write(
-            &path,
-            r#"{
-                "permissions": {
-                    "allow": ["Bash(npm run *)", "Read"],
-                    "deny": ["Bash(curl *)"],
-                    "ask": ["Bash(git push *)"],
-                    "defaultMode": "allowEdits"
-                }
-            }"#,
-        )
-        .unwrap();
-
-        let perms = read_permissions_from_file(&path, "user").unwrap();
-        assert_eq!(perms.allow, vec!["Bash(npm run *)", "Read"]);
-        assert_eq!(perms.deny, vec!["Bash(curl *)"]);
-        assert_eq!(perms.ask, vec!["Bash(git push *)"]);
-        assert_eq!(perms.default_mode, Some("allowEdits".to_string()));
-    }
-
-    #[test]
-    fn test_write_permission_rules() {
-        let dir = tempfile::tempdir().unwrap();
-        let project_path = dir.path();
-
-        // Write to local scope
-        write_permission_rules(
-            &PermissionScope::Local,
-            Some(project_path),
-            "allow",
-            &["Bash(npm run *)".to_string(), "Read".to_string()],
-        )
-        .unwrap();
-
-        let path = project_path.join(".claude").join("settings.local.json");
-        let content = std::fs::read_to_string(&path).unwrap();
-        let json: Value = serde_json::from_str(&content).unwrap();
-
-        let allow = json["permissions"]["allow"].as_array().unwrap();
-        assert_eq!(allow.len(), 2);
-        assert_eq!(allow[0], "Bash(npm run *)");
-    }
-
-    #[test]
-    fn test_write_preserves_other_keys() {
-        let dir = tempfile::tempdir().unwrap();
-        let project_path = dir.path();
-
-        // Create existing settings file with other keys
-        let claude_dir = project_path.join(".claude");
-        std::fs::create_dir_all(&claude_dir).unwrap();
-        let settings_path = claude_dir.join("settings.local.json");
-        std::fs::write(
-            &settings_path,
-            r#"{"hooks":{"PreToolUse":[]},"permissions":{"deny":["Bash(rm -rf *)"]}}"#,
-        )
-        .unwrap();
-
-        // Write new allow rules
-        write_permission_rules(
-            &PermissionScope::Local,
-            Some(project_path),
-            "allow",
-            &["Read".to_string()],
-        )
-        .unwrap();
-
-        let content = std::fs::read_to_string(&settings_path).unwrap();
-        let json: Value = serde_json::from_str(&content).unwrap();
-
-        // Hooks preserved
-        assert!(json.get("hooks").is_some());
-        // Old deny preserved
-        assert_eq!(json["permissions"]["deny"][0], "Bash(rm -rf *)");
-        // New allow added
-        assert_eq!(json["permissions"]["allow"][0], "Read");
-    }
-
-    #[test]
-    fn test_write_default_mode() {
-        let dir = tempfile::tempdir().unwrap();
-        let project_path = dir.path();
-
-        write_default_mode(
-            &PermissionScope::Local,
-            Some(project_path),
-            Some("allowEdits"),
-        )
-        .unwrap();
-
-        let path = project_path.join(".claude").join("settings.local.json");
-        let content = std::fs::read_to_string(&path).unwrap();
-        let json: Value = serde_json::from_str(&content).unwrap();
-
-        assert_eq!(json["permissions"]["defaultMode"], "allowEdits");
-    }
-
-    #[test]
-    fn test_write_additional_directories() {
-        let dir = tempfile::tempdir().unwrap();
-        let project_path = dir.path();
-
-        write_additional_directories(
-            &PermissionScope::Local,
-            Some(project_path),
-            &["/tmp/shared".to_string(), "/opt/data".to_string()],
-        )
-        .unwrap();
-
-        let path = project_path.join(".claude").join("settings.local.json");
-        let content = std::fs::read_to_string(&path).unwrap();
-        let json: Value = serde_json::from_str(&content).unwrap();
-
-        let dirs = json["permissions"]["additionalDirectories"]
-            .as_array()
-            .unwrap();
-        assert_eq!(dirs.len(), 2);
-    }
-
-    #[test]
-    fn test_write_empty_rules_removes_key() {
-        let dir = tempfile::tempdir().unwrap();
-        let project_path = dir.path();
-
-        // Write some rules first
-        write_permission_rules(
-            &PermissionScope::Local,
-            Some(project_path),
-            "allow",
-            &["Read".to_string()],
-        )
-        .unwrap();
-
-        // Now clear them
-        write_permission_rules(&PermissionScope::Local, Some(project_path), "allow", &[]).unwrap();
-
-        let path = project_path.join(".claude").join("settings.local.json");
-        let content = std::fs::read_to_string(&path).unwrap();
-        let json: Value = serde_json::from_str(&content).unwrap();
-
-        // permissions object should be removed when empty
-        assert!(json.get("permissions").is_none());
-    }
-
-    #[test]
-    fn test_read_nonexistent_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("nonexistent.json");
-
-        let perms = read_permissions_from_file(&path, "user").unwrap();
-        assert!(perms.allow.is_empty());
-    }
-
-    #[test]
-    fn test_read_all_permissions_user_only() {
-        // Without project path, only user scope is returned
-        // We can't easily test this without mocking BaseDirs, but we verify the structure
-        let all = read_all_permissions(None);
-        // This may fail in CI if ~/.claude doesn't exist, but the structure is correct
-        assert!(all.is_ok() || all.is_err());
-    }
-
-    // =========================================================================
-    // Additional coverage
-    // =========================================================================
 
     #[test]
     fn test_resolve_settings_path_project_requires_path() {
@@ -459,8 +74,7 @@ mod tests {
 
     #[test]
     fn test_resolve_settings_path_local_requires_path() {
-        let result = resolve_settings_path(&PermissionScope::Local, None);
-        assert!(result.is_err());
+        assert!(resolve_settings_path(&PermissionScope::Local, None).is_err());
     }
 
     #[test]
@@ -480,153 +94,5 @@ mod tests {
         assert!(result.is_ok());
         let path = result.unwrap();
         assert!(path.to_string_lossy().contains("settings.local.json"));
-    }
-
-    #[test]
-    fn test_read_permissions_with_additional_directories() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("settings.json");
-        std::fs::write(
-            &path,
-            r#"{
-                "permissions": {
-                    "additionalDirectories": ["/tmp/shared", "/opt/data"]
-                }
-            }"#,
-        )
-        .unwrap();
-
-        let perms = read_permissions_from_file(&path, "user").unwrap();
-        assert_eq!(perms.additional_directories.len(), 2);
-        assert_eq!(perms.additional_directories[0], "/tmp/shared");
-    }
-
-    #[test]
-    fn test_write_default_mode_removes_when_none() {
-        let dir = tempfile::tempdir().unwrap();
-        let project_path = dir.path();
-
-        // Set a mode first
-        write_default_mode(
-            &PermissionScope::Local,
-            Some(project_path),
-            Some("allowEdits"),
-        )
-        .unwrap();
-
-        // Remove it
-        write_default_mode(&PermissionScope::Local, Some(project_path), None).unwrap();
-
-        let path = project_path.join(".claude").join("settings.local.json");
-        let content = std::fs::read_to_string(&path).unwrap();
-        let json: Value = serde_json::from_str(&content).unwrap();
-        let perms = json.get("permissions").and_then(|p| p.as_object()).unwrap();
-        assert!(perms.get("defaultMode").is_none());
-    }
-
-    #[test]
-    fn test_write_additional_directories_empty_removes_key() {
-        let dir = tempfile::tempdir().unwrap();
-        let project_path = dir.path();
-
-        // Set dirs first
-        write_additional_directories(
-            &PermissionScope::Local,
-            Some(project_path),
-            &["/tmp".to_string()],
-        )
-        .unwrap();
-
-        // Clear them
-        write_additional_directories(&PermissionScope::Local, Some(project_path), &[]).unwrap();
-
-        let path = project_path.join(".claude").join("settings.local.json");
-        let content = std::fs::read_to_string(&path).unwrap();
-        let json: Value = serde_json::from_str(&content).unwrap();
-        if let Some(perms) = json.get("permissions").and_then(|p| p.as_object()) {
-            assert!(perms.get("additionalDirectories").is_none());
-        }
-    }
-
-    #[test]
-    fn test_write_permission_rules_to_project_scope() {
-        let dir = tempfile::tempdir().unwrap();
-        let project_path = dir.path();
-
-        write_permission_rules(
-            &PermissionScope::Project,
-            Some(project_path),
-            "deny",
-            &["Bash(rm -rf *)".to_string()],
-        )
-        .unwrap();
-
-        let path = project_path.join(".claude").join("settings.json");
-        let content = std::fs::read_to_string(&path).unwrap();
-        let json: Value = serde_json::from_str(&content).unwrap();
-        assert_eq!(json["permissions"]["deny"][0], "Bash(rm -rf *)");
-    }
-
-    #[test]
-    fn test_extract_string_array_missing_key() {
-        let val = serde_json::json!({"other": "value"});
-        let result = extract_string_array(&val, "nonexistent");
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn test_extract_string_array_non_array() {
-        let val = serde_json::json!({"key": "not-an-array"});
-        let result = extract_string_array(&val, "key");
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn test_extract_string_array_with_non_strings() {
-        let val = serde_json::json!({"key": ["valid", 42, true, "also_valid"]});
-        let result = extract_string_array(&val, "key");
-        assert_eq!(result, vec!["valid", "also_valid"]);
-    }
-
-    #[test]
-    fn test_permission_scope_serialization() {
-        let scope = PermissionScope::User;
-        let json = serde_json::to_string(&scope).unwrap();
-        assert_eq!(json, "\"user\"");
-
-        let scope = PermissionScope::Project;
-        let json = serde_json::to_string(&scope).unwrap();
-        assert_eq!(json, "\"project\"");
-
-        let scope = PermissionScope::Local;
-        let json = serde_json::to_string(&scope).unwrap();
-        assert_eq!(json, "\"local\"");
-    }
-
-    #[test]
-    fn test_read_all_permissions_with_project_path() {
-        let dir = tempfile::tempdir().unwrap();
-        let project_path = dir.path();
-
-        // Create project settings
-        let claude_dir = project_path.join(".claude");
-        std::fs::create_dir_all(&claude_dir).unwrap();
-        std::fs::write(
-            claude_dir.join("settings.json"),
-            r#"{"permissions": {"allow": ["Read"]}}"#,
-        )
-        .unwrap();
-        std::fs::write(
-            claude_dir.join("settings.local.json"),
-            r#"{"permissions": {"deny": ["Bash(curl *)"]}}"#,
-        )
-        .unwrap();
-
-        let all = read_all_permissions(Some(project_path));
-        // May fail if user home doesn't have .claude, but structure is tested
-        if let Ok(all) = all {
-            assert!(all.project.is_some());
-            assert!(all.local.is_some());
-        }
     }
 }

@@ -1,12 +1,15 @@
 <script lang="ts">
-	import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-svelte';
+	// NOTE: named imports grouped as `{ X, CheckCircle, ... }` make Tailwind v4.2.4's
+	// candidate scanner emit a comma-list that parses as a CSS selector list and throws
+	// "Invalid declaration". Using a namespace import avoids that brace-group candidate.
+	import * as Lucide from 'lucide-svelte';
 	import { notifications, type Notification } from '$lib/stores';
 
 	const icons = {
-		success: CheckCircle,
-		error: AlertCircle,
-		info: Info,
-		warning: AlertTriangle
+		success: Lucide.CheckCircle,
+		error: Lucide.AlertCircle,
+		info: Lucide.Info,
+		warning: Lucide.AlertTriangle
 	};
 
 	const colors = {
@@ -47,7 +50,7 @@
 				class="p-1 hover:opacity-70 transition-opacity flex-shrink-0"
 				aria-label="Dismiss notification"
 			>
-				<X class="w-4 h-4" aria-hidden="true" />
+				<Lucide.X class="w-4 h-4" aria-hidden="true" />
 			</button>
 		</div>
 	{/each}

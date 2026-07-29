@@ -12,8 +12,6 @@ export { dragDrop, type DropTarget } from './dragDrop.svelte';
 export { notifications, type Notification, type NotificationType } from './notifications.svelte';
 export { claudeJson, type ClaudeJsonMcp, type ClaudeJsonProject } from './claudeJson.svelte';
 export { whatsNew, type ReleaseInfo } from './whatsNew.svelte';
-export { statuslineLibrary } from './statuslineLibrary.svelte';
-export { permissionLibrary } from './permissionLibrary.svelte';
 export { memoryLibrary } from './memoryLibrary.svelte';
 export { agentMemoryLibrary } from './agentMemoryLibrary.svelte';
 export { claudeSettingsLibrary } from './claudeSettingsLibrary.svelte';

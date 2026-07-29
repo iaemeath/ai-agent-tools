@@ -48,11 +48,6 @@ vi.mock('$lib/stores', () => ({
 	whatsNew: {
 		showDialog: false
 	},
-	statuslineLibrary: {
-		statuslines: [],
-		isLoading: false,
-		load: vi.fn()
-	},
 	mcpLibrary: {
 		mcps: [],
 		getMcpById: vi.fn()

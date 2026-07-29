@@ -4,7 +4,7 @@
 	import { Sidebar } from '$lib/components/layout';
 	import { Toast } from '$lib/components/shared';
 	import WhatsNewModal from '$lib/components/shared/WhatsNewModal.svelte';
-	import { mcpLibrary, projectsStore, skillLibrary, subagentLibrary, hookLibrary, commandLibrary, statuslineLibrary, ruleLibrary, whatsNew, debugStore } from '$lib/stores';
+	import { mcpLibrary, projectsStore, skillLibrary, subagentLibrary, hookLibrary, commandLibrary, ruleLibrary, whatsNew, debugStore } from '$lib/stores';
 	import { installDebugInterceptor } from '$lib/utils/debugLogger';
 
 	let { children } = $props();
@@ -36,11 +36,6 @@
 				console.error('[Layout] Failed to load secondary stores:', e);
 			});
 		});
-
-		// Priority 3: Low-priority stores after initial paint
-		setTimeout(() => {
-			statuslineLibrary.load();
-		}, 100);
 
 		// Load debug state and install interceptor if enabled
 		debugStore.load().then(() => {

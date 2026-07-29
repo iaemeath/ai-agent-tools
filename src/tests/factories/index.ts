@@ -4,7 +4,6 @@ import type { Skill } from '$lib/types/skill';
 import type { Hook } from '$lib/types/hook';
 import type { SubAgent } from '$lib/types/subagent';
 import type { Command } from '$lib/types/command';
-import type { StatusLine, StatusLineGalleryEntry } from '$lib/types/statusline';
 import type { Repo, RepoItem, ImportResult, SyncResult, RegistryMcpEntry, RegistrySearchResult } from '$lib/types/repo';
 
 let _nextId = 1;
@@ -123,32 +122,6 @@ export function createMockCommand(overrides: Partial<Command> = {}): Command {
 	};
 }
 
-export function createMockStatusLine(overrides: Partial<StatusLine> = {}): StatusLine {
-	const id = overrides.id ?? nextId();
-	return {
-		id,
-		name: `statusline-${id}`,
-		description: null,
-		statuslineType: 'custom',
-		packageName: null,
-		installCommand: null,
-		runCommand: null,
-		rawCommand: null,
-		padding: 1,
-		isActive: false,
-		segmentsJson: null,
-		generatedScript: null,
-		icon: null,
-		author: null,
-		homepageUrl: null,
-		tags: null,
-		source: 'manual',
-		createdAt: now,
-		updatedAt: now,
-		...overrides
-	};
-}
-
 export function createMockRepo(overrides: Partial<Repo> = {}): Repo {
 	const id = overrides.id ?? nextId();
 	return {
@@ -179,22 +152,6 @@ export function createMockRepoItem(overrides: Partial<RepoItem> = {}): RepoItem 
 		isImported: false,
 		createdAt: now,
 		updatedAt: now,
-		...overrides
-	};
-}
-
-export function createMockGalleryEntry(overrides: Partial<StatusLineGalleryEntry> = {}): StatusLineGalleryEntry {
-	return {
-		name: 'gallery-entry',
-		description: 'A gallery entry',
-		author: 'test-author',
-		homepageUrl: null,
-		installCommand: null,
-		runCommand: null,
-		packageName: null,
-		icon: null,
-		tags: null,
-		previewText: null,
 		...overrides
 	};
 }

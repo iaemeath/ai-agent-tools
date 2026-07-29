@@ -15,8 +15,6 @@ describe('stores/index.ts barrel exports', () => {
 		expect(mod.notifications).toBeDefined();
 		expect(mod.claudeJson).toBeDefined();
 		expect(mod.whatsNew).toBeDefined();
-		expect(mod.statuslineLibrary).toBeDefined();
-		expect(mod.permissionLibrary).toBeDefined();
 		expect(mod.memoryLibrary).toBeDefined();
 		expect(mod.claudeSettingsLibrary).toBeDefined();
 		expect(mod.keybindingsLibrary).toBeDefined();

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Project, ProjectSkill, ProjectSubAgent } from '$lib/types';
-	import { goto } from '$app/navigation';
 	import { projectsStore, skillLibrary, subagentLibrary } from '$lib/stores';
 	import { i18n } from '$lib/i18n';
 	import ProjectCard from './ProjectCard.svelte';
@@ -57,10 +56,6 @@
 			: projectsStore.sortedProjects
 	);
 
-	function handleProjectClick(project: Project) {
-		goto('/projects/' + project.id);
-	}
-
 	async function handleFavoriteToggle(project: Project, favorite: boolean) {
 		await projectsStore.toggleFavorite(project.id, favorite);
 	}
@@ -116,7 +111,6 @@
 					preloadedSkills={projectSkillsMap.get(project.id)}
 					preloadedAgents={projectAgentsMap.get(project.id)}
 					onRemove={onRemoveProject}
-					onClick={() => handleProjectClick(project)}
 					onFavoriteToggle={handleFavoriteToggle}
 				/>
 			{/each}
