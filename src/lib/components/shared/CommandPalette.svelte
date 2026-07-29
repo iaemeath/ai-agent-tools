@@ -11,6 +11,7 @@
     Sparkles,
     Shield,
     Puzzle,
+    Bot,
     Sun,
     Moon,
     Search,
@@ -30,6 +31,7 @@
     sparkles: Sparkles,
     shield: Shield,
     puzzle: Puzzle,
+    bot: Bot,
   };
 
   interface PaletteAction {

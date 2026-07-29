@@ -13,7 +13,7 @@
   } from "lucide-svelte";
   import TemplateGallery from "$lib/components/shared/TemplateGallery.svelte";
 
-  let activeTab = $state<"skills" | "agents">("skills");
+  let { kind }: { kind: "skills" | "agents" } = $props();
   let scope = $state<"global" | "project">("global");
   let items = $state<SkillInfo[]>([]);
   let selected = $state<SkillInfo | null>(null);
@@ -35,7 +35,7 @@
 
   const projectPath = $derived(getSelectedProjectPath());
   const needsProject = $derived(scope === "project");
-  const isAgent = $derived(activeTab === "agents");
+  const isAgent = $derived(kind === "agents");
 
   const filteredItems = $derived(
     items.filter((i) => !searchQuery || i.name.toLowerCase().includes(searchQuery.toLowerCase())),
@@ -82,7 +82,7 @@
     loading = true;
     try {
       const pp = needsProject ? projectPath ?? undefined : undefined;
-      items = activeTab === "skills"
+      items = kind === "skills"
         ? await api.skills.list(scope, pp)
         : await api.agents.list(scope, pp);
     } catch (e) { console.error("Failed:", e); items = []; }
@@ -105,7 +105,7 @@
   }
 
   function startCreate() {
-    const type = activeTab === "skills" ? "skill" : "agent";
+    const type = kind === "skills" ? "skill" : "agent";
     const template = type === "skill"
       ? `---\nname: my-${type}\ndescription: What this ${type} does\nuser-invocable: true\n---\n\n# Instructions\n\nDescribe what Claude should do when this ${type} is invoked.\n`
       : `---\nname: my-${type}\ndescription: When to delegate to this agent\nmodel: sonnet\ntools: Read, Glob, Grep\n---\n\n# System Prompt\n\nYou are a specialized assistant that...\n`;
@@ -124,7 +124,7 @@
     saveMessage = null;
     try {
       const pp = needsProject ? projectPath ?? undefined : undefined;
-      if (activeTab === "skills") await api.skills.write(scope, name, editContent, pp);
+      if (kind === "skills") await api.skills.write(scope, name, editContent, pp);
       else await api.agents.write(scope, name, editContent, pp);
       saveMessage = "Saved!";
       setTimeout(() => (saveMessage = null), 2000);
@@ -141,20 +141,13 @@
   async function deleteItem() {
     if (!selected) return;
     try {
-      if (activeTab === "skills") await api.skills.delete(scope, selected.name);
+      if (kind === "skills") await api.skills.delete(scope, selected.name);
       else await api.agents.delete(scope, selected.name);
       selected = null;
       editing = false;
       await loadItems();
     } catch (e) { console.error("Failed:", e); }
     finally { deleteDialogOpen = false; }
-  }
-
-  function handleTabChange(tab: typeof activeTab) {
-    activeTab = tab;
-    selected = null;
-    editing = false;
-    loadItems();
   }
 
   onMount(loadItems);
@@ -173,14 +166,6 @@
   <div class="w-64 shrink-0 border-r border-border flex flex-col bg-bg-secondary">
     <!-- Tabs -->
     <div class="p-3 border-b border-border space-y-2">
-      <div class="flex gap-1 bg-bg-tertiary rounded-lg p-1">
-        <button class="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors {activeTab === 'skills' ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => handleTabChange("skills")}>
-          <Sparkles size={12} /> Skills
-        </button>
-        <button class="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-colors {activeTab === 'agents' ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => handleTabChange("agents")}>
-          <Bot size={12} /> Agents
-        </button>
-      </div>
       <div class="flex gap-1 bg-bg-tertiary rounded-lg p-1">
         <button class="flex-1 px-2 py-1 text-[10px] rounded transition-colors {scope === 'global' ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => { scope = "global"; loadItems(); }}>Global</button>
         <button class="flex-1 px-2 py-1 text-[10px] rounded transition-colors {scope === 'project' ? 'bg-bg-secondary text-text-primary' : 'text-text-muted'}" onclick={() => { scope = "project"; loadItems(); }}>Project</button>
@@ -269,7 +254,7 @@
             {#if isNew}
               <label class="block">
                 <span class="text-xs text-text-muted">Name</span>
-                <input type="text" class="ml-2 px-3 py-1 text-sm bg-bg-tertiary border border-border rounded-md text-text-primary font-mono focus:outline-none focus:border-accent" placeholder="my-{activeTab === 'skills' ? 'skill' : 'agent'}" bind:value={editName} />
+                <input type="text" class="ml-2 px-3 py-1 text-sm bg-bg-tertiary border border-border rounded-md text-text-primary font-mono focus:outline-none focus:border-accent" placeholder="my-{kind === 'skills' ? 'skill' : 'agent'}" bind:value={editName} />
               </label>
             {:else}
               <span class="text-sm font-medium text-text-primary">{selected?.name}</span>
@@ -291,7 +276,7 @@
         </div>
 
         <!-- Help bar for skills -->
-        {#if activeTab === "skills" && !previewMode}
+        {#if kind === "skills" && !previewMode}
           <div class="px-6 py-2 bg-bg-tertiary/50 border-b border-border text-[10px] text-text-muted flex gap-4">
             <span><code class="text-accent">$ARGUMENTS</code> = user input</span>
             <span><code class="text-accent">$0</code>, <code class="text-accent">$1</code> = positional args</span>
@@ -308,7 +293,7 @@
           {:else}
             <textarea
               class="w-full h-full px-4 py-3 text-sm bg-bg-secondary border border-border rounded-lg text-text-primary font-mono resize-none focus:outline-none focus:border-accent"
-              placeholder="---\nname: my-{activeTab === 'skills' ? 'skill' : 'agent'}\ndescription: ...\n---\n\n# Instructions..."
+              placeholder="---\nname: my-{kind === 'skills' ? 'skill' : 'agent'}\ndescription: ...\n---\n\n# Instructions..."
               bind:value={editContent}
             ></textarea>
           {/if}
@@ -421,7 +406,7 @@
           {/if}
 
           <!-- Invocation (skills) -->
-          {#if activeTab === "skills"}
+          {#if kind === "skills"}
             <div class="bg-bg-secondary border border-border rounded-lg p-3">
               <div class="flex items-center gap-2 text-xs text-text-muted mb-1">
                 {#if selectedParsed.meta["user-invocable"] === false}
@@ -537,7 +522,7 @@
 
 <TemplateGallery
   open={galleryOpen}
-  defaultCategory={activeTab === "skills" ? "skill" : "agent"}
+  defaultCategory={kind === "skills" ? "skill" : "agent"}
   onselect={async (template) => {
     const pp = needsProject ? projectPath ?? undefined : undefined;
     const name = template.name.toLowerCase().replace(/\s+/g, "-");

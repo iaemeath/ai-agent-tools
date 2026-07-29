@@ -2,6 +2,7 @@ import type { TranslationKey } from "$lib/i18n";
 
 export type Page =
   | "skills"
+  | "agents"
   | "mcp"
   | "hooks"
   | "plugins"
@@ -17,7 +18,8 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: "skills", label: "Skills & Agents", labelKey: "nav.skills", icon: "sparkles" },
+  { id: "skills", label: "Skills", labelKey: "nav.skills", icon: "sparkles" },
+  { id: "agents", label: "Agents", labelKey: "nav.agents", icon: "bot" },
   { id: "mcp", label: "MCP Servers", labelKey: "nav.mcp", icon: "server" },
   { id: "hooks", label: "Hooks", labelKey: "nav.hooks", icon: "bolt" },
   { id: "plugins", label: "Plugins", labelKey: "nav.plugins", icon: "puzzle" },

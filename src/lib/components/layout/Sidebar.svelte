@@ -15,6 +15,7 @@
     Sparkles,
     Shield,
     Puzzle,
+    Bot,
     Sun,
     Moon,
   } from "lucide-svelte";
@@ -36,6 +37,7 @@
     sparkles: Sparkles,
     shield: Shield,
     puzzle: Puzzle,
+    bot: Bot,
   };
 
   const currentTheme = $derived(getTheme());

@@ -5,6 +5,7 @@
 
   const PAGE_TITLE_KEYS: Record<Page, TranslationKey> = {
     skills: "nav.skills",
+    agents: "nav.agents",
     mcp: "nav.mcp",
     hooks: "nav.hooks",
     plugins: "nav.plugins",
@@ -15,6 +16,7 @@
 
   const PAGE_DESC_KEYS: Record<Page, TranslationKey> = {
     skills: "desc.skills",
+    agents: "desc.agents",
     mcp: "desc.mcp",
     hooks: "desc.hooks",
     plugins: "desc.plugins",

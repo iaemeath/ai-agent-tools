@@ -28,7 +28,9 @@
 
     <div class="flex-1 overflow-hidden">
       {#if currentPage === "skills"}
-        <SkillsPage />
+        <SkillsPage kind={"skills"} />
+      {:else if currentPage === "agents"}
+        <SkillsPage kind={"agents"} />
       {:else if currentPage === "mcp"}
         <McpPage />
       {:else if currentPage === "hooks"}
