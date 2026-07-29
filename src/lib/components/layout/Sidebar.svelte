@@ -6,30 +6,19 @@
     getCurrentPage,
     navigateTo,
   } from "$lib/stores/navigation.svelte";
-  import { api } from "$lib/tauri/commands";
   import {
     BarChart3,
     Settings as SettingsIcon,
     Zap,
     BookOpen,
-    Brain,
     Server,
     Sparkles,
     Shield,
     Puzzle,
-    GitBranch,
-    TerminalSquare,
-    Activity,
-    LayoutGrid,
     Sun,
     Moon,
-    History,
-    Gauge,
-    Keyboard,
-    Network,
   } from "lucide-svelte";
   import { getTheme, toggleTheme } from "$lib/stores/theme.svelte";
-  import type { CostSummary } from "$lib/tauri/commands";
   import { ExternalLink, GitBranch as GithubIcon, X as XIcon } from "lucide-svelte";
   import logoUrl from "$lib/assets/logo.png";
   import { i18n } from "$lib/i18n";
@@ -39,39 +28,21 @@
 
   const currentPage = $derived(getCurrentPage());
 
-  let costSummary = $state<CostSummary | null>(null);
-
   const ICON_MAP: Record<string, typeof BarChart3> = {
-    chart: BarChart3,
     gear: SettingsIcon,
     bolt: Zap,
     book: BookOpen,
-    brain: Brain,
     server: Server,
     sparkles: Sparkles,
     shield: Shield,
     puzzle: Puzzle,
-    git: GitBranch,
-    pipelines: Activity,
-    sessions: History,
-    templates: LayoutGrid,
-    terminal: TerminalSquare,
-    analytics: Activity,
-    savings: Gauge,
-    keybindings: Keyboard,
-    network: Network,
   };
 
   const currentTheme = $derived(getTheme());
 
   onMount(async () => {
     try {
-      const [cost, ver] = await Promise.all([
-        api.budget.getCostSummary(),
-        getVersion(),
-      ]);
-      costSummary = cost;
-      appVersion = ver;
+      appVersion = await getVersion();
     } catch {
       // silent
     }
@@ -113,43 +84,6 @@
       </button>
     {/each}
   </nav>
-
-  <!-- Cost Widget -->
-  {#if costSummary}
-    <div class="px-4 py-2 border-t border-border" title="Estimated API-equivalent cost — not actual billing">
-      <div class="flex items-center justify-between text-xs mb-1">
-        <span class="text-text-muted">{i18n.t('sidebar.today')}</span>
-        <span
-          class="font-medium {costSummary.daily_exceeded
-            ? 'text-danger'
-            : 'text-text-primary'}"
-        >
-          ${costSummary.today.toFixed(2)}
-        </span>
-      </div>
-      <div class="flex items-center justify-between text-xs mb-1.5">
-        <span class="text-text-muted">{i18n.t('sidebar.thisMonth')}</span>
-        <span class="font-medium text-text-primary"
-          >${costSummary.this_month.toFixed(2)}</span
-        >
-      </div>
-      <!-- Mini sparkline -->
-      {#if costSummary.last_7_days.length > 0}
-        {@const max = Math.max(...costSummary.last_7_days, 0.01)}
-        <div class="flex items-end gap-px h-4">
-          {#each costSummary.last_7_days as val}
-            <div
-              class="flex-1 bg-accent/40 rounded-t-sm"
-              style="height: {Math.max((val / max) * 100, 5)}%"
-            ></div>
-          {/each}
-        </div>
-      {/if}
-      {#if costSummary.daily_exceeded || costSummary.monthly_exceeded}
-        <p class="text-[10px] text-danger mt-1">{i18n.t('sidebar.budgetExceeded')}</p>
-      {/if}
-    </div>
-  {/if}
 
   <!-- Theme toggle -->
   <div class="px-4 py-2 border-t border-border">

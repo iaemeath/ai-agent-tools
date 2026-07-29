@@ -8,14 +8,6 @@ default-run = "glyphic"
 name = "glyphic_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
-[[bin]]
-name = "glyphic-filter"
-path = "src/bin/glyphic_filter.rs"
-
-[[bin]]
-name = "glyphic-ctx"
-path = "src/bin/glyphic_ctx.rs"
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

@@ -124,10 +124,6 @@ pub fn claude_desktop_config_path() -> PathBuf {
         .join("claude_desktop_config.json")
 }
 
-pub fn stats_cache_path() -> PathBuf {
-    claude_home().join("stats-cache.json")
-}
-
 pub fn projects_dir() -> PathBuf {
     claude_home().join("projects")
 }

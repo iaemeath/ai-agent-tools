@@ -1,27 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { NAV_ITEMS, navigateTo, type Page } from "$lib/stores/navigation.svelte";
+  import { NAV_ITEMS, navigateTo } from "$lib/stores/navigation.svelte";
   import { toggleTheme, getTheme } from "$lib/stores/theme.svelte";
   import {
     BarChart3,
     Settings,
     Zap,
     BookOpen,
-    Brain,
     Server,
     Sparkles,
     Shield,
     Puzzle,
-    GitBranch,
-    TerminalSquare,
-    Activity,
-    LayoutGrid,
-    History,
-    Gauge,
     Sun,
     Moon,
     Search,
-    Keyboard,
     Command as CommandIcon,
   } from "lucide-svelte";
 
@@ -31,23 +23,13 @@
   let inputEl = $state<HTMLInputElement | null>(null);
 
   const ICON_MAP: Record<string, typeof BarChart3> = {
-    chart: BarChart3,
     gear: Settings,
     bolt: Zap,
     book: BookOpen,
-    brain: Brain,
     server: Server,
     sparkles: Sparkles,
     shield: Shield,
     puzzle: Puzzle,
-    git: GitBranch,
-    pipelines: Activity,
-    sessions: History,
-    templates: LayoutGrid,
-    terminal: TerminalSquare,
-    analytics: Activity,
-    savings: Gauge,
-    keybindings: Keyboard,
   };
 
   interface PaletteAction {
@@ -68,14 +50,6 @@
       category: "navigate" as const,
       handler: () => navigateTo(item.id),
     })),
-    {
-      id: "nav-keybindings",
-      label: "Keybindings",
-      description: "Go to Keybindings",
-      icon: "keybindings",
-      category: "navigate",
-      handler: () => navigateTo("keybindings" as Page),
-    },
     {
       id: "action-theme",
       label: "Toggle Theme",
