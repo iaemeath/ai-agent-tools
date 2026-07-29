@@ -170,7 +170,7 @@ async fn fetch_content_from_url(url: &str) -> Result<String, String> {
     let client = reqwest::Client::new();
     let response = client
         .get(&raw_url)
-        .header("User-Agent", "claude-code-tool-manager/1.0")
+        .header("User-Agent", "claude-code-config-ui/1.0")
         .send()
         .await
         .map_err(|e| format!("Failed to fetch content: {}", e))?;

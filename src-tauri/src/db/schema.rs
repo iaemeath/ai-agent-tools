@@ -728,39 +728,6 @@ impl Database {
             )?;
         }
 
-        // Migration 14: Add spinner_verbs and spinner_verb_config tables
-        let has_spinner_verbs_table: bool = self
-            .conn
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='spinner_verbs'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(false);
-
-        if !has_spinner_verbs_table {
-            self.conn.execute_batch(
-                r#"
-                CREATE TABLE spinner_verbs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    verb TEXT NOT NULL UNIQUE,
-                    is_enabled INTEGER DEFAULT 1,
-                    display_order INTEGER DEFAULT 0,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE TABLE spinner_verb_config (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
-                    mode TEXT NOT NULL DEFAULT 'append' CHECK (mode IN ('append', 'replace')),
-                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-                );
-
-                INSERT OR IGNORE INTO spinner_verb_config (id, mode) VALUES (1, 'append');
-                "#,
-            )?;
-        }
-
         // Migration 15: Add permission_templates table
         let has_permission_templates_table: bool = self
             .conn
@@ -789,98 +756,6 @@ impl Database {
                 CREATE INDEX idx_permission_templates_category ON permission_templates(category);
                 "#,
             )?;
-        }
-
-        // Migration 16: Add docker_hosts, containers, and project_containers tables
-        let has_docker_hosts_table: bool = self
-            .conn
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='docker_hosts'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(false);
-
-        if !has_docker_hosts_table {
-            self.conn.execute_batch(
-                r#"
-                CREATE TABLE docker_hosts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
-                    host_type TEXT NOT NULL CHECK (host_type IN ('local', 'ssh', 'tcp')),
-                    connection_uri TEXT,
-                    ssh_key_path TEXT,
-                    tls_ca_cert TEXT,
-                    tls_cert TEXT,
-                    tls_key TEXT,
-                    is_default INTEGER DEFAULT 0,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-                );
-
-                -- Seed default local Docker host
-                INSERT INTO docker_hosts (name, host_type, is_default)
-                VALUES ('Local Docker', 'local', 1);
-
-                CREATE TABLE containers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
-                    description TEXT,
-                    container_type TEXT NOT NULL CHECK (container_type IN ('devcontainer', 'docker', 'custom')),
-                    docker_host_id INTEGER NOT NULL DEFAULT 1,
-                    docker_container_id TEXT,
-                    image TEXT,
-                    dockerfile TEXT,
-                    devcontainer_json TEXT,
-                    env TEXT,
-                    ports TEXT,
-                    volumes TEXT,
-                    mounts TEXT,
-                    features TEXT,
-                    post_create_command TEXT,
-                    post_start_command TEXT,
-                    working_dir TEXT,
-                    template_id TEXT,
-                    repo_url TEXT,
-                    icon TEXT,
-                    tags TEXT,
-                    is_favorite INTEGER DEFAULT 0,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (docker_host_id) REFERENCES docker_hosts(id) ON DELETE SET DEFAULT
-                );
-
-                CREATE TABLE project_containers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id INTEGER NOT NULL,
-                    container_id INTEGER NOT NULL,
-                    is_default INTEGER DEFAULT 0,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-                    FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE CASCADE,
-                    UNIQUE (project_id, container_id)
-                );
-
-                CREATE INDEX idx_containers_docker_host ON containers(docker_host_id);
-                CREATE INDEX idx_project_containers_project ON project_containers(project_id);
-                CREATE INDEX idx_project_containers_container ON project_containers(container_id);
-                "#,
-            )?;
-        }
-
-        // Migration 17: Add repo_url column to containers table
-        let has_repo_url: bool = self
-            .conn
-            .query_row(
-                "SELECT COUNT(*) > 0 FROM pragma_table_info('containers') WHERE name = 'repo_url'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(false);
-
-        if !has_repo_url {
-            self.conn
-                .execute("ALTER TABLE containers ADD COLUMN repo_url TEXT", [])?;
         }
 
         // Migration 18: Add new hook types and fields to hooks table
@@ -2264,123 +2139,6 @@ impl Database {
         }
     }
 
-    // Spinner Verb methods
-    pub fn get_all_spinner_verbs(&self) -> Result<Vec<crate::db::models::SpinnerVerb>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, verb, is_enabled, display_order, created_at, updated_at
-             FROM spinner_verbs ORDER BY display_order, id",
-        )?;
-
-        let verbs = stmt
-            .query_map([], |row| {
-                Ok(crate::db::models::SpinnerVerb {
-                    id: row.get(0)?,
-                    verb: row.get(1)?,
-                    is_enabled: row.get::<_, i32>(2)? != 0,
-                    display_order: row.get(3)?,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
-                })
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        Ok(verbs)
-    }
-
-    pub fn get_spinner_verb_by_id(&self, id: i64) -> Result<crate::db::models::SpinnerVerb> {
-        self.conn
-            .query_row(
-                "SELECT id, verb, is_enabled, display_order, created_at, updated_at
-             FROM spinner_verbs WHERE id = ?",
-                rusqlite::params![id],
-                |row| {
-                    Ok(crate::db::models::SpinnerVerb {
-                        id: row.get(0)?,
-                        verb: row.get(1)?,
-                        is_enabled: row.get::<_, i32>(2)? != 0,
-                        display_order: row.get(3)?,
-                        created_at: row.get(4)?,
-                        updated_at: row.get(5)?,
-                    })
-                },
-            )
-            .map_err(|e| e.into())
-    }
-
-    pub fn create_spinner_verb(&self, verb: &str) -> Result<crate::db::models::SpinnerVerb> {
-        // Get the next display_order
-        let max_order: i32 = self
-            .conn
-            .query_row(
-                "SELECT COALESCE(MAX(display_order), -1) FROM spinner_verbs",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(-1);
-
-        self.conn.execute(
-            "INSERT INTO spinner_verbs (verb, display_order) VALUES (?, ?)",
-            rusqlite::params![verb, max_order + 1],
-        )?;
-
-        let id = self.conn.last_insert_rowid();
-        self.get_spinner_verb_by_id(id)
-    }
-
-    pub fn update_spinner_verb(
-        &self,
-        id: i64,
-        verb: &str,
-        is_enabled: bool,
-    ) -> Result<crate::db::models::SpinnerVerb> {
-        self.conn.execute(
-            "UPDATE spinner_verbs SET verb = ?, is_enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            rusqlite::params![verb, is_enabled as i32, id],
-        )?;
-
-        self.get_spinner_verb_by_id(id)
-    }
-
-    pub fn delete_spinner_verb(&self, id: i64) -> Result<()> {
-        self.conn.execute(
-            "DELETE FROM spinner_verbs WHERE id = ?",
-            rusqlite::params![id],
-        )?;
-        Ok(())
-    }
-
-    pub fn get_spinner_verb_mode(&self) -> Result<String> {
-        let mode = self
-            .conn
-            .query_row(
-                "SELECT mode FROM spinner_verb_config WHERE id = 1",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .unwrap_or_else(|_| "append".to_string());
-
-        Ok(mode)
-    }
-
-    pub fn set_spinner_verb_mode(&self, mode: &str) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO spinner_verb_config (id, mode, updated_at) VALUES (1, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(id) DO UPDATE SET mode = excluded.mode, updated_at = CURRENT_TIMESTAMP",
-            rusqlite::params![mode],
-        )?;
-        Ok(())
-    }
-
-    pub fn reorder_spinner_verbs(&self, ids: &[i64]) -> Result<()> {
-        for (index, id) in ids.iter().enumerate() {
-            self.conn.execute(
-                "UPDATE spinner_verbs SET display_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                rusqlite::params![index as i32, id],
-            )?;
-        }
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -3100,76 +2858,6 @@ mod tests {
     }
 
     // =========================================================================
-    // Spinner Verb tests
-    // =========================================================================
-
-    #[test]
-    fn test_create_and_get_spinner_verb() {
-        let db = setup_db();
-        let verb = db.create_spinner_verb("Pondering").unwrap();
-        assert_eq!(verb.verb, "Pondering");
-        assert!(verb.is_enabled);
-
-        let fetched = db.get_spinner_verb_by_id(verb.id).unwrap();
-        assert_eq!(fetched.verb, "Pondering");
-    }
-
-    #[test]
-    fn test_update_spinner_verb() {
-        let db = setup_db();
-        let verb = db.create_spinner_verb("Old").unwrap();
-        let updated = db.update_spinner_verb(verb.id, "New", false).unwrap();
-        assert_eq!(updated.verb, "New");
-        assert!(!updated.is_enabled);
-    }
-
-    #[test]
-    fn test_delete_spinner_verb() {
-        let db = setup_db();
-        let verb = db.create_spinner_verb("Temp").unwrap();
-        db.delete_spinner_verb(verb.id).unwrap();
-        assert!(db.get_spinner_verb_by_id(verb.id).is_err());
-    }
-
-    #[test]
-    fn test_get_all_spinner_verbs() {
-        let db = setup_db();
-        db.create_spinner_verb("V1").unwrap();
-        db.create_spinner_verb("V2").unwrap();
-        db.create_spinner_verb("V3").unwrap();
-        let all = db.get_all_spinner_verbs().unwrap();
-        assert_eq!(all.len(), 3);
-    }
-
-    #[test]
-    fn test_spinner_verb_mode() {
-        let db = setup_db();
-        // Default should be append
-        let mode = db.get_spinner_verb_mode().unwrap();
-        assert_eq!(mode, "append");
-
-        db.set_spinner_verb_mode("replace").unwrap();
-        let mode = db.get_spinner_verb_mode().unwrap();
-        assert_eq!(mode, "replace");
-    }
-
-    #[test]
-    fn test_reorder_spinner_verbs() {
-        let db = setup_db();
-        let v1 = db.create_spinner_verb("A").unwrap();
-        let v2 = db.create_spinner_verb("B").unwrap();
-        let v3 = db.create_spinner_verb("C").unwrap();
-
-        // Reverse order
-        db.reorder_spinner_verbs(&[v3.id, v2.id, v1.id]).unwrap();
-
-        let all = db.get_all_spinner_verbs().unwrap();
-        assert_eq!(all[0].verb, "C");
-        assert_eq!(all[1].verb, "B");
-        assert_eq!(all[2].verb, "A");
-    }
-
-    // =========================================================================
     // Cascade delete tests
     // =========================================================================
 
@@ -3382,26 +3070,6 @@ mod tests {
     // Docker hosts table seeding test
     // =========================================================================
 
-    #[test]
-    fn test_docker_hosts_default_seeded() {
-        let db = setup_db();
-        let count: i64 = db
-            .conn()
-            .query_row("SELECT COUNT(*) FROM docker_hosts", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(count, 1);
-
-        let name: String = db
-            .conn()
-            .query_row(
-                "SELECT name FROM docker_hosts WHERE is_default = 1",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(name, "Local Docker");
-    }
-
     // =========================================================================
     // App settings default values
     // =========================================================================
@@ -3608,22 +3276,6 @@ mod tests {
     }
 
     // =========================================================================
-    // Spinner verb auto-incrementing display_order
-    // =========================================================================
-
-    #[test]
-    fn test_spinner_verb_auto_display_order() {
-        let db = setup_db();
-        let v1 = db.create_spinner_verb("First").unwrap();
-        let v2 = db.create_spinner_verb("Second").unwrap();
-        let v3 = db.create_spinner_verb("Third").unwrap();
-
-        assert_eq!(v1.display_order, 0);
-        assert_eq!(v2.display_order, 1);
-        assert_eq!(v3.display_order, 2);
-    }
-
-    // =========================================================================
     // StatusLine raw command type
     // =========================================================================
 
@@ -3652,70 +3304,6 @@ mod tests {
         assert_eq!(sl.raw_command, Some("echo 'model: $MODEL'".to_string()));
         assert!(sl.generated_script.is_some());
         assert_eq!(sl.padding, 0); // default
-    }
-
-    // =========================================================================
-    // Containers table exists and constraints work
-    // =========================================================================
-
-    #[test]
-    fn test_containers_table_exists() {
-        let db = setup_db();
-        db.conn()
-            .execute(
-                "INSERT INTO containers (name, container_type, docker_host_id, image) VALUES ('test-c', 'docker', 1, 'alpine')",
-                [],
-            )
-            .unwrap();
-        let id = db.conn().last_insert_rowid();
-
-        let name: String = db
-            .conn()
-            .query_row("SELECT name FROM containers WHERE id = ?", [id], |row| {
-                row.get(0)
-            })
-            .unwrap();
-        assert_eq!(name, "test-c");
-    }
-
-    #[test]
-    fn test_project_containers_table() {
-        let db = setup_db();
-
-        // Create project and container
-        db.conn()
-            .execute(
-                "INSERT INTO projects (name, path) VALUES ('proj', '/tmp/proj')",
-                [],
-            )
-            .unwrap();
-        let proj_id = db.conn().last_insert_rowid();
-
-        db.conn()
-            .execute(
-                "INSERT INTO containers (name, container_type, docker_host_id) VALUES ('c1', 'docker', 1)",
-                [],
-            )
-            .unwrap();
-        let container_id = db.conn().last_insert_rowid();
-
-        // Assign container to project
-        db.conn()
-            .execute(
-                "INSERT INTO project_containers (project_id, container_id) VALUES (?, ?)",
-                [proj_id, container_id],
-            )
-            .unwrap();
-
-        let count: i64 = db
-            .conn()
-            .query_row(
-                "SELECT COUNT(*) FROM project_containers WHERE project_id = ?",
-                [proj_id],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(count, 1);
     }
 
     // =========================================================================
@@ -3806,12 +3394,6 @@ mod tests {
         db.delete_statusline(99999).unwrap();
     }
 
-    #[test]
-    fn test_delete_nonexistent_spinner_verb() {
-        let db = setup_db();
-        db.delete_spinner_verb(99999).unwrap();
-    }
-
     // =========================================================================
     // Remove global items that don't exist
     // =========================================================================
@@ -3844,18 +3426,6 @@ mod tests {
     fn test_remove_gateway_mcp_nonexistent() {
         let db = setup_db();
         db.remove_gateway_mcp(99999).unwrap();
-    }
-
-    // =========================================================================
-    // Spinner verb mode edge cases
-    // =========================================================================
-
-    #[test]
-    fn test_set_spinner_verb_mode_idempotent() {
-        let db = setup_db();
-        db.set_spinner_verb_mode("replace").unwrap();
-        db.set_spinner_verb_mode("replace").unwrap();
-        assert_eq!(db.get_spinner_verb_mode().unwrap(), "replace");
     }
 
     // =========================================================================
@@ -4001,13 +3571,4 @@ mod tests {
         assert_eq!(skill_count, 0);
     }
 
-    // =========================================================================
-    // Spinner verb reorder with empty list
-    // =========================================================================
-
-    #[test]
-    fn test_reorder_spinner_verbs_empty() {
-        let db = setup_db();
-        db.reorder_spinner_verbs(&[]).unwrap();
-    }
 }

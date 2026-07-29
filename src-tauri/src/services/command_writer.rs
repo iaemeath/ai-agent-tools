@@ -1,5 +1,4 @@
 use crate::db::models::Command;
-use crate::utils::opencode_paths::get_opencode_paths;
 use anyhow::Result;
 use directories::BaseDirs;
 use std::path::Path;
@@ -113,88 +112,6 @@ pub fn write_project_command(project_path: &Path, command: &Command) -> Result<(
 /// Delete a command from a project's Claude config ({project}/.claude/)
 pub fn delete_project_command(project_path: &Path, command: &Command) -> Result<()> {
     delete_command_file(project_path, command)
-}
-
-// ============================================================================
-// OpenCode Support
-// ============================================================================
-// OpenCode uses a slightly different structure: .opencode/command/{name}.md
-// OpenCode frontmatter format: description, agent, model, subtask
-
-/// Generate markdown content for an OpenCode command (.opencode/command/name.md)
-/// OpenCode uses different frontmatter keys than Claude Code
-pub(crate) fn generate_command_markdown_opencode(command: &Command) -> String {
-    let mut frontmatter = String::from("---\n");
-
-    if let Some(ref desc) = command.description {
-        if !desc.is_empty() {
-            frontmatter.push_str(&format!("description: {}\n", desc));
-        }
-    }
-
-    // OpenCode uses 'model' same as Claude Code
-    if let Some(ref model) = command.model {
-        if !model.is_empty() {
-            frontmatter.push_str(&format!("model: {}\n", model));
-        }
-    }
-
-    // Note: OpenCode also supports 'agent' and 'subtask' but we don't have those fields
-    // in our Command struct yet. They can be added later if needed.
-
-    frontmatter.push_str("---\n\n");
-    format!("{}{}", frontmatter, command.content)
-}
-
-/// Write a command to OpenCode's format
-/// Commands go to {base_path}/command/{name}.md
-pub fn write_command_file_opencode(base_path: &Path, command: &Command) -> Result<()> {
-    let command_dir = base_path.join("command");
-    std::fs::create_dir_all(&command_dir)?;
-
-    let file_path = command_dir.join(format!("{}.md", command.name));
-    crate::utils::backup::backup_file(&file_path)?;
-    let content = generate_command_markdown_opencode(command);
-    std::fs::write(file_path, content)?;
-
-    Ok(())
-}
-
-/// Delete a command from OpenCode's format
-pub fn delete_command_file_opencode(base_path: &Path, command: &Command) -> Result<()> {
-    let file_path = base_path
-        .join("command")
-        .join(format!("{}.md", command.name));
-
-    if file_path.exists() {
-        std::fs::remove_file(&file_path)?;
-    }
-
-    Ok(())
-}
-
-/// Write a command to the global OpenCode config (~/.config/opencode/)
-pub fn write_global_command_opencode(command: &Command) -> Result<()> {
-    let paths = get_opencode_paths()?;
-    write_command_file_opencode(&paths.config_dir, command)
-}
-
-/// Delete a command from the global OpenCode config
-pub fn delete_global_command_opencode(command: &Command) -> Result<()> {
-    let paths = get_opencode_paths()?;
-    delete_command_file_opencode(&paths.config_dir, command)
-}
-
-/// Write a command to a project's OpenCode config ({project}/.opencode/)
-pub fn write_project_command_opencode(project_path: &Path, command: &Command) -> Result<()> {
-    let opencode_dir = project_path.join(".opencode");
-    write_command_file_opencode(&opencode_dir, command)
-}
-
-/// Delete a command from a project's OpenCode config
-pub fn delete_project_command_opencode(project_path: &Path, command: &Command) -> Result<()> {
-    let opencode_dir = project_path.join(".opencode");
-    delete_command_file_opencode(&opencode_dir, command)
 }
 
 // ============================================================================
@@ -368,51 +285,6 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // =========================================================================
-    // OpenCode format tests
-    // =========================================================================
-
-    #[test]
-    fn test_write_command_file_opencode() {
-        let temp_dir = TempDir::new().unwrap();
-        let command = sample_command();
-
-        write_command_file_opencode(temp_dir.path(), &command).unwrap();
-
-        // OpenCode uses "command" not "commands"
-        let expected_path = temp_dir.path().join("command").join("test-command.md");
-        assert!(expected_path.exists());
-    }
-
-    #[test]
-    fn test_delete_command_file_opencode() {
-        let temp_dir = TempDir::new().unwrap();
-        let command = sample_command();
-
-        write_command_file_opencode(temp_dir.path(), &command).unwrap();
-        let file_path = temp_dir.path().join("command").join("test-command.md");
-        assert!(file_path.exists());
-
-        delete_command_file_opencode(temp_dir.path(), &command).unwrap();
-        assert!(!file_path.exists());
-    }
-
-    #[test]
-    fn test_generate_command_markdown_opencode() {
-        let command = sample_command();
-        let md = generate_command_markdown_opencode(&command);
-
-        // OpenCode format should have description and model
-        assert!(md.starts_with("---\n"));
-        assert!(md.contains("description: A test slash command\n"));
-        assert!(md.contains("model: sonnet\n"));
-        assert!(md.contains("---\n\nExecute this task for the user."));
-
-        // OpenCode should NOT have Claude-specific fields
-        assert!(!md.contains("allowed-tools:"));
-        assert!(!md.contains("argument-hint:"));
-    }
-
     #[test]
     fn test_delete_command_file_cleans_up_empty_dir() {
         let temp_dir = TempDir::new().unwrap();
@@ -479,42 +351,6 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_command_markdown_opencode_minimal() {
-        let command = sample_minimal_command();
-        let md = generate_command_markdown_opencode(&command);
-
-        assert!(!md.contains("description:"));
-        assert!(!md.contains("model:"));
-        assert!(md.contains("Minimal content."));
-    }
-
-    #[test]
-    fn test_generate_command_markdown_opencode_empty_model() {
-        let mut command = sample_command();
-        command.model = Some("".to_string());
-        let md = generate_command_markdown_opencode(&command);
-        assert!(!md.contains("model:"));
-    }
-
-    #[test]
-    fn test_generate_command_markdown_opencode_empty_description() {
-        let mut command = sample_command();
-        command.description = Some("".to_string());
-        let md = generate_command_markdown_opencode(&command);
-        assert!(!md.contains("description:"));
-    }
-
-    #[test]
-    fn test_delete_command_file_opencode_nonexistent() {
-        let temp_dir = TempDir::new().unwrap();
-        let command = sample_command();
-
-        // Should not error when file doesn't exist
-        let result = delete_command_file_opencode(temp_dir.path(), &command);
-        assert!(result.is_ok());
-    }
-
-    #[test]
     fn test_write_project_command() {
         let temp_dir = TempDir::new().unwrap();
         let command = sample_command();
@@ -543,53 +379,5 @@ mod tests {
             .join("commands")
             .join("test-command.md");
         assert!(!file_path.exists());
-    }
-
-    #[test]
-    fn test_write_project_command_opencode() {
-        let temp_dir = TempDir::new().unwrap();
-        let command = sample_command();
-
-        write_project_command_opencode(temp_dir.path(), &command).unwrap();
-
-        let expected_path = temp_dir
-            .path()
-            .join(".opencode")
-            .join("command")
-            .join("test-command.md");
-        assert!(expected_path.exists());
-    }
-
-    #[test]
-    fn test_delete_project_command_opencode() {
-        let temp_dir = TempDir::new().unwrap();
-        let command = sample_command();
-
-        write_project_command_opencode(temp_dir.path(), &command).unwrap();
-        delete_project_command_opencode(temp_dir.path(), &command).unwrap();
-
-        let file_path = temp_dir
-            .path()
-            .join(".opencode")
-            .join("command")
-            .join("test-command.md");
-        assert!(!file_path.exists());
-    }
-
-    #[test]
-    fn test_opencode_command_content_uses_correct_format() {
-        let temp_dir = TempDir::new().unwrap();
-        let command = sample_command();
-
-        write_command_file_opencode(temp_dir.path(), &command).unwrap();
-
-        let file_path = temp_dir.path().join("command").join("test-command.md");
-        let content = std::fs::read_to_string(file_path).unwrap();
-
-        // Verify OpenCode format
-        assert!(content.contains("description: A test slash command"));
-        assert!(content.contains("model: sonnet"));
-        assert!(!content.contains("allowed-tools:"));
-        assert!(!content.contains("argument-hint:"));
     }
 }

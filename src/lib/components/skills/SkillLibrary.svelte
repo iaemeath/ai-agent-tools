@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Skill } from '$lib/types';
-	import { skillLibrary } from '$lib/stores';
+	import { skillLibrary, notifications } from '$lib/stores';
 	import SkillCard from './SkillCard.svelte';
 	import { SearchBar } from '$lib/components/shared';
 	import { Sparkles } from 'lucide-svelte';
@@ -20,6 +20,40 @@
 			skillLibrary.updateSkill({ ...skill, isFavorite: favorite });
 		} catch (error) {
 			console.error('Failed to toggle favorite:', error);
+		}
+	}
+
+	function isSkillEnabled(skill: Skill): boolean {
+		if (skillLibrary.selectedScope === 'user') {
+			const row = skillLibrary.globalSkills.find((g) => g.skillId === skill.id);
+			return row?.isEnabled ?? false;
+		}
+		const row = skillLibrary.projectSkills.find((p) => p.skillId === skill.id);
+		return row?.isEnabled ?? false;
+	}
+
+	async function handleToggleEnable(skill: Skill, enabled: boolean) {
+		try {
+			if (skillLibrary.selectedScope === 'user') {
+				const row = skillLibrary.globalSkills.find((g) => g.skillId === skill.id);
+				if (row) {
+					await skillLibrary.toggleGlobalSkill(row.id, enabled);
+				} else if (enabled) {
+					await skillLibrary.addGlobalSkill(skill.id);
+				}
+			} else {
+				const projectId = skillLibrary.currentProjectId;
+				if (projectId == null) return;
+				const row = skillLibrary.projectSkills.find((p) => p.skillId === skill.id);
+				if (row) {
+					await skillLibrary.toggleProjectSkill(row.id, enabled);
+				} else if (enabled) {
+					await skillLibrary.assignToProject(projectId, skill.id);
+				}
+			}
+		} catch (e) {
+			console.error('Failed to toggle skill enable:', e);
+			notifications.error(i18n.t('skill.updateFailed'));
 		}
 	}
 </script>
@@ -66,6 +100,8 @@
 					{skill}
 					{onEdit}
 					{onDelete}
+					enabled={isSkillEnabled(skill)}
+					onToggleEnable={handleToggleEnable}
 					onFavoriteToggle={handleFavoriteToggle}
 				/>
 			{/each}

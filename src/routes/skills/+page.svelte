@@ -1,17 +1,49 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Header } from '$lib/components/layout';
 	import { SkillLibrary, SkillForm, SkillFilesEditor } from '$lib/components/skills';
-	import { ConfirmDialog } from '$lib/components/shared';
-	import { skillLibrary, notifications } from '$lib/stores';
+	import { ConfirmDialog, ScopeBar } from '$lib/components/shared';
+	import { skillLibrary, projectsStore, notifications } from '$lib/stores';
 	import { i18n } from '$lib/i18n';
 	import type { Skill } from '$lib/types';
-	import { Plus } from 'lucide-svelte';
+	import { User, FolderOpen } from 'lucide-svelte';
 
 	let editTab = $state<'details' | 'files'>('details');
 
 	let showAddSkill = $state(false);
 	let editingSkill = $state<Skill | null>(null);
 	let deletingSkill = $state<Skill | null>(null);
+
+	const skillScopes = $derived([
+		{ key: 'user', label: i18n.t('skill.scopeUser'), description: i18n.t('skill.scopeUserDesc'), icon: User },
+		{
+			key: 'project',
+			label: i18n.t('skill.scopeProject'),
+			description: i18n.t('skill.scopeProjectDesc'),
+			icon: FolderOpen
+		}
+	]);
+
+	onMount(async () => {
+		await projectsStore.loadProjects();
+		await skillLibrary.load();
+		await skillLibrary.loadGlobalSkills();
+		if (projectsStore.selectedProjectPath) {
+			await skillLibrary.setProjectPath(projectsStore.selectedProjectPath);
+		}
+	});
+
+	async function handleRefresh() {
+		await skillLibrary.load();
+		await skillLibrary.loadGlobalSkills();
+		if (projectsStore.selectedProjectPath) await skillLibrary.loadProjectSkills();
+		notifications.success(i18n.t('skill.refreshed'));
+	}
+
+	function scopeCount(scope: string): number {
+		if (scope === 'user') return skillLibrary.globalSkills.filter((g) => g.isEnabled).length;
+		return skillLibrary.projectSkills.filter((p) => p.isEnabled).length;
+	}
 
 	async function handleCreateSkill(values: any) {
 		try {
@@ -53,12 +85,18 @@
 />
 
 <div class="flex-1 overflow-auto p-6">
-	<div class="flex justify-end mb-6">
-		<button onclick={() => (showAddSkill = true)} class="btn btn-primary">
-			<Plus class="w-4 h-4 mr-2" />
-			{i18n.t('skill.addSkill')}
-		</button>
-	</div>
+	<ScopeBar
+		projectPath={projectsStore.selectedProjectPath}
+		projects={projectsStore.projects}
+		selectedScope={skillLibrary.selectedScope}
+		scopes={skillScopes}
+		getCount={scopeCount}
+		noProjectLabel={i18n.t('settings.scopeNoProject')}
+		refreshLabel={i18n.t('skill.refresh')}
+		onProjectChange={(p) => skillLibrary.setProjectPath(p)}
+		onScopeSelect={(s) => skillLibrary.setScope(s as 'user' | 'project')}
+		onRefresh={handleRefresh}
+	/>
 
 	<SkillLibrary
 		onEdit={(skill) => (editingSkill = skill)}

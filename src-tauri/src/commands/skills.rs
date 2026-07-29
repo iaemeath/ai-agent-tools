@@ -339,9 +339,6 @@ pub fn add_global_skill(db: State<'_, Arc<Mutex<Database>>>, skill_id: i64) -> R
     for editor in &enabled_editors {
         match editor.as_str() {
             "claude_code" => skill_writer::write_global_skill(&skill).map_err(|e| e.to_string())?,
-            "opencode" => {
-                skill_writer::write_global_skill_opencode(&skill).map_err(|e| e.to_string())?
-            }
             unknown => warn!(
                 "[Skills] Unknown editor type '{}' for skill '{}'. Skipping.",
                 unknown, skill.name
@@ -378,9 +375,6 @@ pub fn remove_global_skill(
         match editor.as_str() {
             "claude_code" => {
                 skill_writer::delete_global_skill(&skill).map_err(|e| e.to_string())?
-            }
-            "opencode" => {
-                skill_writer::delete_global_skill_opencode(&skill).map_err(|e| e.to_string())?
             }
             unknown => warn!(
                 "[Skills] Unknown editor type '{}' for skill '{}'. Skipping.",
@@ -427,9 +421,6 @@ pub fn toggle_global_skill(
                 "claude_code" => {
                     skill_writer::write_global_skill(&skill).map_err(|e| e.to_string())?
                 }
-                "opencode" => {
-                    skill_writer::write_global_skill_opencode(&skill).map_err(|e| e.to_string())?
-                }
                 unknown => warn!(
                     "[Skills] Unknown editor type '{}' for skill '{}'. Skipping.",
                     unknown, skill.name
@@ -439,9 +430,6 @@ pub fn toggle_global_skill(
             match editor.as_str() {
                 "claude_code" => {
                     skill_writer::delete_global_skill(&skill).map_err(|e| e.to_string())?
-                }
-                "opencode" => {
-                    skill_writer::delete_global_skill_opencode(&skill).map_err(|e| e.to_string())?
                 }
                 unknown => warn!(
                     "[Skills] Unknown editor type '{}' for skill '{}'. Skipping.",
@@ -494,10 +482,6 @@ pub fn assign_skill_to_project(
         match editor.as_str() {
             "claude_code" => skill_writer::write_project_skill(Path::new(&project_path), &skill)
                 .map_err(|e| e.to_string())?,
-            "opencode" => {
-                skill_writer::write_project_skill_opencode(Path::new(&project_path), &skill)
-                    .map_err(|e| e.to_string())?
-            }
             unknown => warn!(
                 "[Skills] Unknown editor type '{}' for skill '{}'. Skipping.",
                 unknown, skill.name
@@ -547,10 +531,6 @@ pub fn remove_skill_from_project(
         match editor.as_str() {
             "claude_code" => skill_writer::delete_project_skill(Path::new(&project_path), &skill)
                 .map_err(|e| e.to_string())?,
-            "opencode" => {
-                skill_writer::delete_project_skill_opencode(Path::new(&project_path), &skill)
-                    .map_err(|e| e.to_string())?
-            }
             unknown => warn!(
                 "[Skills] Unknown editor type '{}' for skill '{}'. Skipping.",
                 unknown, skill.name
@@ -603,10 +583,6 @@ pub fn toggle_project_skill(
                     skill_writer::write_project_skill(Path::new(&project_path), &skill)
                         .map_err(|e| e.to_string())?
                 }
-                "opencode" => {
-                    skill_writer::write_project_skill_opencode(Path::new(&project_path), &skill)
-                        .map_err(|e| e.to_string())?
-                }
                 unknown => warn!(
                     "[Skills] Unknown editor type '{}' for skill '{}'. Skipping.",
                     unknown, skill.name
@@ -616,10 +592,6 @@ pub fn toggle_project_skill(
             match editor.as_str() {
                 "claude_code" => {
                     skill_writer::delete_project_skill(Path::new(&project_path), &skill)
-                        .map_err(|e| e.to_string())?
-                }
-                "opencode" => {
-                    skill_writer::delete_project_skill_opencode(Path::new(&project_path), &skill)
                         .map_err(|e| e.to_string())?
                 }
                 unknown => warn!(

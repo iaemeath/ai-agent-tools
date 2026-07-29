@@ -7,6 +7,11 @@ class McpLibraryState {
 	error = $state<string | null>(null);
 	searchQuery = $state('');
 	selectedType = $state<'all' | 'stdio' | 'sse' | 'http'>('all');
+	selectedScope = $state<'user' | 'project'>('user');
+
+	setScope(scope: 'user' | 'project') {
+		this.selectedScope = scope;
+	}
 
 	filteredMcps = $derived.by(() => {
 		let result = this.mcps;

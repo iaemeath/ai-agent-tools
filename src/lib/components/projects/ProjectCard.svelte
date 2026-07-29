@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Project, ProjectSkill, ProjectSubAgent } from '$lib/types';
 	import { projectsStore, notifications, skillLibrary, subagentLibrary } from '$lib/stores';
+	import { i18n } from '$lib/i18n';
 	import { FolderOpen, Trash2, RefreshCw, ExternalLink, Plug, Sparkles, Bot } from 'lucide-svelte';
 	import { open } from '@tauri-apps/plugin-shell';
 	import { ActionMenu, ActionMenuItem, FavoriteButton, Badge } from '$lib/components/shared';
@@ -84,17 +85,10 @@
 				<h3 class="font-medium text-gray-900 dark:text-white truncate">
 					{project.name}
 				</h3>
-				{#if project.editorType === 'opencode'}
-					<Badge variant="auto">
-						<span class="w-3 h-3 rounded-sm bg-emerald-500 text-white flex items-center justify-center text-[8px] font-bold" aria-hidden="true">O</span>
-						OpenCode
-					</Badge>
-				{:else}
-					<Badge variant="info">
-						<span class="w-3 h-3 rounded-sm bg-primary-500 text-white flex items-center justify-center text-[8px] font-bold" aria-hidden="true">C</span>
-						Claude
-					</Badge>
-				{/if}
+				<Badge variant="info">
+					<span class="w-3 h-3 rounded-sm bg-primary-500 text-white flex items-center justify-center text-[8px] font-bold" aria-hidden="true">C</span>
+					Claude
+				</Badge>
 				{#if project.hasMcpFile}
 					<Badge variant="success">.mcp.json</Badge>
 				{/if}
@@ -112,26 +106,26 @@
 					onclick={() => onFavoriteToggle(project, !project.isFavorite)}
 				/>
 			{/if}
-			<ActionMenu bind:this={actionMenu} label="Actions for {project.name}">
-				<ActionMenuItem icon={RefreshCw} label="Sync Config" onclick={async () => {
+			<ActionMenu bind:this={actionMenu} label={i18n.t('project.card.actionsFor', { name: project.name })}>
+				<ActionMenuItem icon={RefreshCw} label={i18n.t('project.card.syncConfig')} onclick={async () => {
 					try {
 						await projectsStore.syncProjectConfig(project.id);
-						notifications.success('Config synced');
+						notifications.success(i18n.t('project.card.configSynced'));
 					} catch {
-						notifications.error('Failed to sync config');
+						notifications.error(i18n.t('project.card.syncFailed'));
 					}
 					actionMenu.close();
 				}} />
-				<ActionMenuItem icon={ExternalLink} label="Open Folder" onclick={async () => {
+				<ActionMenuItem icon={ExternalLink} label={i18n.t('project.card.openFolder')} onclick={async () => {
 					try {
 						await open(project.path);
 					} catch {
-						notifications.error('Failed to open folder');
+						notifications.error(i18n.t('project.card.openFolderFailed'));
 					}
 					actionMenu.close();
 				}} />
 				{#if onRemove}
-					<ActionMenuItem icon={Trash2} label="Remove" variant="danger" onclick={() => {
+					<ActionMenuItem icon={Trash2} label={i18n.t('project.card.remove')} variant="danger" onclick={() => {
 						onRemove(project);
 						actionMenu.close();
 					}} />
@@ -145,7 +139,7 @@
 		<div class="flex items-center gap-1.5 text-sm">
 			<Plug class="w-4 h-4 text-purple-400" aria-hidden="true" />
 			{#if totalMcpCount > 0}
-				<span class="text-gray-600 dark:text-gray-300" aria-label="{enabledMcpCount} of {totalMcpCount} MCPs enabled">
+				<span class="text-gray-600 dark:text-gray-300" aria-label={i18n.t('project.card.mcpsEnabled', { enabled: enabledMcpCount, total: totalMcpCount })}>
 					{enabledMcpCount}/{totalMcpCount}
 				</span>
 			{:else}
@@ -156,7 +150,7 @@
 		<div class="flex items-center gap-1.5 text-sm">
 			<Sparkles class="w-4 h-4 text-yellow-400" aria-hidden="true" />
 			{#if totalSkillCount > 0}
-				<span class="text-gray-600 dark:text-gray-300" aria-label="{enabledSkillCount} of {totalSkillCount} skills enabled">
+				<span class="text-gray-600 dark:text-gray-300" aria-label={i18n.t('project.card.skillsEnabled', { enabled: enabledSkillCount, total: totalSkillCount })}>
 					{enabledSkillCount}/{totalSkillCount}
 				</span>
 			{:else}
@@ -167,7 +161,7 @@
 		<div class="flex items-center gap-1.5 text-sm">
 			<Bot class="w-4 h-4 text-cyan-400" aria-hidden="true" />
 			{#if totalAgentCount > 0}
-				<span class="text-gray-600 dark:text-gray-300" aria-label="{enabledAgentCount} of {totalAgentCount} agents enabled">
+				<span class="text-gray-600 dark:text-gray-300" aria-label={i18n.t('project.card.agentsEnabled', { enabled: enabledAgentCount, total: totalAgentCount })}>
 					{enabledAgentCount}/{totalAgentCount}
 				</span>
 			{:else}

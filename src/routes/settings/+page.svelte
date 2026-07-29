@@ -6,7 +6,7 @@
 	import { SETTINGS_CATEGORIES } from '$lib/components/settings';
 	import { onboarding } from '$lib/stores/onboarding.svelte';
 	import type { Component } from 'svelte';
-	import { i18n } from '$lib/i18n';
+	import { i18n, type TranslationKey } from '$lib/i18n';
 
 	onMount(() => {
 		onboarding.completeStep('explore-settings');
@@ -44,32 +44,24 @@
 		}
 	}
 
-	const TAB_SUBTITLES: Record<string, string> = {
-		'models': 'Configure model defaults, output behavior, and git attribution',
-		'security': 'Configure bash command isolation, network access, and security settings',
-		'plugins': 'Manage enabled plugins and custom marketplace sources',
-		'environment': 'Configure environment variables for Claude Code runtime',
-		'interface': 'Control visual and interaction preferences for Claude Code',
-		'files': 'Configure custom @ file autocomplete suggestions',
-		'session': 'Configure session cleanup, update channels, and plans directory',
-		'auto-mode': 'Configure auto permission mode behavior and trust boundaries',
-		'authentication': 'Configure scripts that provide authentication credentials and API keys',
-		'agent-teams': 'Configure team members, models, and display mode for agent teams',
-		'mcp-approval': 'Control which project-level MCP servers are automatically approved',
-		'keybindings': 'Customize keyboard shortcuts for Claude Code',
-		'spinner-verbs': 'Customize the action verbs shown in Claude Code\'s spinner',
-		'admin': 'View enterprise managed settings deployed by your IT administrator',
-		'cli': 'CLI startup flags reference and scheduling commands',
-		'cloud-sync': 'Sync your Claude Code config across machines via GitHub',
-		'editor-sync': 'Configure editors, servers, tokens, paths, and backups',
-		'containers': 'Configure Claude Code integration for dev containers'
+	const TAB_SUBTITLES: Record<string, TranslationKey> = {
+		'models': 'settings.subtitle.models',
+		'security': 'settings.subtitle.security',
+		'environment': 'settings.subtitle.environment',
+		'interface': 'settings.subtitle.interface',
+		'files': 'settings.subtitle.files',
+		'session': 'settings.subtitle.session',
+		'auto-mode': 'settings.subtitle.auto-mode',
+		'authentication': 'settings.subtitle.authentication',
+		'agent-teams': 'settings.subtitle.agent-teams',
+		'mcp-approval': 'settings.subtitle.mcp-approval',
+		'keybindings': 'settings.subtitle.keybindings'
 	};
 
 	// Lazy-load tab components — only the active tab's code is fetched
 	const TAB_LOADERS: Record<string, () => Promise<{ default: Component }>> = {
 		'models': () => import('$lib/components/settings/tabs/SettingsModelsTab.svelte'),
 		'security': () => import('$lib/components/settings/tabs/SettingsSecurityTab.svelte'),
-		'plugins': () => import('$lib/components/settings/tabs/SettingsPluginsTab.svelte'),
 		'environment': () => import('$lib/components/settings/tabs/SettingsEnvironmentTab.svelte'),
 		'interface': () => import('$lib/components/settings/tabs/SettingsInterfaceTab.svelte'),
 		'files': () => import('$lib/components/settings/tabs/SettingsFilesTab.svelte'),
@@ -79,12 +71,6 @@
 		'agent-teams': () => import('$lib/components/settings/tabs/SettingsAgentTeamsTab.svelte'),
 		'mcp-approval': () => import('$lib/components/settings/tabs/SettingsMcpApprovalTab.svelte'),
 		'keybindings': () => import('$lib/components/settings/tabs/SettingsKeybindingsTab.svelte'),
-		'spinner-verbs': () => import('$lib/components/settings/tabs/SettingsSpinnerVerbsTab.svelte'),
-		'admin': () => import('$lib/components/settings/tabs/SettingsAdminTab.svelte'),
-		'cli': () => import('$lib/components/settings/tabs/SettingsCliTab.svelte'),
-		'cloud-sync': () => import('$lib/components/settings/tabs/SettingsCloudSyncTab.svelte'),
-		'editor-sync': () => import('$lib/components/settings/tabs/SettingsEditorSyncTab.svelte'),
-		'containers': () => import('$lib/components/settings/tabs/SettingsContainersTab.svelte'),
 	};
 
 	const activeTabPromise = $derived(TAB_LOADERS[activeTab]?.());
@@ -92,7 +78,7 @@
 
 <Header
 	title={i18n.t('page.settings.title')}
-	subtitle={TAB_SUBTITLES[activeTab] ?? i18n.t('page.settings.subtitle')}
+	subtitle={i18n.t(TAB_SUBTITLES[activeTab] ?? 'page.settings.subtitle')}
 />
 
 <div class="flex-1 overflow-hidden flex">
@@ -119,7 +105,7 @@
 								: 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700/50'}"
 					>
 						<category.icon class="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-						{category.label}
+						{i18n.t(category.label)}
 					</button>
 				{/each}
 			</div>
@@ -146,7 +132,7 @@
 								: 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700/50'}"
 					>
 						<category.icon class="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-						{category.label}
+						{i18n.t(category.label)}
 					</button>
 				{/each}
 			</div>

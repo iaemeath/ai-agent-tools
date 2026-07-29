@@ -1,21 +1,26 @@
 <script lang="ts">
 	import type { SubAgent } from '$lib/types';
 	import { Bot, MoreVertical, Edit, Trash2, Heart } from 'lucide-svelte';
+	import { i18n } from '$lib/i18n';
 
 	type Props = {
 		subagent: SubAgent;
 		showActions?: boolean;
+		enabled?: boolean;
 		onEdit?: (subagent: SubAgent) => void;
 		onDelete?: (subagent: SubAgent) => void;
 		onFavoriteToggle?: (subagent: SubAgent, favorite: boolean) => void;
+		onToggleEnable?: (subagent: SubAgent, enabled: boolean) => void;
 	};
 
 	let {
 		subagent,
 		showActions = true,
+		enabled = false,
 		onEdit,
 		onDelete,
-		onFavoriteToggle
+		onFavoriteToggle,
+		onToggleEnable
 	}: Props = $props();
 
 	let showMenu = $state(false);
@@ -154,4 +159,32 @@
 			</div>
 		{/if}
 	</div>
+
+	{#if onToggleEnable}
+		<div
+			class="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/60"
+		>
+			<span class="text-xs font-medium text-gray-500 dark:text-gray-400">
+				{i18n.t('common.enabled')}
+			</span>
+			<button
+				type="button"
+				role="switch"
+				aria-checked={enabled}
+				onclick={(e) => {
+					e.stopPropagation();
+					onToggleEnable(subagent, !enabled);
+				}}
+				class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors {enabled
+					? 'bg-primary-600'
+					: 'bg-gray-300 dark:bg-gray-600'}"
+			>
+				<span
+					class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform {enabled
+						? 'translate-x-4'
+						: 'translate-x-0.5'}"
+				></span>
+			</button>
+		</div>
+	{/if}
 </div>

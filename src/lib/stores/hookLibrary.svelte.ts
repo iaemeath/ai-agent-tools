@@ -7,8 +7,11 @@ import type {
 	HookEventType,
 	Project
 } from '$lib/types';
+import { projectsStore } from './projects.svelte';
 
 export type HookViewMode = 'all' | 'byScope';
+
+type HookScope = 'user' | 'project';
 
 export interface ProjectWithHooks {
 	project: Project;
@@ -19,6 +22,8 @@ class HookLibraryState {
 	hooks = $state<Hook[]>([]);
 	templates = $state<Hook[]>([]);
 	globalHooks = $state<GlobalHook[]>([]);
+	projectHooks = $state<ProjectHook[]>([]);
+	selectedScope = $state<HookScope>('user');
 	projectsWithHooks = $state<ProjectWithHooks[]>([]);
 	isLoading = $state(false);
 	error = $state<string | null>(null);
@@ -130,6 +135,39 @@ class HookLibraryState {
 		}
 	}
 
+	setScope(scope: HookScope) {
+		this.selectedScope = scope;
+	}
+
+	get currentProjectId(): number | null {
+		const project = projectsStore.projects.find((p) => p.path === projectsStore.selectedProjectPath);
+		return project?.id ?? null;
+	}
+
+	async setProjectPath(path: string | null) {
+		projectsStore.setSelectedProjectPath(path);
+		if (!path) {
+			this.selectedScope = 'user';
+			this.projectHooks = [];
+			return;
+		}
+		await this.loadProjectHooks();
+	}
+
+	async loadProjectHooks() {
+		const projectId = this.currentProjectId;
+		if (projectId == null) {
+			this.projectHooks = [];
+			return;
+		}
+		try {
+			this.projectHooks = await this.getProjectHooks(projectId);
+		} catch (e) {
+			console.error('[hookLibrary] Failed to load project hooks:', e);
+			this.projectHooks = [];
+		}
+	}
+
 	async loadAllProjectHooks() {
 		console.log('[hookLibrary] Loading all project hooks...');
 		try {
@@ -208,16 +246,19 @@ class HookLibraryState {
 	async assignToProject(projectId: number, hookId: number): Promise<void> {
 		console.log(`[hookLibrary] Assigning hook id=${hookId} to project id=${projectId}`);
 		await invoke('assign_hook_to_project', { projectId, hookId });
+		await this.loadProjectHooks();
 	}
 
 	async removeFromProject(projectId: number, hookId: number): Promise<void> {
 		console.log(`[hookLibrary] Removing hook id=${hookId} from project id=${projectId}`);
 		await invoke('remove_hook_from_project', { projectId, hookId });
+		await this.loadProjectHooks();
 	}
 
 	async toggleProjectHook(assignmentId: number, enabled: boolean): Promise<void> {
 		console.log(`[hookLibrary] Toggling project hook assignment id=${assignmentId} enabled=${enabled}`);
 		await invoke('toggle_project_hook', { assignmentId, enabled });
+		await this.loadProjectHooks();
 	}
 
 	async getProjectHooks(projectId: number): Promise<ProjectHook[]> {
@@ -235,38 +276,6 @@ class HookLibraryState {
 
 	setEventFilter(eventType: HookEventType | '') {
 		this.eventFilter = eventType;
-	}
-
-	// ============================================================================
-	// Export and Sound Hook Methods
-	// ============================================================================
-
-	async exportToJson(hookIds: number[]): Promise<string> {
-		console.log(`[hookLibrary] Exporting ${hookIds.length} hooks to JSON`);
-		return await invoke<string>('export_hooks_to_json', { hookIds });
-	}
-
-	async exportToClipboard(hookIds: number[]): Promise<void> {
-		const json = await this.exportToJson(hookIds);
-		await navigator.clipboard.writeText(json);
-		console.log(`[hookLibrary] Exported ${hookIds.length} hooks to clipboard`);
-	}
-
-	async createSoundNotificationHooks(
-		events: HookEventType[],
-		soundPath: string,
-		method: 'shell' | 'python'
-	): Promise<Hook[]> {
-		console.log(`[hookLibrary] Creating sound hooks for events: ${events.join(', ')}`);
-		const hooks = await invoke<Hook[]>('create_sound_notification_hooks', {
-			events,
-			soundPath,
-			method
-		});
-		this.hooks = [...this.hooks, ...hooks];
-		await this.loadGlobalHooks();
-		console.log(`[hookLibrary] Created ${hooks.length} sound hooks`);
-		return hooks;
 	}
 
 	async duplicate(id: number, newName: string): Promise<Hook> {

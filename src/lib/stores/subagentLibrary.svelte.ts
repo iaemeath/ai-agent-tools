@@ -1,9 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { SubAgent, CreateSubAgentRequest, GlobalSubAgent, ProjectSubAgent } from '$lib/types';
+import { projectsStore } from './projects.svelte';
+
+type SubAgentScope = 'user' | 'project';
 
 class SubAgentLibraryState {
 	subagents = $state<SubAgent[]>([]);
 	globalSubAgents = $state<GlobalSubAgent[]>([]);
+	projectSubAgents = $state<ProjectSubAgent[]>([]);
+	selectedScope = $state<SubAgentScope>('user');
 	isLoading = $state(false);
 	error = $state<string | null>(null);
 	searchQuery = $state('');
@@ -51,6 +56,39 @@ class SubAgentLibraryState {
 		}
 	}
 
+	setScope(scope: SubAgentScope) {
+		this.selectedScope = scope;
+	}
+
+	get currentProjectId(): number | null {
+		const project = projectsStore.projects.find((p) => p.path === projectsStore.selectedProjectPath);
+		return project?.id ?? null;
+	}
+
+	async setProjectPath(path: string | null) {
+		projectsStore.setSelectedProjectPath(path);
+		if (!path) {
+			this.selectedScope = 'user';
+			this.projectSubAgents = [];
+			return;
+		}
+		await this.loadProjectSubAgents();
+	}
+
+	async loadProjectSubAgents() {
+		const projectId = this.currentProjectId;
+		if (projectId == null) {
+			this.projectSubAgents = [];
+			return;
+		}
+		try {
+			this.projectSubAgents = await this.getProjectSubAgents(projectId);
+		} catch (e) {
+			console.error('Failed to load project subagents:', e);
+			this.projectSubAgents = [];
+		}
+	}
+
 	async create(request: CreateSubAgentRequest): Promise<SubAgent> {
 		const subagent = await invoke<SubAgent>('create_subagent', { subagent: request });
 		this.subagents = [...this.subagents, subagent];
@@ -85,14 +123,17 @@ class SubAgentLibraryState {
 
 	async assignToProject(projectId: number, subagentId: number): Promise<void> {
 		await invoke('assign_subagent_to_project', { projectId, subagentId });
+		await this.loadProjectSubAgents();
 	}
 
 	async removeFromProject(projectId: number, subagentId: number): Promise<void> {
 		await invoke('remove_subagent_from_project', { projectId, subagentId });
+		await this.loadProjectSubAgents();
 	}
 
 	async toggleProjectSubAgent(assignmentId: number, enabled: boolean): Promise<void> {
 		await invoke('toggle_project_subagent', { assignmentId, enabled });
+		await this.loadProjectSubAgents();
 	}
 
 	async getProjectSubAgents(projectId: number): Promise<ProjectSubAgent[]> {

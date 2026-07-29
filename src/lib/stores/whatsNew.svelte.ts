@@ -1,7 +1,7 @@
 import { getVersion } from '@tauri-apps/api/app';
 
 const LAST_SEEN_VERSION_KEY = 'claude-tool-manager-last-seen-version';
-const GITHUB_REPO = 'tylergraydev/claude-code-tool-manager';
+const GITHUB_REPO = 'iaemeath/claude-code-config-ui';
 
 export interface ReleaseInfo {
 	version: string;

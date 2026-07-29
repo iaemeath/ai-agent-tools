@@ -1,27 +1,36 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { Snippet } from 'svelte';
-	import { claudeSettingsLibrary, projectsStore, notifications } from '$lib/stores';
+	import { claudeSettingsLibrary, projectsStore, notifications, i18n } from '$lib/stores';
+	import { ScopeBar } from '$lib/components/shared';
 	import type { ClaudeSettings, ClaudeSettingsScope } from '$lib/types';
 	import { CLAUDE_SETTINGS_SCOPE_LABELS } from '$lib/types';
-	import { RefreshCw, FolderOpen, User, FileText } from 'lucide-svelte';
+	import { FolderOpen, User, FileText } from 'lucide-svelte';
 
 	type Props = {
 		getSettingCount: (scope: ClaudeSettingsScope) => number;
-		children: Snippet<[{ settings: ClaudeSettings; save: (settings: ClaudeSettings, successMsg: string, errorMsg: string) => Promise<void> }]>;
+		children: Snippet<
+			[
+				{
+					settings: ClaudeSettings;
+					save: (settings: ClaudeSettings, successMsg: string, errorMsg: string) => Promise<void>;
+				}
+			]
+		>;
 	};
 
 	let { getSettingCount, children }: Props = $props();
 
 	onMount(async () => {
 		await projectsStore.loadProjects();
+		if (projectsStore.selectedProjectPath) {
+			claudeSettingsLibrary.setProjectPath(projectsStore.selectedProjectPath);
+		}
 		await claudeSettingsLibrary.load();
 	});
 
-	function handleProjectChange(e: Event) {
-		const target = e.target as HTMLSelectElement;
-		const value = target.value;
-		claudeSettingsLibrary.setProjectPath(value || null);
+	function handleProjectChange(path: string | null) {
+		claudeSettingsLibrary.setProjectPath(path);
 		claudeSettingsLibrary.load();
 	}
 
@@ -39,72 +48,25 @@
 		}
 	}
 
-	const scopes: { key: ClaudeSettingsScope; icon: typeof User }[] = [
-		{ key: 'user', icon: User },
-		{ key: 'project', icon: FolderOpen },
-		{ key: 'local', icon: FileText }
+	const settingsScopes = [
+		{ key: 'user', label: CLAUDE_SETTINGS_SCOPE_LABELS.user.label, description: CLAUDE_SETTINGS_SCOPE_LABELS.user.description, icon: User },
+		{ key: 'project', label: CLAUDE_SETTINGS_SCOPE_LABELS.project.label, description: CLAUDE_SETTINGS_SCOPE_LABELS.project.description, icon: FolderOpen },
+		{ key: 'local', label: CLAUDE_SETTINGS_SCOPE_LABELS.local.label, description: CLAUDE_SETTINGS_SCOPE_LABELS.local.description, icon: FileText }
 	];
 </script>
 
-<div class="flex flex-wrap items-center gap-4 mb-6">
-	<div class="flex items-center gap-2">
-		<FolderOpen class="w-4 h-4 text-gray-500 dark:text-gray-400" />
-		<select
-			value={claudeSettingsLibrary.projectPath ?? ''}
-			onchange={handleProjectChange}
-			class="input text-sm"
-		>
-			<option value="">No project</option>
-			{#each projectsStore.projects as project}
-				<option value={project.path}>{project.name}</option>
-			{/each}
-		</select>
-	</div>
-
-	<div class="flex-1 min-w-[300px]">
-		<div class="flex gap-1 bg-gray-100 dark:bg-gray-700/50 rounded-lg p-1">
-			{#each scopes as { key, icon }}
-				{@const isDisabled = key !== 'user' && !claudeSettingsLibrary.projectPath}
-				{@const isActive = claudeSettingsLibrary.selectedScope === key}
-				{@const count = getSettingCount(key)}
-				<button
-					onclick={() => claudeSettingsLibrary.setScope(key)}
-					disabled={isDisabled}
-					class="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors flex-1
-						{isActive
-						? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-						: isDisabled
-							? 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
-							: 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}"
-					title={CLAUDE_SETTINGS_SCOPE_LABELS[key].description}
-				>
-					<svelte:component this={icon} class="w-4 h-4" />
-					{CLAUDE_SETTINGS_SCOPE_LABELS[key].label}
-					{#if count > 0}
-						<span
-							class="ml-1 px-1.5 py-0.5 text-xs rounded-full
-								{isActive
-							? 'bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300'
-							: 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}"
-						>
-							{count}
-						</span>
-					{/if}
-				</button>
-			{/each}
-		</div>
-	</div>
-
-	<div class="flex items-center gap-2">
-		<button
-			onclick={handleRefresh}
-			class="btn btn-ghost"
-			title="Refresh from settings files"
-		>
-			<RefreshCw class="w-4 h-4" />
-		</button>
-	</div>
-</div>
+<ScopeBar
+	projectPath={projectsStore.selectedProjectPath}
+	projects={projectsStore.projects}
+	selectedScope={claudeSettingsLibrary.selectedScope}
+	scopes={settingsScopes}
+	getCount={(s) => getSettingCount(s as ClaudeSettingsScope)}
+	noProjectLabel={i18n.t('settings.scopeNoProject')}
+	refreshLabel="Refresh from settings files"
+	onProjectChange={handleProjectChange}
+	onScopeSelect={(s) => claudeSettingsLibrary.setScope(s as ClaudeSettingsScope)}
+	onRefresh={handleRefresh}
+/>
 
 {#if claudeSettingsLibrary.isLoading}
 	<div class="flex items-center justify-center py-20">

@@ -1,12 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { AllClaudeSettings, ClaudeSettings, ClaudeSettingsScope } from '$lib/types';
+import { projectsStore } from './projects.svelte';
 
 class ClaudeSettingsLibraryState {
 	settings = $state<AllClaudeSettings | null>(null);
 	isLoading = $state(false);
 	error = $state<string | null>(null);
 	selectedScope = $state<ClaudeSettingsScope>('user');
-	projectPath = $state<string | null>(null);
 
 	currentScopeSettings = $derived.by(() => {
 		if (!this.settings) return null;
@@ -26,7 +26,7 @@ class ClaudeSettingsLibraryState {
 		this.error = null;
 		try {
 			this.settings = await invoke<AllClaudeSettings>('get_all_claude_settings', {
-				projectPath: this.projectPath
+				projectPath: projectsStore.selectedProjectPath
 			});
 			console.log('[claudeSettingsLibrary] Loaded settings');
 		} catch (e) {
@@ -42,7 +42,7 @@ class ClaudeSettingsLibraryState {
 		try {
 			await invoke<ClaudeSettings>('save_claude_settings', {
 				scope: this.selectedScope,
-				projectPath: this.projectPath,
+				projectPath: projectsStore.selectedProjectPath,
 				settings
 			});
 			await this.load();
@@ -57,7 +57,7 @@ class ClaudeSettingsLibraryState {
 	}
 
 	setProjectPath(path: string | null) {
-		this.projectPath = path;
+		projectsStore.setSelectedProjectPath(path);
 		if (!path && this.selectedScope !== 'user') {
 			this.selectedScope = 'user';
 		}

@@ -15,6 +15,39 @@
 
 	let { onEdit, onDelete, onDuplicate }: Props = $props();
 
+	function isHookEnabled(hook: Hook): boolean {
+		if (hookLibrary.selectedScope === 'user') {
+			const row = hookLibrary.globalHooks.find((g) => g.hookId === hook.id);
+			return row?.isEnabled ?? false;
+		}
+		const row = hookLibrary.projectHooks.find((p) => p.hookId === hook.id);
+		return row?.isEnabled ?? false;
+	}
+
+	async function handleToggleEnable(hook: Hook, enabled: boolean) {
+		try {
+			if (hookLibrary.selectedScope === 'user') {
+				const row = hookLibrary.globalHooks.find((g) => g.hookId === hook.id);
+				if (row) {
+					await hookLibrary.toggleGlobalHook(row.id, enabled);
+				} else if (enabled) {
+					await hookLibrary.addGlobalHook(hook.id);
+				}
+			} else {
+				const projectId = hookLibrary.currentProjectId;
+				if (projectId == null) return;
+				const row = hookLibrary.projectHooks.find((p) => p.hookId === hook.id);
+				if (row) {
+					await hookLibrary.toggleProjectHook(row.id, enabled);
+				} else if (enabled) {
+					await hookLibrary.assignToProject(projectId, hook.id);
+				}
+			}
+		} catch (e) {
+			console.error('Failed to toggle hook enable:', e);
+		}
+	}
+
 	// Event order for consistent grouping
 	const EVENT_ORDER = [
 		'SessionStart',
@@ -274,7 +307,7 @@
 						</div>
 						<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 							{#each hooks as hook (hook.id)}
-								<HookCard {hook} {onEdit} {onDelete} {onDuplicate} />
+								<HookCard {hook} {onEdit} {onDelete} {onDuplicate} enabled={isHookEnabled(hook)} onToggleEnable={handleToggleEnable} />
 							{/each}
 						</div>
 					</div>
@@ -324,7 +357,7 @@
 									</div>
 									<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 										{#each items as globalHook (globalHook.id)}
-											<HookCard hook={globalHook.hook} {onEdit} {onDelete} {onDuplicate} />
+											<HookCard hook={globalHook.hook} {onEdit} {onDelete} {onDuplicate} enabled={isHookEnabled(globalHook.hook)} onToggleEnable={handleToggleEnable} />
 										{/each}
 									</div>
 								</div>
@@ -366,7 +399,7 @@
 									</div>
 									<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 										{#each items as projectHook (projectHook.id)}
-											<HookCard hook={projectHook.hook} {onEdit} {onDelete} {onDuplicate} />
+											<HookCard hook={projectHook.hook} {onEdit} {onDelete} {onDuplicate} enabled={isHookEnabled(projectHook.hook)} onToggleEnable={handleToggleEnable} />
 										{/each}
 									</div>
 								</div>
@@ -401,7 +434,7 @@
 									</div>
 									<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 										{#each items as hook (hook.id)}
-											<HookCard {hook} {onEdit} {onDelete} {onDuplicate} />
+											<HookCard {hook} {onEdit} {onDelete} {onDuplicate} enabled={isHookEnabled(hook)} onToggleEnable={handleToggleEnable} />
 										{/each}
 									</div>
 								</div>

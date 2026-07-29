@@ -4,7 +4,6 @@ import type { Skill } from '$lib/types/skill';
 import type { Hook } from '$lib/types/hook';
 import type { SubAgent } from '$lib/types/subagent';
 import type { Command } from '$lib/types/command';
-import type { Profile, ProfileWithItems } from '$lib/types/profile';
 import type { StatusLine, StatusLineGalleryEntry } from '$lib/types/statusline';
 import type { Repo, RepoItem, ImportResult, SyncResult, RegistryMcpEntry, RegistrySearchResult } from '$lib/types/repo';
 
@@ -118,20 +117,6 @@ export function createMockCommand(overrides: Partial<Command> = {}): Command {
 		content: 'Command content',
 		source: 'manual',
 		isFavorite: false,
-		createdAt: now,
-		updatedAt: now,
-		...overrides
-	};
-}
-
-export function createMockProfile(overrides: Partial<Profile> = {}): Profile {
-	const id = overrides.id ?? nextId();
-	return {
-		id,
-		name: `profile-${id}`,
-		description: null,
-		icon: null,
-		isActive: false,
 		createdAt: now,
 		updatedAt: now,
 		...overrides

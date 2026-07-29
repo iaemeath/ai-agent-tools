@@ -1,9 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { Command, CreateCommandRequest, GlobalCommand, ProjectCommand } from '$lib/types';
+import { projectsStore } from './projects.svelte';
+
+type CommandScope = 'user' | 'project';
 
 class CommandLibraryState {
 	commands = $state<Command[]>([]);
 	globalCommands = $state<GlobalCommand[]>([]);
+	projectCommands = $state<ProjectCommand[]>([]);
+	selectedScope = $state<CommandScope>('user');
 	isLoading = $state(false);
 	error = $state<string | null>(null);
 	searchQuery = $state('');
@@ -51,6 +56,39 @@ class CommandLibraryState {
 		}
 	}
 
+	setScope(scope: CommandScope) {
+		this.selectedScope = scope;
+	}
+
+	get currentProjectId(): number | null {
+		const project = projectsStore.projects.find((p) => p.path === projectsStore.selectedProjectPath);
+		return project?.id ?? null;
+	}
+
+	async setProjectPath(path: string | null) {
+		projectsStore.setSelectedProjectPath(path);
+		if (!path) {
+			this.selectedScope = 'user';
+			this.projectCommands = [];
+			return;
+		}
+		await this.loadProjectCommands();
+	}
+
+	async loadProjectCommands() {
+		const projectId = this.currentProjectId;
+		if (projectId == null) {
+			this.projectCommands = [];
+			return;
+		}
+		try {
+			this.projectCommands = await this.getProjectCommands(projectId);
+		} catch (e) {
+			console.error('Failed to load project commands:', e);
+			this.projectCommands = [];
+		}
+	}
+
 	async create(request: CreateCommandRequest): Promise<Command> {
 		const command = await invoke<Command>('create_command', { command: request });
 		this.commands = [...this.commands, command];
@@ -85,14 +123,17 @@ class CommandLibraryState {
 
 	async assignToProject(projectId: number, commandId: number): Promise<void> {
 		await invoke('assign_command_to_project', { projectId, commandId });
+		await this.loadProjectCommands();
 	}
 
 	async removeFromProject(projectId: number, commandId: number): Promise<void> {
 		await invoke('remove_command_from_project', { projectId, commandId });
+		await this.loadProjectCommands();
 	}
 
 	async toggleProjectCommand(assignmentId: number, enabled: boolean): Promise<void> {
 		await invoke('toggle_project_command', { assignmentId, enabled });
+		await this.loadProjectCommands();
 	}
 
 	async getProjectCommands(projectId: number): Promise<ProjectCommand[]> {

@@ -1,15 +1,42 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Header } from '$lib/components/layout';
 	import { CommandLibrary, CommandForm } from '$lib/components/commands';
-	import { ConfirmDialog } from '$lib/components/shared';
-	import { commandLibrary, notifications } from '$lib/stores';
+	import { ConfirmDialog, ScopeBar } from '$lib/components/shared';
+	import { commandLibrary, projectsStore, notifications } from '$lib/stores';
 	import { i18n } from '$lib/i18n';
 	import type { Command } from '$lib/types';
-	import { Plus } from 'lucide-svelte';
+	import { User, FolderOpen } from 'lucide-svelte';
 
 	let showAddCommand = $state(false);
 	let editingCommand = $state<Command | null>(null);
 	let deletingCommand = $state<Command | null>(null);
+
+	const commandScopes = $derived([
+		{ key: 'user', label: i18n.t('scope.user'), description: i18n.t('scope.userDesc'), icon: User },
+		{ key: 'project', label: i18n.t('scope.project'), description: i18n.t('scope.projectDesc'), icon: FolderOpen }
+	]);
+
+	onMount(async () => {
+		await projectsStore.loadProjects();
+		await commandLibrary.load();
+		await commandLibrary.loadGlobalCommands();
+		if (projectsStore.selectedProjectPath) {
+			await commandLibrary.setProjectPath(projectsStore.selectedProjectPath);
+		}
+	});
+
+	async function handleRefresh() {
+		await commandLibrary.load();
+		await commandLibrary.loadGlobalCommands();
+		if (projectsStore.selectedProjectPath) await commandLibrary.loadProjectCommands();
+		notifications.success(i18n.t('common.refreshed'));
+	}
+
+	function scopeCount(scope: string): number {
+		if (scope === 'user') return commandLibrary.globalCommands.filter((g) => g.isEnabled).length;
+		return commandLibrary.projectCommands.filter((p) => p.isEnabled).length;
+	}
 
 	async function handleCreateCommand(values: any) {
 		try {
@@ -51,12 +78,18 @@
 />
 
 <div class="flex-1 overflow-auto p-6">
-	<div class="flex justify-end mb-6">
-		<button onclick={() => (showAddCommand = true)} class="btn btn-primary">
-			<Plus class="w-4 h-4 mr-2" />
-			{i18n.t('command.addCommand')}
-		</button>
-	</div>
+	<ScopeBar
+		projectPath={projectsStore.selectedProjectPath}
+		projects={projectsStore.projects}
+		selectedScope={commandLibrary.selectedScope}
+		scopes={commandScopes}
+		getCount={scopeCount}
+		noProjectLabel={i18n.t('settings.scopeNoProject')}
+		refreshLabel={i18n.t('common.refresh')}
+		onProjectChange={(p) => commandLibrary.setProjectPath(p)}
+		onScopeSelect={(s) => commandLibrary.setScope(s as 'user' | 'project')}
+		onRefresh={handleRefresh}
+	/>
 
 	<CommandLibrary
 		onEdit={(command) => (editingCommand = command)}

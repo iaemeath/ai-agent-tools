@@ -233,7 +233,7 @@ impl McpServerState {
 pub fn generate_self_mcp_entry(port: u16) -> crate::db::models::CreateMcpRequest {
     crate::db::models::CreateMcpRequest {
         name: "Tool Manager MCP".to_string(),
-        description: Some("MCP server exposed by Claude Code Tool Manager for programmatic management of MCPs, Skills, Sub-Agents, Hooks, and Projects.".to_string()),
+        description: Some("MCP server exposed by Claude Code Config UI for programmatic management of MCPs, Skills, Sub-Agents, Hooks, and Projects.".to_string()),
         mcp_type: "http".to_string(),  // Uses HTTP transport (Streamable HTTP)
         command: None,
         args: None,

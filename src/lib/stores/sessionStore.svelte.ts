@@ -1,178 +1,151 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
-	ProjectListInfo,
-	SessionListInfo,
-	SessionDetail,
-	ProjectSummary,
-	SessionSummary,
-	SessionSortField
+	SessionMeta,
+	SessionMessage,
+	DeleteSessionOptions,
+	DeleteSessionResult
 } from '$lib/types';
-import { totalTokens } from '$lib/types/session';
-import { estimateSessionCost } from '$lib/types/usage';
 
 class SessionStoreState {
-	projectList = $state<ProjectListInfo | null>(null);
-	sessionList = $state<SessionListInfo | null>(null);
-	sessionDetail = $state<SessionDetail | null>(null);
-	selectedProject = $state<string | null>(null);
+	sessions = $state<SessionMeta[]>([]);
+	isLoading = $state(false);
+	error = $state<string | null>(null);
+
+	searchQuery = $state('');
+
 	selectedSessionId = $state<string | null>(null);
+	messages = $state<SessionMessage[]>([]);
+	messagesLoading = $state(false);
 
-	isLoadingProjects = $state(false);
-	isLoadingSessions = $state(false);
-	isLoadingDetail = $state(false);
-	isRefreshingProjects = $state(false);
-	isRefreshingSessions = $state(false);
-	projectsError = $state<string | null>(null);
-	sessionsError = $state<string | null>(null);
-	detailError = $state<string | null>(null);
+	// Batch-delete selection mode
+	selectionMode = $state(false);
+	selectedIds = $state<Set<string>>(new Set());
 
-	sortField = $state<SessionSortField>('date');
-	sortDirection = $state<'asc' | 'desc'>('desc');
-
-	// Derived state
-	projects = $derived(this.projectList?.projects ?? []);
-	projectsExist = $derived(this.projectList?.exists ?? false);
-	sessions = $derived(this.sessionList?.sessions ?? []);
-	sessionsExist = $derived(this.sessionList?.exists ?? false);
-
-	isLoading = $derived(this.isLoadingProjects || this.isLoadingSessions || this.isLoadingDetail);
-
-	sortedSessions = $derived.by(() => {
-		const items = [...this.sessions];
-		const dir = this.sortDirection === 'asc' ? 1 : -1;
-
-		items.sort((a, b) => {
-			switch (this.sortField) {
-				case 'date': {
-					const aTs = a.firstTimestamp ?? '';
-					const bTs = b.firstTimestamp ?? '';
-					return aTs < bTs ? -dir : aTs > bTs ? dir : 0;
-				}
-				case 'tokens':
-					return (totalTokens(a) - totalTokens(b)) * dir;
-				case 'duration':
-					return (a.durationMs - b.durationMs) * dir;
-				case 'messages':
-					return (a.userMessageCount + a.assistantMessageCount - (b.userMessageCount + b.assistantMessageCount)) * dir;
-				case 'cost': {
-					const aCost = estimateSessionCost(a.modelsUsed, a.totalInputTokens, a.totalOutputTokens, a.totalCacheReadTokens, a.totalCacheCreationTokens);
-					const bCost = estimateSessionCost(b.modelsUsed, b.totalInputTokens, b.totalOutputTokens, b.totalCacheReadTokens, b.totalCacheCreationTokens);
-					return (aCost - bCost) * dir;
-				}
-				default:
-					return 0;
-			}
-		});
-
-		return items;
-	});
-
-	projectToolUsage = $derived.by(() => {
-		const counts: Record<string, number> = {};
-		for (const session of this.sessions) {
-			for (const [tool, count] of Object.entries(session.toolCounts)) {
-				counts[tool] = (counts[tool] || 0) + count;
-			}
-		}
-		return counts;
-	});
-
-	currentProject = $derived.by(() => {
-		if (!this.selectedProject) return null;
-		return this.projects.find((p) => p.folderName === this.selectedProject) ?? null;
-	});
-
-	async loadProjects() {
-		console.log('[sessionStore] Loading session projects...');
-		if (this.projectList) {
-			this.isRefreshingProjects = true;
-		} else {
-			this.isLoadingProjects = true;
-		}
-		this.projectsError = null;
-		try {
-			this.projectList = await invoke<ProjectListInfo>('get_session_projects');
-			console.log('[sessionStore] Loaded', this.projects.length, 'projects');
-		} catch (e) {
-			this.projectsError = String(e);
-			console.error('[sessionStore] Failed to load projects:', e);
-		} finally {
-			this.isLoadingProjects = false;
-			this.isRefreshingProjects = false;
-		}
-	}
-
-	async loadSessions(folder: string) {
-		console.log('[sessionStore] Loading sessions for:', folder);
-		if (this.sessionList && this.selectedProject === folder) {
-			this.isRefreshingSessions = true;
-		} else {
-			this.isLoadingSessions = true;
-		}
-		this.sessionsError = null;
-		this.selectedProject = folder;
-		this.selectedSessionId = null;
-		this.sessionDetail = null;
-		try {
-			this.sessionList = await invoke<SessionListInfo>('get_project_sessions', {
-				projectFolder: folder
-			});
-			console.log('[sessionStore] Loaded', this.sessions.length, 'sessions');
-		} catch (e) {
-			this.sessionsError = String(e);
-			console.error('[sessionStore] Failed to load sessions:', e);
-		} finally {
-			this.isLoadingSessions = false;
-			this.isRefreshingSessions = false;
-		}
-	}
-
-	async loadSessionDetail(folder: string, id: string) {
-		console.log('[sessionStore] Loading session detail:', id);
-		this.isLoadingDetail = true;
-		this.detailError = null;
-		this.selectedSessionId = id;
-		try {
-			this.sessionDetail = await invoke<SessionDetail>('get_session_detail', {
-				projectFolder: folder,
-				sessionId: id
-			});
-			console.log(
-				'[sessionStore] Loaded detail with',
-				this.sessionDetail?.messages.length,
-				'messages'
+	filteredSessions = $derived.by(() => {
+		let result = this.sessions;
+		const query = this.searchQuery.trim().toLowerCase();
+		if (query) {
+			result = result.filter(
+				(s) =>
+					(s.title ?? '').toLowerCase().includes(query) ||
+					(s.summary ?? '').toLowerCase().includes(query) ||
+					(s.projectDir ?? '').toLowerCase().includes(query) ||
+					(s.sourcePath ?? '').toLowerCase().includes(query) ||
+					s.sessionId.toLowerCase().includes(query)
 			);
+		}
+		return [...result].sort((a, b) => {
+			const aTs = a.lastActiveAt ?? a.createdAt ?? 0;
+			const bTs = b.lastActiveAt ?? b.createdAt ?? 0;
+			return bTs - aTs;
+		});
+	});
+
+	selectedSession = $derived(
+		this.sessions.find((s) => s.sessionId === this.selectedSessionId) ?? null
+	);
+
+	selectedCount = $derived(this.selectedIds.size);
+
+	async load() {
+		this.isLoading = true;
+		this.error = null;
+		try {
+			this.sessions = await invoke<SessionMeta[]>('list_sessions');
 		} catch (e) {
-			this.detailError = String(e);
-			console.error('[sessionStore] Failed to load session detail:', e);
+			this.error = String(e);
+			console.error('Failed to load sessions:', e);
 		} finally {
-			this.isLoadingDetail = false;
+			this.isLoading = false;
 		}
 	}
 
-	selectProject(folder: string) {
-		this.loadSessions(folder);
+	async refresh() {
+		await this.load();
 	}
 
-	selectSession(id: string) {
-		if (this.selectedProject) {
-			this.loadSessionDetail(this.selectedProject, id);
+	async select(meta: SessionMeta | null) {
+		if (!meta) {
+			this.selectedSessionId = null;
+			this.messages = [];
+			return;
+		}
+		this.selectedSessionId = meta.sessionId;
+		this.messagesLoading = true;
+		this.messages = [];
+		try {
+			this.messages = await invoke<SessionMessage[]>('get_session_messages', {
+				providerId: meta.providerId,
+				sourcePath: meta.sourcePath
+			});
+		} catch (e) {
+			console.error('Failed to load session messages:', e);
+		} finally {
+			this.messagesLoading = false;
 		}
 	}
 
-	clearSession() {
-		this.selectedSessionId = null;
-		this.sessionDetail = null;
-		this.detailError = null;
+	async deleteOne(meta: SessionMeta): Promise<boolean> {
+		try {
+			await invoke('delete_session', {
+				providerId: meta.providerId,
+				sessionId: meta.sessionId,
+				sourcePath: meta.sourcePath
+			});
+			this.sessions = this.sessions.filter((s) => s.sessionId !== meta.sessionId);
+			if (this.selectedSessionId === meta.sessionId) {
+				await this.select(null);
+			}
+			this.selectedIds = new Set([...this.selectedIds].filter((id) => id !== meta.sessionId));
+			return true;
+		} catch (e) {
+			console.error('Failed to delete session:', e);
+			return false;
+		}
 	}
 
-	setSort(field: SessionSortField) {
-		if (this.sortField === field) {
-			this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+	async deleteMany(metas: SessionMeta[]): Promise<DeleteSessionResult[]> {
+		const items: DeleteSessionOptions[] = metas.map((m) => ({
+			providerId: m.providerId,
+			sessionId: m.sessionId,
+			sourcePath: m.sourcePath ?? ''
+		}));
+		let outcomes: DeleteSessionResult[] = [];
+		try {
+			outcomes = await invoke<DeleteSessionResult[]>('delete_sessions', { items });
+			const removedIds = new Set(
+				outcomes.filter((o) => o.success).map((o) => o.sessionId)
+			);
+			this.sessions = this.sessions.filter((s) => !removedIds.has(s.sessionId));
+			if (this.selectedSessionId && removedIds.has(this.selectedSessionId)) {
+				await this.select(null);
+			}
+			this.selectedIds = new Set();
+		} catch (e) {
+			console.error('Failed to delete sessions:', e);
+		}
+		return outcomes;
+	}
+
+	toggleSelected(sessionId: string) {
+		const next = new Set(this.selectedIds);
+		if (next.has(sessionId)) {
+			next.delete(sessionId);
 		} else {
-			this.sortField = field;
-			this.sortDirection = 'desc';
+			next.add(sessionId);
 		}
+		this.selectedIds = next;
+	}
+
+	toggleSelectionMode() {
+		this.selectionMode = !this.selectionMode;
+		if (!this.selectionMode) {
+			this.selectedIds = new Set();
+		}
+	}
+
+	clearSelection() {
+		this.selectedIds = new Set();
 	}
 }
 

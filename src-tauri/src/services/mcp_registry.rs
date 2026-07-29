@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 const REGISTRY_BASE_URL: &str = "https://registry.modelcontextprotocol.io";
-const USER_AGENT: &str = "claude-code-tool-manager/1.2";
+const USER_AGENT: &str = "claude-code-config-ui/1.2";
 
 // ============================================================================
 // Registry API Response Types

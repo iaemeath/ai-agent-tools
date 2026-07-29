@@ -176,8 +176,6 @@ pub fn add_global_subagent(
             "claude_code" => {
                 subagent_writer::write_global_subagent(&subagent).map_err(|e| e.to_string())?
             }
-            "opencode" => subagent_writer::write_global_subagent_opencode(&subagent)
-                .map_err(|e| e.to_string())?,
             unknown => warn!(
                 "[SubAgents] Unknown editor type '{}' for subagent '{}'. Skipping.",
                 unknown, subagent.name
@@ -220,8 +218,6 @@ pub fn remove_global_subagent(
             "claude_code" => {
                 subagent_writer::delete_global_subagent(&name).map_err(|e| e.to_string())?
             }
-            "opencode" => subagent_writer::delete_global_subagent_opencode(&name)
-                .map_err(|e| e.to_string())?,
             unknown => warn!(
                 "[SubAgents] Unknown editor type '{}' for subagent '{}'. Skipping.",
                 unknown, name
@@ -270,8 +266,6 @@ pub fn toggle_global_subagent(
                 "claude_code" => {
                     subagent_writer::write_global_subagent(&subagent).map_err(|e| e.to_string())?
                 }
-                "opencode" => subagent_writer::write_global_subagent_opencode(&subagent)
-                    .map_err(|e| e.to_string())?,
                 unknown => warn!(
                     "[SubAgents] Unknown editor type '{}' for subagent '{}'. Skipping.",
                     unknown, subagent.name
@@ -280,8 +274,6 @@ pub fn toggle_global_subagent(
         } else {
             match editor.as_str() {
                 "claude_code" => subagent_writer::delete_global_subagent(&subagent.name)
-                    .map_err(|e| e.to_string())?,
-                "opencode" => subagent_writer::delete_global_subagent_opencode(&subagent.name)
                     .map_err(|e| e.to_string())?,
                 unknown => warn!(
                     "[SubAgents] Unknown editor type '{}' for subagent '{}'. Skipping.",
@@ -337,11 +329,6 @@ pub fn assign_subagent_to_project(
                 subagent_writer::write_project_subagent(Path::new(&project_path), &subagent)
                     .map_err(|e| e.to_string())?
             }
-            "opencode" => subagent_writer::write_project_subagent_opencode(
-                Path::new(&project_path),
-                &subagent,
-            )
-            .map_err(|e| e.to_string())?,
             unknown => warn!(
                 "[SubAgents] Unknown editor type '{}' for subagent '{}'. Skipping.",
                 unknown, subagent.name
@@ -393,10 +380,6 @@ pub fn remove_subagent_from_project(
         match editor.as_str() {
             "claude_code" => {
                 subagent_writer::delete_project_subagent(Path::new(&project_path), &name)
-                    .map_err(|e| e.to_string())?
-            }
-            "opencode" => {
-                subagent_writer::delete_project_subagent_opencode(Path::new(&project_path), &name)
                     .map_err(|e| e.to_string())?
             }
             unknown => warn!(
@@ -451,11 +434,6 @@ pub fn toggle_project_subagent(
                     subagent_writer::write_project_subagent(Path::new(&project_path), &subagent)
                         .map_err(|e| e.to_string())?
                 }
-                "opencode" => subagent_writer::write_project_subagent_opencode(
-                    Path::new(&project_path),
-                    &subagent,
-                )
-                .map_err(|e| e.to_string())?,
                 unknown => warn!(
                     "[SubAgents] Unknown editor type '{}' for subagent '{}'. Skipping.",
                     unknown, subagent.name
@@ -464,11 +442,6 @@ pub fn toggle_project_subagent(
         } else {
             match editor.as_str() {
                 "claude_code" => subagent_writer::delete_project_subagent(
-                    Path::new(&project_path),
-                    &subagent.name,
-                )
-                .map_err(|e| e.to_string())?,
-                "opencode" => subagent_writer::delete_project_subagent_opencode(
                     Path::new(&project_path),
                     &subagent.name,
                 )

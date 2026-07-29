@@ -1,18 +1,15 @@
 import { en } from './locales/en';
-import { zhTW } from './locales/zh-TW';
 import { zhCN } from './locales/zh-CN';
 import type { Locale, LocaleInfo, TranslationKey, Translations } from './types';
 
 const locales: Record<Locale, Translations> = {
 	en,
-	'zh-TW': zhTW,
 	'zh-CN': zhCN
 };
 
 const localeInfos: LocaleInfo[] = [
 	{ code: 'en', label: 'EN' },
-	{ code: 'zh-CN', label: '简' },
-	{ code: 'zh-TW', label: '繁' }
+	{ code: 'zh-CN', label: '简' }
 ];
 
 function detectLocale(): Locale {

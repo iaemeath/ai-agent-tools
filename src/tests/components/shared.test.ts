@@ -11,29 +11,6 @@ vi.mock('$lib/stores', () => ({
 		error: vi.fn(),
 		info: vi.fn(),
 		warning: vi.fn()
-	},
-	updater: {
-		status: 'idle',
-		update: null,
-		error: null,
-		downloadProgress: 0,
-		checkForUpdates: vi.fn(),
-		downloadAndInstall: vi.fn(),
-		restartApp: vi.fn(),
-		dismiss: vi.fn()
-	}
-}));
-
-vi.mock('$lib/stores/updater.svelte', () => ({
-	updater: {
-		status: 'idle',
-		update: null,
-		error: null,
-		downloadProgress: 0,
-		checkForUpdates: vi.fn(),
-		downloadAndInstall: vi.fn(),
-		restartApp: vi.fn(),
-		dismiss: vi.fn()
 	}
 }));
 
@@ -266,63 +243,6 @@ describe('Toast Component', () => {
 		const container = screen.getByRole('status');
 		expect(container).toBeInTheDocument();
 		(notifications as any).notifications = [];
-	});
-});
-
-describe('UpdateNotification Component', () => {
-	let UpdateNotification: any;
-
-	beforeAll(async () => {
-		const mod = await import('$lib/components/shared/UpdateNotification.svelte');
-		UpdateNotification = mod.default;
-	});
-
-	it('should render without errors when status is idle', () => {
-		render(UpdateNotification);
-		expect(document.body).toBeTruthy();
-	});
-
-	it('should show Update Available when status is available', async () => {
-		const { updater } = await import('$lib/stores/updater.svelte');
-		(updater as any).status = 'available';
-		(updater as any).update = { version: '4.0.0' };
-		render(UpdateNotification);
-		expect(screen.getByText('Update Available')).toBeInTheDocument();
-		expect(screen.getByText(/Version 4.0.0/)).toBeInTheDocument();
-		expect(screen.getByText('Download')).toBeInTheDocument();
-		expect(screen.getByText('Later')).toBeInTheDocument();
-		(updater as any).status = 'idle';
-		(updater as any).update = null;
-	});
-
-	it('should show downloading state', async () => {
-		const { updater } = await import('$lib/stores/updater.svelte');
-		(updater as any).status = 'downloading';
-		(updater as any).downloadProgress = 50;
-		render(UpdateNotification);
-		expect(screen.getByText('Downloading Update...')).toBeInTheDocument();
-		(updater as any).status = 'idle';
-	});
-
-	it('should show ready state with restart button', async () => {
-		const { updater } = await import('$lib/stores/updater.svelte');
-		(updater as any).status = 'ready';
-		render(UpdateNotification);
-		expect(screen.getByText('Update Ready')).toBeInTheDocument();
-		expect(screen.getByText('Restart Now')).toBeInTheDocument();
-		(updater as any).status = 'idle';
-	});
-
-	it('should show error state', async () => {
-		const { updater } = await import('$lib/stores/updater.svelte');
-		(updater as any).status = 'error';
-		(updater as any).error = 'Network error';
-		render(UpdateNotification);
-		expect(screen.getByText('Update Error')).toBeInTheDocument();
-		expect(screen.getByText('Network error')).toBeInTheDocument();
-		expect(screen.getByText('Dismiss')).toBeInTheDocument();
-		(updater as any).status = 'idle';
-		(updater as any).error = null;
 	});
 });
 

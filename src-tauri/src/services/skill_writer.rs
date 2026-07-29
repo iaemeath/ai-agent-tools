@@ -1,5 +1,4 @@
 use crate::db::models::Skill;
-use crate::utils::opencode_paths::get_opencode_paths;
 use anyhow::Result;
 use directories::BaseDirs;
 use std::path::Path;
@@ -126,58 +125,6 @@ pub fn write_project_skill(project_path: &Path, skill: &Skill) -> Result<()> {
 /// Delete a skill from a project's Claude config ({project}/.claude/)
 pub fn delete_project_skill(project_path: &Path, skill: &Skill) -> Result<()> {
     delete_skill_file(project_path, skill)
-}
-
-// ============================================================================
-// OpenCode Support
-// ============================================================================
-
-/// Write a skill to OpenCode's format
-/// Agent skills go to {base_path}/agent/{name}.md (OpenCode uses agent/ not skills/)
-pub fn write_skill_file_opencode(base_path: &Path, skill: &Skill) -> Result<()> {
-    let agent_dir = base_path.join("agent");
-    std::fs::create_dir_all(&agent_dir)?;
-
-    let file_path = agent_dir.join(format!("{}.md", skill.name));
-    crate::utils::backup::backup_file(&file_path)?;
-    let content = generate_skill_markdown(skill);
-    std::fs::write(file_path, content)?;
-
-    Ok(())
-}
-
-/// Delete a skill from OpenCode's format
-pub fn delete_skill_file_opencode(base_path: &Path, skill: &Skill) -> Result<()> {
-    let file_path = base_path.join("agent").join(format!("{}.md", skill.name));
-    if file_path.exists() {
-        std::fs::remove_file(file_path)?;
-    }
-
-    Ok(())
-}
-
-/// Write a skill to the global OpenCode config (~/.config/opencode/)
-pub fn write_global_skill_opencode(skill: &Skill) -> Result<()> {
-    let paths = get_opencode_paths()?;
-    write_skill_file_opencode(&paths.config_dir, skill)
-}
-
-/// Delete a skill from the global OpenCode config
-pub fn delete_global_skill_opencode(skill: &Skill) -> Result<()> {
-    let paths = get_opencode_paths()?;
-    delete_skill_file_opencode(&paths.config_dir, skill)
-}
-
-/// Write a skill to a project's OpenCode config ({project}/.opencode/)
-pub fn write_project_skill_opencode(project_path: &Path, skill: &Skill) -> Result<()> {
-    let opencode_dir = project_path.join(".opencode");
-    write_skill_file_opencode(&opencode_dir, skill)
-}
-
-/// Delete a skill from a project's OpenCode config
-pub fn delete_project_skill_opencode(project_path: &Path, skill: &Skill) -> Result<()> {
-    let opencode_dir = project_path.join(".opencode");
-    delete_skill_file_opencode(&opencode_dir, skill)
 }
 
 #[cfg(test)]
@@ -375,35 +322,6 @@ mod tests {
     }
 
     // =========================================================================
-    // OpenCode format tests
-    // =========================================================================
-
-    #[test]
-    fn test_write_skill_file_opencode() {
-        let temp_dir = TempDir::new().unwrap();
-        let skill = sample_skill();
-
-        write_skill_file_opencode(temp_dir.path(), &skill).unwrap();
-
-        // OpenCode uses "agent" not "skills"
-        let expected_path = temp_dir.path().join("agent").join("test-agent.md");
-        assert!(expected_path.exists());
-    }
-
-    #[test]
-    fn test_delete_skill_file_opencode() {
-        let temp_dir = TempDir::new().unwrap();
-        let skill = sample_skill();
-
-        write_skill_file_opencode(temp_dir.path(), &skill).unwrap();
-        let file_path = temp_dir.path().join("agent").join("test-agent.md");
-        assert!(file_path.exists());
-
-        delete_skill_file_opencode(temp_dir.path(), &skill).unwrap();
-        assert!(!file_path.exists());
-    }
-
-    // =========================================================================
     // Additional coverage: edge cases
     // =========================================================================
     #[test]
@@ -458,44 +376,6 @@ mod tests {
             .join("skills")
             .join("test-agent");
         assert!(!expected.exists());
-    }
-
-    #[test]
-    fn test_write_project_skill_opencode() {
-        let temp_dir = TempDir::new().unwrap();
-        let skill = sample_skill();
-        write_project_skill_opencode(temp_dir.path(), &skill).unwrap();
-
-        let expected = temp_dir
-            .path()
-            .join(".opencode")
-            .join("agent")
-            .join("test-agent.md");
-        assert!(expected.exists());
-    }
-
-    #[test]
-    fn test_delete_project_skill_opencode() {
-        let temp_dir = TempDir::new().unwrap();
-        let skill = sample_skill();
-        write_project_skill_opencode(temp_dir.path(), &skill).unwrap();
-        delete_project_skill_opencode(temp_dir.path(), &skill).unwrap();
-
-        let expected = temp_dir
-            .path()
-            .join(".opencode")
-            .join("agent")
-            .join("test-agent.md");
-        assert!(!expected.exists());
-    }
-
-    #[test]
-    fn test_delete_skill_file_opencode_nonexistent() {
-        let temp_dir = TempDir::new().unwrap();
-        let skill = sample_skill();
-        // Should not error
-        let result = delete_skill_file_opencode(temp_dir.path(), &skill);
-        assert!(result.is_ok());
     }
 
     #[test]

@@ -385,8 +385,6 @@ pub fn add_global_command(
             "claude_code" => {
                 command_writer::write_global_command(&command).map_err(|e| e.to_string())?
             }
-            "opencode" => command_writer::write_global_command_opencode(&command)
-                .map_err(|e| e.to_string())?,
             unknown => warn!(
                 "[Commands] Unknown editor type '{}' for command '{}'. Skipping.",
                 unknown, command.name
@@ -430,8 +428,6 @@ pub fn remove_global_command(
             "claude_code" => {
                 command_writer::delete_global_command(&command).map_err(|e| e.to_string())?
             }
-            "opencode" => command_writer::delete_global_command_opencode(&command)
-                .map_err(|e| e.to_string())?,
             unknown => warn!(
                 "[Commands] Unknown editor type '{}' for command '{}'. Skipping.",
                 unknown, command.name
@@ -480,8 +476,6 @@ pub fn toggle_global_command(
                 "claude_code" => {
                     command_writer::write_global_command(&command).map_err(|e| e.to_string())?
                 }
-                "opencode" => command_writer::write_global_command_opencode(&command)
-                    .map_err(|e| e.to_string())?,
                 unknown => warn!(
                     "[Commands] Unknown editor type '{}' for command '{}'. Skipping.",
                     unknown, command.name
@@ -492,8 +486,6 @@ pub fn toggle_global_command(
                 "claude_code" => {
                     command_writer::delete_global_command(&command).map_err(|e| e.to_string())?
                 }
-                "opencode" => command_writer::delete_global_command_opencode(&command)
-                    .map_err(|e| e.to_string())?,
                 unknown => warn!(
                     "[Commands] Unknown editor type '{}' for command '{}'. Skipping.",
                     unknown, command.name
@@ -553,10 +545,6 @@ pub fn assign_command_to_project(
                 command_writer::write_project_command(Path::new(&project_path), &command)
                     .map_err(|e| e.to_string())?
             }
-            "opencode" => {
-                command_writer::write_project_command_opencode(Path::new(&project_path), &command)
-                    .map_err(|e| e.to_string())?
-            }
             unknown => warn!(
                 "[Commands] Unknown editor type '{}' for command '{}'. Skipping.",
                 unknown, command.name
@@ -611,10 +599,6 @@ pub fn remove_command_from_project(
                 command_writer::delete_project_command(Path::new(&project_path), &command)
                     .map_err(|e| e.to_string())?
             }
-            "opencode" => {
-                command_writer::delete_project_command_opencode(Path::new(&project_path), &command)
-                    .map_err(|e| e.to_string())?
-            }
             unknown => warn!(
                 "[Commands] Unknown editor type '{}' for command '{}'. Skipping.",
                 unknown, command.name
@@ -664,11 +648,6 @@ pub fn toggle_project_command(
                     command_writer::write_project_command(Path::new(&project_path), &command)
                         .map_err(|e| e.to_string())?
                 }
-                "opencode" => command_writer::write_project_command_opencode(
-                    Path::new(&project_path),
-                    &command,
-                )
-                .map_err(|e| e.to_string())?,
                 unknown => warn!(
                     "[Commands] Unknown editor type '{}' for command '{}'. Skipping.",
                     unknown, command.name
@@ -680,11 +659,6 @@ pub fn toggle_project_command(
                     command_writer::delete_project_command(Path::new(&project_path), &command)
                         .map_err(|e| e.to_string())?
                 }
-                "opencode" => command_writer::delete_project_command_opencode(
-                    Path::new(&project_path),
-                    &command,
-                )
-                .map_err(|e| e.to_string())?,
                 unknown => warn!(
                     "[Commands] Unknown editor type '{}' for command '{}'. Skipping.",
                     unknown, command.name

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 const GITHUB_API_BASE: &str = "https://api.github.com";
 const RAW_GITHUB_BASE: &str = "https://raw.githubusercontent.com";
-const USER_AGENT: &str = "claude-code-tool-manager/1.0";
+const USER_AGENT: &str = "claude-code-config-ui/1.0";
 
 #[derive(Debug, Clone)]
 pub struct GitHubClient {

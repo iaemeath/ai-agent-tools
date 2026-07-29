@@ -30,20 +30,11 @@ vi.mock('$lib/stores', () => ({
 		unassignedHooks: [],
 		setEventFilter: vi.fn(),
 		setViewMode: vi.fn(),
-		exportToJson: vi.fn().mockResolvedValue('{}'),
-		exportToClipboard: vi.fn(),
-		createSoundNotificationHooks: vi.fn().mockResolvedValue([])
 	},
 	notifications: {
 		success: vi.fn(),
 		error: vi.fn()
 	},
-	soundLibrary: {
-		systemSounds: [],
-		load: vi.fn(),
-		getSoundByPath: vi.fn(),
-		deployNotificationScript: vi.fn()
-	}
 }));
 
 vi.mock('$lib/types', async (importOriginal) => {
@@ -76,13 +67,6 @@ vi.mock('$lib/types', async (importOriginal) => {
 			{ value: 'ElicitationResult', label: 'Elicitation Result', description: 'MCP elicitation result' },
 			{ value: 'SessionEnd', label: 'Session End', description: 'Session ends' }
 		],
-		SOUND_HOOK_PRESETS: actual.SOUND_HOOK_PRESETS ?? [
-			{ id: 'task-complete', name: 'Task Complete', description: 'Sound on task finish', events: ['Stop', 'SubagentStop', 'TaskCompleted'] },
-			{ id: 'permission-required', name: 'Permission Required', description: 'Sound on permission', events: ['Notification'] },
-			{ id: 'error-alert', name: 'Error Alert', description: 'Sound on errors', events: ['StopFailure', 'PostToolUseFailure'] },
-			{ id: 'full-suite', name: 'Full Suite', description: 'All events', events: ['Stop', 'SubagentStop', 'TaskCompleted', 'StopFailure', 'Notification'] }
-		],
-		getDefaultSound: actual.getDefaultSound ?? (() => '/System/Library/Sounds/Glass.aiff')
 	};
 });
 
@@ -92,10 +76,6 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
 	writeTextFile: vi.fn()
-}));
-
-vi.mock('$lib/components/sounds', () => ({
-	SoundPicker: {}
 }));
 
 describe('HookCard Component', () => {
@@ -553,129 +533,6 @@ describe('HookLibrary Component', () => {
 	});
 });
 
-describe('HookExportModal Component', () => {
-	let HookExportModal: any;
-
-	beforeAll(async () => {
-		const mod = await import('$lib/components/hooks/HookExportModal.svelte');
-		HookExportModal = mod.default;
-	});
-
-	it('should render export modal', () => {
-		render(HookExportModal, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Export Hooks')).toBeInTheDocument();
-	});
-
-	it('should show "Select hooks to export as JSON" description', () => {
-		render(HookExportModal, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Select hooks to export as JSON')).toBeInTheDocument();
-	});
-
-	it('should show Select all and Clear buttons', () => {
-		render(HookExportModal, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Select all')).toBeInTheDocument();
-		expect(screen.getByText('Clear')).toBeInTheDocument();
-	});
-
-	it('should show selection count', () => {
-		render(HookExportModal, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('0 of 0 selected')).toBeInTheDocument();
-	});
-
-	it('should show Copy to Clipboard button', () => {
-		render(HookExportModal, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Copy to Clipboard')).toBeInTheDocument();
-	});
-
-	it('should show Export to File button', () => {
-		render(HookExportModal, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Export to File')).toBeInTheDocument();
-	});
-
-	it('should show Cancel button', () => {
-		render(HookExportModal, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Cancel')).toBeInTheDocument();
-	});
-
-	it('should show empty state when no hooks available', () => {
-		render(HookExportModal, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('No hooks to export')).toBeInTheDocument();
-	});
-
-	it('should show preview placeholder when no hooks selected', () => {
-		render(HookExportModal, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Select hooks to preview export')).toBeInTheDocument();
-	});
-
-	it('should show Preview section header', () => {
-		render(HookExportModal, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Preview')).toBeInTheDocument();
-	});
-});
-
-describe('SoundHookWizard Component', () => {
-	let SoundHookWizard: any;
-
-	beforeAll(async () => {
-		const mod = await import('$lib/components/hooks/SoundHookWizard.svelte');
-		SoundHookWizard = mod.default;
-	});
-
-	it('should render wizard title', () => {
-		render(SoundHookWizard, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Sound Notifications Setup')).toBeInTheDocument();
-	});
-
-	it('should show Step 1 of 3', () => {
-		render(SoundHookWizard, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Step 1 of 3')).toBeInTheDocument();
-	});
-
-	it('should show Choose Events heading', () => {
-		render(SoundHookWizard, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Choose Events')).toBeInTheDocument();
-	});
-
-	it('should show Quick Presets section', () => {
-		render(SoundHookWizard, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Quick Presets')).toBeInTheDocument();
-	});
-
-	it('should show individual events section', () => {
-		render(SoundHookWizard, { props: { onClose: vi.fn() } });
-		expect(screen.getByText('Or Select Individual Events')).toBeInTheDocument();
-	});
-
-	it('should show event options', () => {
-		render(SoundHookWizard, { props: { onClose: vi.fn() } });
-		expect(screen.getAllByText('Task Complete').length).toBeGreaterThan(0);
-		expect(screen.getAllByText('Notification').length).toBeGreaterThan(0);
-	});
-
-	it('should show Back button (disabled on step 1)', () => {
-		render(SoundHookWizard, { props: { onClose: vi.fn() } });
-		const backBtn = screen.getByText('Back');
-		expect(backBtn.closest('button')?.disabled).toBe(true);
-	});
-
-	it('should show Next button (disabled when no events selected)', () => {
-		render(SoundHookWizard, { props: { onClose: vi.fn() } });
-		const nextBtn = screen.getByText('Next');
-		expect(nextBtn.closest('button')?.disabled).toBe(true);
-	});
-
-	it('should enable Next button when an event is selected', async () => {
-		render(SoundHookWizard, { props: { onClose: vi.fn() } });
-		// Click a checkbox event - multiple elements exist for 'Task Complete', get the one in individual events
-		const allTaskComplete = screen.getAllByText('Task Complete');
-		// The last one should be the individual event button
-		const lastTaskComplete = allTaskComplete[allTaskComplete.length - 1];
-		await fireEvent.click(lastTaskComplete.closest('button')!);
-		const nextBtn = screen.getByText('Next');
-		expect(nextBtn.closest('button')?.disabled).toBe(false);
-	});
-});
-
 describe('Hooks index.ts exports', () => {
 	let hookExports: any;
 
@@ -685,9 +542,7 @@ describe('Hooks index.ts exports', () => {
 
 	it('should export all components', () => {
 		expect(hookExports.HookCard).toBeDefined();
-		expect(hookExports.HookExportModal).toBeDefined();
 		expect(hookExports.HookForm).toBeDefined();
 		expect(hookExports.HookLibrary).toBeDefined();
-		expect(hookExports.SoundHookWizard).toBeDefined();
 	});
 });

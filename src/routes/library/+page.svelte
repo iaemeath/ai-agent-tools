@@ -3,11 +3,11 @@
 	import { invoke } from '@tauri-apps/api/core';
 	import { Header } from '$lib/components/layout';
 	import { McpLibrary, McpForm, McpTestModal } from '$lib/components/mcp';
-	import { ConfirmDialog } from '$lib/components/shared';
-	import { mcpLibrary, notifications } from '$lib/stores';
+	import { ConfirmDialog, ScopeBar } from '$lib/components/shared';
+	import { mcpLibrary, projectsStore, notifications } from '$lib/stores';
 	import { i18n } from '$lib/i18n';
 	import type { Mcp, GatewayMcp } from '$lib/types';
-	import { Plus } from 'lucide-svelte';
+	import { User, FolderOpen } from 'lucide-svelte';
 
 	let showAddMcp = $state(false);
 	let editingMcp = $state<Mcp | null>(null);
@@ -15,9 +15,34 @@
 	let testingMcp = $state<Mcp | null>(null);
 	let gatewayMcpIds = $state<Set<number>>(new Set());
 
+	const mcpScopes = $derived([
+		{ key: 'user', label: i18n.t('scope.user'), description: i18n.t('scope.userDesc'), icon: User },
+		{ key: 'project', label: i18n.t('scope.project'), description: i18n.t('scope.projectDesc'), icon: FolderOpen }
+	]);
+
 	onMount(async () => {
+		await projectsStore.loadProjects();
+		await projectsStore.loadGlobalMcps();
 		await loadGatewayMcps();
 	});
+
+	async function handleRefresh() {
+		await mcpLibrary.load();
+		await projectsStore.loadGlobalMcps();
+		await projectsStore.loadProjects();
+		notifications.success(i18n.t('common.refreshed'));
+	}
+
+	async function handleProjectChange(path: string | null) {
+		projectsStore.setSelectedProjectPath(path);
+		await projectsStore.loadProjects();
+	}
+
+	function scopeCount(scope: string): number {
+		if (scope === 'user') return projectsStore.globalMcps.filter((g) => g.isEnabled).length;
+		const project = projectsStore.projects.find((p) => p.path === projectsStore.selectedProjectPath);
+		return project?.assignedMcps.filter((a) => a.isEnabled).length ?? 0;
+	}
 
 	async function loadGatewayMcps() {
 		try {
@@ -96,12 +121,18 @@
 />
 
 <div class="flex-1 overflow-auto p-6">
-	<div class="flex justify-end mb-6">
-		<button onclick={() => (showAddMcp = true)} class="btn btn-primary">
-			<Plus class="w-4 h-4 mr-2" />
-			{i18n.t('mcp.addMcp')}
-		</button>
-	</div>
+	<ScopeBar
+		projectPath={projectsStore.selectedProjectPath}
+		projects={projectsStore.projects}
+		selectedScope={mcpLibrary.selectedScope}
+		scopes={mcpScopes}
+		getCount={scopeCount}
+		noProjectLabel={i18n.t('settings.scopeNoProject')}
+		refreshLabel={i18n.t('common.refresh')}
+		onProjectChange={handleProjectChange}
+		onScopeSelect={(s) => mcpLibrary.setScope(s as 'user' | 'project')}
+		onRefresh={handleRefresh}
+	/>
 
 	<McpLibrary
 		onEdit={(mcp) => (editingMcp = mcp)}

@@ -1,9 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { Skill, CreateSkillRequest, GlobalSkill, ProjectSkill, SkillFile, CreateSkillFileRequest } from '$lib/types';
+import { projectsStore } from './projects.svelte';
+
+type SkillScope = 'user' | 'project';
 
 class SkillLibraryState {
 	skills = $state<Skill[]>([]);
 	globalSkills = $state<GlobalSkill[]>([]);
+	projectSkills = $state<ProjectSkill[]>([]);
+	selectedScope = $state<SkillScope>('user');
 	isLoading = $state(false);
 	error = $state<string | null>(null);
 	searchQuery = $state('');
@@ -51,6 +56,39 @@ class SkillLibraryState {
 		}
 	}
 
+	setScope(scope: SkillScope) {
+		this.selectedScope = scope;
+	}
+
+	get currentProjectId(): number | null {
+		const project = projectsStore.projects.find((p) => p.path === projectsStore.selectedProjectPath);
+		return project?.id ?? null;
+	}
+
+	async setProjectPath(path: string | null) {
+		projectsStore.setSelectedProjectPath(path);
+		if (!path) {
+			this.selectedScope = 'user';
+			this.projectSkills = [];
+			return;
+		}
+		await this.loadProjectSkills();
+	}
+
+	async loadProjectSkills() {
+		const projectId = this.currentProjectId;
+		if (projectId == null) {
+			this.projectSkills = [];
+			return;
+		}
+		try {
+			this.projectSkills = await this.getProjectSkills(projectId);
+		} catch (e) {
+			console.error('Failed to load project skills:', e);
+			this.projectSkills = [];
+		}
+	}
+
 	async create(request: CreateSkillRequest): Promise<Skill> {
 		const skill = await invoke<Skill>('create_skill', { skill: request });
 		this.skills = [...this.skills, skill];
@@ -85,14 +123,17 @@ class SkillLibraryState {
 
 	async assignToProject(projectId: number, skillId: number): Promise<void> {
 		await invoke('assign_skill_to_project', { projectId, skillId });
+		await this.loadProjectSkills();
 	}
 
 	async removeFromProject(projectId: number, skillId: number): Promise<void> {
 		await invoke('remove_skill_from_project', { projectId, skillId });
+		await this.loadProjectSkills();
 	}
 
 	async toggleProjectSkill(assignmentId: number, enabled: boolean): Promise<void> {
 		await invoke('toggle_project_skill', { assignmentId, enabled });
+		await this.loadProjectSkills();
 	}
 
 	async getProjectSkills(projectId: number): Promise<ProjectSkill[]> {

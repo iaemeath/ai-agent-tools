@@ -7,6 +7,13 @@ class ProjectsState {
 	isLoading = $state(false);
 	error = $state<string | null>(null);
 
+	/** Globally-selected project path, shared across every scope bar. */
+	selectedProjectPath = $state<string | null>(null);
+
+	setSelectedProjectPath(path: string | null) {
+		this.selectedProjectPath = path;
+	}
+
 	async loadProjects() {
 		console.log('[projectsStore] Loading projects...');
 		this.isLoading = true;

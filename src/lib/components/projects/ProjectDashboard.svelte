@@ -3,8 +3,9 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { projectsStore, notifications } from '$lib/stores';
+	import { i18n } from '$lib/i18n';
 	import { invoke } from '@tauri-apps/api/core';
-	import { FolderOpen, ArrowLeft, ChevronDown, RefreshCw, ExternalLink, Wrench, Settings } from 'lucide-svelte';
+	import { FolderOpen, ArrowLeft, RefreshCw, ExternalLink, Wrench, Settings } from 'lucide-svelte';
 	import ProjectToolsPanel from './ProjectToolsPanel.svelte';
 	import ProjectSettingsPanel from './ProjectSettingsPanel.svelte';
 
@@ -13,9 +14,6 @@
 	};
 
 	let { project: projectProp }: Props = $props();
-
-	let showEditorDropdown = $state(false);
-	let updatingEditor = $state(false);
 
 	// Get current project from store (reactive to updates)
 	let project = $derived(
@@ -45,31 +43,12 @@
 		goto(`/projects/${project.id}?tab=settings&section=${section}`, { replaceState: true });
 	}
 
-	async function handleChangeEditorType(editorType: 'claude_code' | 'opencode') {
-		if (editorType === project.editorType) {
-			showEditorDropdown = false;
-			return;
-		}
-		updatingEditor = true;
-		try {
-			await invoke('update_project_editor_type', { projectId: project.id, editorType });
-			await projectsStore.loadProjects();
-			notifications.success(`Switched to ${editorType === 'claude_code' ? 'Claude Code' : 'OpenCode'}`);
-		} catch (err) {
-			notifications.error('Failed to change editor');
-			console.error(err);
-		} finally {
-			updatingEditor = false;
-			showEditorDropdown = false;
-		}
-	}
-
 	async function handleSyncConfig() {
 		try {
 			await projectsStore.syncProjectConfig(project.id);
-			notifications.success('Config synced');
+			notifications.success(i18n.t('project.card.configSynced'));
 		} catch (err) {
-			notifications.error('Failed to sync config');
+			notifications.error(i18n.t('project.card.syncFailed'));
 			console.error(err);
 		}
 	}
@@ -78,14 +57,11 @@
 		try {
 			await invoke('open_folder', { path: project.path });
 		} catch (err) {
-			notifications.error('Failed to open folder');
+			notifications.error(i18n.t('project.card.openFolderFailed'));
 			console.error(err);
 		}
 	}
 
-	function getEditorDisplayName(editorType: string): string {
-		return editorType === 'claude_code' ? 'Claude Code' : 'OpenCode';
-	}
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -98,7 +74,7 @@
 			<button
 				onclick={() => goto('/projects')}
 				class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-				title="Back to Projects"
+				title={i18n.t('project.backToProjects')}
 			>
 				<ArrowLeft class="w-5 h-5" />
 			</button>
@@ -112,40 +88,6 @@
 			<div class="flex-1 min-w-0">
 				<div class="flex items-center gap-2">
 					<h1 class="text-xl font-semibold text-gray-900 dark:text-white truncate">{project.name}</h1>
-					<!-- Editor Type Dropdown -->
-					<div class="relative">
-						<button
-							onclick={(e) => { e.stopPropagation(); showEditorDropdown = !showEditorDropdown; }}
-							disabled={updatingEditor}
-							class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors {project.editorType === 'opencode'
-								? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/70'
-								: 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-900/70'}"
-						>
-							<span class="w-3 h-3 rounded-sm flex items-center justify-center text-[8px] font-bold text-white {project.editorType === 'opencode' ? 'bg-emerald-500' : 'bg-primary-500'}">
-								{project.editorType === 'opencode' ? 'O' : 'C'}
-							</span>
-							{getEditorDisplayName(project.editorType)}
-							<ChevronDown class="w-3 h-3" />
-						</button>
-						{#if showEditorDropdown}
-							<div class="absolute left-0 top-full mt-1 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20">
-								<button
-									onclick={() => handleChangeEditorType('claude_code')}
-									class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 {project.editorType === 'claude_code' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300'}"
-								>
-									<span class="w-4 h-4 rounded-sm bg-primary-500 text-white flex items-center justify-center text-[9px] font-bold">C</span>
-									Claude Code
-								</button>
-								<button
-									onclick={() => handleChangeEditorType('opencode')}
-									class="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 {project.editorType === 'opencode' ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-gray-300'}"
-								>
-									<span class="w-4 h-4 rounded-sm bg-emerald-500 text-white flex items-center justify-center text-[9px] font-bold">O</span>
-									OpenCode
-								</button>
-							</div>
-						{/if}
-					</div>
 				</div>
 				<p class="text-sm text-gray-500 dark:text-gray-400 font-mono truncate">{project.path}</p>
 			</div>
@@ -158,7 +100,7 @@
 					title="Open project folder"
 				>
 					<ExternalLink class="w-4 h-4" />
-					<span class="hidden sm:inline ml-1.5">Open Folder</span>
+					<span class="hidden sm:inline ml-1.5">{i18n.t('project.card.openFolder')}</span>
 				</button>
 				<button
 					onclick={handleSyncConfig}
@@ -166,7 +108,7 @@
 					title="Sync config files"
 				>
 					<RefreshCw class="w-4 h-4" />
-					<span class="hidden sm:inline ml-1.5">Sync Config</span>
+					<span class="hidden sm:inline ml-1.5">{i18n.t('project.card.syncConfig')}</span>
 				</button>
 			</div>
 		</div>
@@ -178,7 +120,7 @@
 				class="flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors {activeTab === 'tools' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
 			>
 				<Wrench class="w-4 h-4" />
-				Tools
+				{i18n.t('project.dashboard.tools')}
 				{#if toolsCount > 0}
 					<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full {activeTab === 'tools' ? 'bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-300' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}">
 						{toolsCount}
@@ -190,7 +132,7 @@
 				class="flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors {activeTab === 'settings' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
 			>
 				<Settings class="w-4 h-4" />
-				Settings
+				{i18n.t('project.dashboard.settings')}
 			</button>
 		</div>
 	</div>
@@ -204,12 +146,3 @@
 		{/if}
 	</div>
 </div>
-
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-{#if showEditorDropdown}
-	<div
-		class="fixed inset-0 z-10"
-		onclick={() => showEditorDropdown = false}
-	></div>
-{/if}

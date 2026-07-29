@@ -21,6 +21,39 @@
 			console.error('Failed to toggle favorite:', error);
 		}
 	}
+
+	function isSubAgentEnabled(subagent: SubAgent): boolean {
+		if (subagentLibrary.selectedScope === 'user') {
+			const row = subagentLibrary.globalSubAgents.find((g) => g.subagentId === subagent.id);
+			return row?.isEnabled ?? false;
+		}
+		const row = subagentLibrary.projectSubAgents.find((p) => p.subagentId === subagent.id);
+		return row?.isEnabled ?? false;
+	}
+
+	async function handleToggleEnable(subagent: SubAgent, enabled: boolean) {
+		try {
+			if (subagentLibrary.selectedScope === 'user') {
+				const row = subagentLibrary.globalSubAgents.find((g) => g.subagentId === subagent.id);
+				if (row) {
+					await subagentLibrary.toggleGlobalSubAgent(row.id, enabled);
+				} else if (enabled) {
+					await subagentLibrary.addGlobalSubAgent(subagent.id);
+				}
+			} else {
+				const projectId = subagentLibrary.currentProjectId;
+				if (projectId == null) return;
+				const row = subagentLibrary.projectSubAgents.find((p) => p.subagentId === subagent.id);
+				if (row) {
+					await subagentLibrary.toggleProjectSubAgent(row.id, enabled);
+				} else if (enabled) {
+					await subagentLibrary.assignToProject(projectId, subagent.id);
+				}
+			}
+		} catch (e) {
+			console.error('Failed to toggle sub-agent enable:', e);
+		}
+	}
 </script>
 
 <div class="space-y-4">
@@ -65,6 +98,8 @@
 					{subagent}
 					{onEdit}
 					{onDelete}
+					enabled={isSubAgentEnabled(subagent)}
+					onToggleEnable={handleToggleEnable}
 					onFavoriteToggle={handleFavoriteToggle}
 				/>
 			{/each}

@@ -6,12 +6,12 @@ mod db;
 mod mcp_gateway;
 mod mcp_server;
 mod services;
+mod session_manager;
 mod utils;
 
 use db::Database;
 use mcp_gateway::server::{GatewayServerConfig, GatewayServerState, DEFAULT_GATEWAY_PORT};
 use mcp_server::server::{McpServerConfig, McpServerState, DEFAULT_MCP_SERVER_PORT};
-use services::docker::client::DockerClientManager;
 use services::mcp_session::McpSessionManager;
 
 pub fn run() {
@@ -22,7 +22,6 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init());
 
     // Enable MCP bridge plugin for development/testing
@@ -58,9 +57,6 @@ pub fn run() {
 
             // Initialize session manager for MCP execution
             app.manage(Mutex::new(McpSessionManager::new()));
-
-            // Initialize Docker client manager
-            app.manage(Arc::new(DockerClientManager::new()));
 
             // Initialize MCP server state with config from database
             let mcp_server_config = {
@@ -304,8 +300,6 @@ pub fn run() {
             commands::hooks::remove_hook_from_project,
             commands::hooks::toggle_project_hook,
             commands::hooks::seed_hook_templates,
-            commands::hooks::export_hooks_to_json,
-            commands::hooks::create_sound_notification_hooks,
             commands::hooks::duplicate_hook,
             // Rule Commands
             commands::rules::get_all_rules,
@@ -322,17 +316,6 @@ pub fn run() {
             commands::rules::remove_rule_from_project,
             commands::rules::toggle_project_rule,
             commands::rules::get_active_rules_for_path,
-            // Sound Commands
-            commands::sounds::get_system_sounds,
-            commands::sounds::get_custom_sounds,
-            commands::sounds::preview_sound,
-            commands::sounds::ensure_sounds_directory,
-            commands::sounds::upload_custom_sound,
-            commands::sounds::delete_custom_sound,
-            commands::sounds::generate_sound_hook_command,
-            commands::sounds::deploy_notification_script,
-            commands::sounds::get_sounds_directory,
-            commands::sounds::validate_sound_file,
             // Repos (Marketplace) Commands
             commands::repos::get_all_repos,
             commands::repos::add_repo,
@@ -355,27 +338,10 @@ pub fn run() {
             commands::settings::get_app_settings,
             commands::settings::update_app_settings,
             commands::settings::get_available_editors,
-            commands::settings::get_opencode_paths_cmd,
-            commands::settings::get_codex_paths_cmd,
-            commands::settings::get_copilot_paths_cmd,
-            commands::settings::get_cursor_paths_cmd,
-            commands::settings::get_gemini_paths_cmd,
             commands::settings::toggle_editor,
             commands::settings::set_github_token,
             commands::settings::clear_github_token,
             commands::settings::has_github_token,
-            commands::settings::get_container_claude_settings,
-            commands::settings::set_container_claude_settings,
-            // Profile Commands
-            commands::profiles::get_all_profiles,
-            commands::profiles::get_profile,
-            commands::profiles::create_profile,
-            commands::profiles::update_profile,
-            commands::profiles::delete_profile,
-            commands::profiles::capture_profile_from_current,
-            commands::profiles::activate_profile,
-            commands::profiles::deactivate_profile,
-            commands::profiles::get_active_profile,
             // StatusLine Commands
             commands::statusline::get_all_statuslines,
             commands::statusline::get_statusline,
@@ -392,16 +358,6 @@ pub fn run() {
             commands::statusline::set_statusline_gallery_url,
             commands::statusline::generate_statusline_preview,
             commands::statusline::read_current_statusline_config,
-            // Spinner Verb Commands
-            commands::spinner_verbs::get_all_spinner_verbs,
-            commands::spinner_verbs::create_spinner_verb,
-            commands::spinner_verbs::update_spinner_verb,
-            commands::spinner_verbs::delete_spinner_verb,
-            commands::spinner_verbs::reorder_spinner_verbs,
-            commands::spinner_verbs::get_spinner_verb_mode,
-            commands::spinner_verbs::set_spinner_verb_mode,
-            commands::spinner_verbs::sync_spinner_verbs,
-            commands::spinner_verbs::read_current_spinner_verbs_config,
             // Debug Commands
             commands::debug::enable_debug_mode,
             commands::debug::disable_debug_mode,
@@ -476,63 +432,11 @@ pub fn run() {
             // Keybindings Commands
             commands::keybindings::get_keybindings,
             commands::keybindings::save_keybindings,
-            // Managed Settings Commands
-            commands::managed_settings::get_managed_settings,
-            // Analytics Commands
-            commands::analytics::get_usage_stats,
-            // Insights Commands
-            commands::insights::get_insights_report,
-            commands::insights::get_session_facets,
-            // Session Explorer Commands
-            commands::sessions::get_session_projects,
-            commands::sessions::get_project_sessions,
-            commands::sessions::get_session_detail,
-            // Container Commands
-            commands::containers::get_all_containers,
-            commands::containers::get_container,
-            commands::containers::create_container,
-            commands::containers::update_container,
-            commands::containers::delete_container,
-            commands::containers::toggle_container_favorite,
-            commands::containers::check_docker_available,
-            commands::containers::build_container_image,
-            commands::containers::start_container_cmd,
-            commands::containers::stop_container_cmd,
-            commands::containers::restart_container_cmd,
-            commands::containers::remove_container_cmd,
-            commands::containers::get_container_status,
-            commands::containers::get_all_container_statuses,
-            commands::containers::get_container_logs_cmd,
-            commands::containers::get_container_stats_cmd,
-            commands::containers::exec_in_container_cmd,
-            commands::containers::get_container_templates,
-            commands::containers::create_container_from_template,
-            commands::containers::assign_container_to_project,
-            commands::containers::remove_container_from_project,
-            commands::containers::get_project_containers,
-            commands::containers::set_default_project_container,
-            commands::containers::start_container_shell,
-            commands::containers::send_shell_input,
-            commands::containers::resize_shell,
-            // Cloud Sync Commands
-            commands::cloud_sync::get_gh_cli_token,
-            commands::cloud_sync::has_gh_cli,
-            commands::cloud_sync::connect_cloud_sync,
-            commands::cloud_sync::get_sync_auth_status,
-            commands::cloud_sync::disconnect_cloud_sync,
-            commands::cloud_sync::get_sync_config,
-            commands::cloud_sync::save_sync_config,
-            commands::cloud_sync::get_project_mappings,
-            commands::cloud_sync::save_project_mappings,
-            commands::cloud_sync::push_sync,
-            commands::cloud_sync::pull_sync,
-            commands::cloud_sync::get_sync_status,
-            // Docker Host Commands
-            commands::docker_hosts::get_all_docker_hosts,
-            commands::docker_hosts::create_docker_host,
-            commands::docker_hosts::update_docker_host,
-            commands::docker_hosts::delete_docker_host,
-            commands::docker_hosts::test_docker_host,
+            // Session Manager Commands
+            commands::session_manager::list_sessions,
+            commands::session_manager::get_session_messages,
+            commands::session_manager::delete_session,
+            commands::session_manager::delete_sessions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

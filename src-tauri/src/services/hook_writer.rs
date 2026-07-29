@@ -175,14 +175,6 @@ pub fn write_project_hooks(project_path: &Path, hooks: &[Hook]) -> Result<()> {
     write_settings_file(&settings_path, &settings)
 }
 
-/// Convert hooks to Claude Code settings.json format for export
-/// This returns a serde_json::Value that can be serialized for export
-pub fn hooks_to_settings_format(hooks: &[Hook]) -> Value {
-    json!({
-        "hooks": generate_hooks_config(hooks)
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,38 +379,6 @@ mod tests {
         let post_tool = config.get("PostToolUse").unwrap().as_array().unwrap();
         let hook_actions = post_tool[0].get("hooks").unwrap().as_array().unwrap();
         assert_eq!(hook_actions[0].get("timeout").unwrap(), 60);
-    }
-
-    #[test]
-    fn test_hooks_to_settings_format() {
-        let hooks = vec![Hook {
-            id: 1,
-            name: "test".to_string(),
-            description: None,
-            event_type: "Stop".to_string(),
-            matcher: None,
-            hook_type: "command".to_string(),
-            command: Some("echo done".to_string()),
-            prompt: None,
-            timeout: None,
-            tags: None,
-            source: "manual".to_string(),
-            is_template: false,
-            url: None,
-            headers: None,
-            allowed_env_vars: None,
-            if_condition: None,
-            status_message: None,
-            once: false,
-            async_mode: false,
-            shell: None,
-            created_at: "2024-01-01".to_string(),
-            updated_at: "2024-01-01".to_string(),
-        }];
-
-        let result = hooks_to_settings_format(&hooks);
-        assert!(result.get("hooks").is_some());
-        assert!(result["hooks"].get("Stop").is_some());
     }
 
     #[test]

@@ -25,11 +25,6 @@ vi.mock('$lib/stores', () => ({
 		save: vi.fn(),
 		load: vi.fn()
 	},
-	spinnerVerbLibrary: {
-		verbs: [],
-		isLoading: false,
-		load: vi.fn()
-	},
 	projectsStore: {
 		projects: []
 	}

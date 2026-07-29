@@ -1,4 +1,4 @@
-//! MCP Tools for Claude Code Tool Manager
+//! MCP Tools for Claude Code Config UI
 //!
 //! This module defines all the tools exposed by the MCP server.
 
@@ -805,7 +805,7 @@ impl ServerHandler for ToolManagerServer {
                 .build(),
         )
         .with_instructions(
-            "Claude Code Tool Manager MCP Server. Manage MCPs, Skills, Sub-Agents, Hooks, and Projects programmatically."
+            "Claude Code Config UI MCP Server. Manage MCPs, Skills, Sub-Agents, Hooks, and Projects programmatically."
                 .to_string(),
         )
     }
@@ -1374,7 +1374,7 @@ mod tests {
         assert!(info
             .instructions
             .unwrap()
-            .contains("Claude Code Tool Manager"));
+            .contains("Claude Code Config UI"));
         assert!(info.capabilities.tools.is_some());
     }
 

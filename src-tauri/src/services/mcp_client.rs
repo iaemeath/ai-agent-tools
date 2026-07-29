@@ -270,7 +270,7 @@ impl StdioMcpClient {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
             "clientInfo": {
-                "name": "claude-code-tool-manager",
+                "name": "claude-code-config-ui",
                 "version": env!("CARGO_PKG_VERSION")
             }
         });
@@ -568,7 +568,7 @@ impl HttpMcpClient {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
                 "clientInfo": {
-                    "name": "claude-code-tool-manager",
+                    "name": "claude-code-config-ui",
                     "version": env!("CARGO_PKG_VERSION")
                 }
             }
@@ -957,7 +957,7 @@ impl SseMcpClient {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
                 "clientInfo": {
-                    "name": "claude-code-tool-manager",
+                    "name": "claude-code-config-ui",
                     "version": env!("CARGO_PKG_VERSION")
                 }
             }
@@ -1217,7 +1217,7 @@ impl StreamableHttpMcpClient {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
                 "clientInfo": {
-                    "name": "claude-code-tool-manager",
+                    "name": "claude-code-config-ui",
                     "version": env!("CARGO_PKG_VERSION")
                 }
             }
@@ -1916,7 +1916,7 @@ async fn test_sse_mcp_internal_async(
             "protocolVersion": "2024-11-05",
             "capabilities": {},
             "clientInfo": {
-                "name": "claude-code-tool-manager",
+                "name": "claude-code-config-ui",
                 "version": env!("CARGO_PKG_VERSION")
             }
         }
@@ -2175,7 +2175,7 @@ async fn test_streamable_http_internal_async(
             "protocolVersion": "2024-11-05",
             "capabilities": {},
             "clientInfo": {
-                "name": "claude-code-tool-manager",
+                "name": "claude-code-config-ui",
                 "version": env!("CARGO_PKG_VERSION")
             }
         }
@@ -2482,7 +2482,7 @@ fn test_http_mcp_internal(
             "protocolVersion": "2024-11-05",
             "capabilities": {},
             "clientInfo": {
-                "name": "claude-code-tool-manager",
+                "name": "claude-code-config-ui",
                 "version": env!("CARGO_PKG_VERSION")
             }
         }
@@ -4382,7 +4382,7 @@ data: "result":{}}
             "protocolVersion": "2024-11-05",
             "capabilities": {},
             "clientInfo": {
-                "name": "claude-code-tool-manager",
+                "name": "claude-code-config-ui",
                 "version": env!("CARGO_PKG_VERSION")
             }
         });
@@ -4398,7 +4398,7 @@ data: "result":{}}
         assert_eq!(serialized["params"]["protocolVersion"], "2024-11-05");
         assert_eq!(
             serialized["params"]["clientInfo"]["name"],
-            "claude-code-tool-manager"
+            "claude-code-config-ui"
         );
         assert!(serialized["params"]["capabilities"].is_object());
     }

@@ -22,6 +22,39 @@
 			console.error('Failed to toggle favorite:', error);
 		}
 	}
+
+	function isCommandEnabled(command: Command): boolean {
+		if (commandLibrary.selectedScope === 'user') {
+			const row = commandLibrary.globalCommands.find((g) => g.commandId === command.id);
+			return row?.isEnabled ?? false;
+		}
+		const row = commandLibrary.projectCommands.find((p) => p.commandId === command.id);
+		return row?.isEnabled ?? false;
+	}
+
+	async function handleToggleEnable(command: Command, enabled: boolean) {
+		try {
+			if (commandLibrary.selectedScope === 'user') {
+				const row = commandLibrary.globalCommands.find((g) => g.commandId === command.id);
+				if (row) {
+					await commandLibrary.toggleGlobalCommand(row.id, enabled);
+				} else if (enabled) {
+					await commandLibrary.addGlobalCommand(command.id);
+				}
+			} else {
+				const projectId = commandLibrary.currentProjectId;
+				if (projectId == null) return;
+				const row = commandLibrary.projectCommands.find((p) => p.commandId === command.id);
+				if (row) {
+					await commandLibrary.toggleProjectCommand(row.id, enabled);
+				} else if (enabled) {
+					await commandLibrary.assignToProject(projectId, command.id);
+				}
+			}
+		} catch (e) {
+			console.error('Failed to toggle command enable:', e);
+		}
+	}
 </script>
 
 <div class="space-y-4">
@@ -66,6 +99,8 @@
 					{command}
 					{onEdit}
 					{onDelete}
+					enabled={isCommandEnabled(command)}
+					onToggleEnable={handleToggleEnable}
 					onFavoriteToggle={handleFavoriteToggle}
 				/>
 			{/each}

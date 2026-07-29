@@ -8,12 +8,14 @@
 		showActions?: boolean;
 		showGatewayToggle?: boolean;
 		isInGateway?: boolean;
+		enabled?: boolean;
 		onEdit?: (mcp: Mcp) => void;
 		onDelete?: (mcp: Mcp) => void;
 		onDuplicate?: (mcp: Mcp) => void;
 		onTest?: (mcp: Mcp) => void;
 		onGatewayToggle?: (mcp: Mcp, enabled: boolean) => void;
 		onFavoriteToggle?: (mcp: Mcp, favorite: boolean) => void;
+		onToggleEnable?: (mcp: Mcp, enabled: boolean) => void;
 	};
 
 	let {
@@ -21,12 +23,14 @@
 		showActions = true,
 		showGatewayToggle = false,
 		isInGateway = false,
+		enabled = false,
 		onEdit,
 		onDelete,
 		onDuplicate,
 		onTest,
 		onGatewayToggle,
-		onFavoriteToggle
+		onFavoriteToggle,
+		onToggleEnable
 	}: Props = $props();
 
 	let menuButton = $state<HTMLButtonElement>();
@@ -225,4 +229,32 @@
 			</div>
 		{/if}
 	</div>
+
+	{#if onToggleEnable}
+		<div
+			class="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/60"
+		>
+			<span class="text-xs font-medium text-gray-500 dark:text-gray-400">
+				{i18n.t('common.enabled')}
+			</span>
+			<button
+				type="button"
+				role="switch"
+				aria-checked={enabled}
+				onclick={(e) => {
+					e.stopPropagation();
+					onToggleEnable(mcp, !enabled);
+				}}
+				class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors {enabled
+					? 'bg-primary-600'
+					: 'bg-gray-300 dark:bg-gray-600'}"
+			>
+				<span
+					class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform {enabled
+						? 'translate-x-4'
+						: 'translate-x-0.5'}"
+				></span>
+			</button>
+		</div>
+	{/if}
 </div>

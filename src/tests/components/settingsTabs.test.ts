@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { render } from '@testing-library/svelte';
 
 vi.mock('$lib/stores', () => ({
 	claudeSettingsLibrary: {
@@ -44,17 +44,6 @@ vi.mock('$lib/stores', () => ({
 		resetContext: vi.fn(),
 		save: vi.fn(),
 		setSearch: vi.fn()
-	},
-	spinnerVerbLibrary: {
-		verbs: [],
-		mode: 'append',
-		isLoading: false,
-		load: vi.fn().mockResolvedValue(undefined),
-		create: vi.fn(),
-		update: vi.fn(),
-		delete: vi.fn(),
-		setMode: vi.fn(),
-		sync: vi.fn()
 	},
 	whatsNew: {
 		showDialog: false
@@ -125,23 +114,6 @@ vi.mock('$lib/types', async (importOriginal) => {
 			local: { label: 'Local', description: 'Local scope' }
 		}
 	};
-});
-
-// ──────────────────────────────────────────────────────────
-// SettingsAdminTab
-// ──────────────────────────────────────────────────────────
-describe('SettingsAdminTab', () => {
-	let SettingsAdminTab: any;
-
-	beforeAll(async () => {
-		const mod = await import('$lib/components/settings/tabs/SettingsAdminTab.svelte');
-		SettingsAdminTab = mod.default;
-	});
-
-	it('should render loading spinner initially', () => {
-		const { container } = render(SettingsAdminTab);
-		expect(container.querySelector('.animate-spin')).toBeTruthy();
-	});
 });
 
 // ──────────────────────────────────────────────────────────
@@ -315,56 +287,6 @@ describe('SettingsSessionTab', () => {
 });
 
 // ──────────────────────────────────────────────────────────
-// SettingsSpinnerVerbsTab
-// ──────────────────────────────────────────────────────────
-describe('SettingsSpinnerVerbsTab', () => {
-	let SettingsSpinnerVerbsTab: any;
-
-	beforeAll(async () => {
-		const mod = await import('$lib/components/settings/tabs/SettingsSpinnerVerbsTab.svelte');
-		SettingsSpinnerVerbsTab = mod.default;
-	});
-
-	it('should render Mode label', () => {
-		render(SettingsSpinnerVerbsTab);
-		expect(screen.getByText('Mode:')).toBeInTheDocument();
-	});
-
-	it('should render mode select with Append and Replace options', () => {
-		render(SettingsSpinnerVerbsTab);
-		expect(screen.getByText('Append (add to defaults)')).toBeInTheDocument();
-		expect(screen.getByText('Replace (use only these)')).toBeInTheDocument();
-	});
-
-	it('should render Sync to Settings button', () => {
-		render(SettingsSpinnerVerbsTab);
-		expect(screen.getByText('Sync to Settings')).toBeInTheDocument();
-	});
-
-	it('should render Add Verb button', () => {
-		render(SettingsSpinnerVerbsTab);
-		expect(screen.getByText('Add Verb')).toBeInTheDocument();
-	});
-});
-
-// ──────────────────────────────────────────────────────────
-// SettingsEditorSyncTab (large, complex component)
-// ──────────────────────────────────────────────────────────
-describe('SettingsEditorSyncTab', () => {
-	let SettingsEditorSyncTab: any;
-
-	beforeAll(async () => {
-		const mod = await import('$lib/components/settings/tabs/SettingsEditorSyncTab.svelte');
-		SettingsEditorSyncTab = mod.default;
-	});
-
-	it('should render without crashing', () => {
-		render(SettingsEditorSyncTab);
-		expect(document.body).toBeTruthy();
-	});
-});
-
-// ──────────────────────────────────────────────────────────
 // SettingsAutoModeTab
 // ──────────────────────────────────────────────────────────
 describe('SettingsAutoModeTab', () => {
@@ -378,28 +300,6 @@ describe('SettingsAutoModeTab', () => {
 	it('should render without crashing', () => {
 		render(SettingsAutoModeTab);
 		expect(document.body).toBeTruthy();
-	});
-});
-
-// ──────────────────────────────────────────────────────────
-// SettingsCliTab
-// ──────────────────────────────────────────────────────────
-describe('SettingsCliTab', () => {
-	let SettingsCliTab: any;
-
-	beforeAll(async () => {
-		const mod = await import('$lib/components/settings/tabs/SettingsCliTab.svelte');
-		SettingsCliTab = mod.default;
-	});
-
-	it('should render CLI Startup Flags heading', () => {
-		render(SettingsCliTab);
-		expect(screen.getByText('CLI Startup Flags')).toBeInTheDocument();
-	});
-
-	it('should render Scheduling heading', () => {
-		render(SettingsCliTab);
-		expect(screen.getByText('Scheduling')).toBeInTheDocument();
 	});
 });
 
@@ -419,10 +319,6 @@ describe('Settings tabs index exports', () => {
 		expect(exports.SettingsAuthTab).toBeDefined();
 		expect(exports.SettingsMcpApprovalTab).toBeDefined();
 		expect(exports.SettingsKeybindingsTab).toBeDefined();
-		expect(exports.SettingsSpinnerVerbsTab).toBeDefined();
-		expect(exports.SettingsAdminTab).toBeDefined();
-		expect(exports.SettingsEditorSyncTab).toBeDefined();
 		expect(exports.SettingsAutoModeTab).toBeDefined();
-		expect(exports.SettingsCliTab).toBeDefined();
 	});
 });

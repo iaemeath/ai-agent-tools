@@ -14,7 +14,7 @@
 	let selectedScope = $state<'user' | 'project'>('user');
 	let showDeleteConfirm = $state(false);
 
-	const projectPath = $derived(projectsStore.selectedProject?.path ?? null);
+	const projectPath = $derived(projectsStore.selectedProjectPath);
 
 	$effect(() => {
 		agentMemoryLibrary.loadMemory(subagent.name, selectedScope, projectPath);

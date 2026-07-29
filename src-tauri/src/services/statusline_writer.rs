@@ -655,7 +655,7 @@ pub fn generate_script_from_segments_with_theme(
 
     format!(
         r#"#!/usr/bin/env python3
-"""Auto-generated status line script by Claude Code Tool Manager."""
+"""Auto-generated status line script by Claude Code Config UI."""
 import sys
 import json
 
@@ -1256,7 +1256,7 @@ fn generate_powerline_script(segments: &[StatusLineSegment], theme: &str) -> Str
 
     format!(
         r#"#!/usr/bin/env python3
-"""Auto-generated Powerline status line script by Claude Code Tool Manager."""
+"""Auto-generated Powerline status line script by Claude Code Config UI."""
 import sys
 import json
 

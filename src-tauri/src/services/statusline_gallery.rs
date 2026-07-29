@@ -14,7 +14,7 @@ pub async fn fetch_gallery_from_url(
         request = request.header("Authorization", format!("token {}", token));
     }
 
-    request = request.header("User-Agent", "claude-code-tool-manager");
+    request = request.header("User-Agent", "claude-code-config-ui");
 
     let response = request.send().await?;
 

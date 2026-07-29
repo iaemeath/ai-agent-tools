@@ -104,8 +104,9 @@ describe('Claude Settings Library Store', () => {
 
 		it('should set project path', async () => {
 			const { claudeSettingsLibrary } = await import('$lib/stores/claudeSettingsLibrary.svelte');
+			const { projectsStore } = await import('$lib/stores/projects.svelte');
 			claudeSettingsLibrary.setProjectPath('/my/project');
-			expect(claudeSettingsLibrary.projectPath).toBe('/my/project');
+			expect(projectsStore.selectedProjectPath).toBe('/my/project');
 		});
 	});
 });

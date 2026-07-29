@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Mcp } from '$lib/types';
-	import { mcpLibrary } from '$lib/stores';
+	import { mcpLibrary, projectsStore } from '$lib/stores';
 	import McpCard from './McpCard.svelte';
 	import { SearchBar, LoadingSpinner, EmptyState } from '$lib/components/shared';
 	import { Plug, Globe, Server, Package } from 'lucide-svelte';
@@ -24,6 +24,40 @@
 			mcpLibrary.updateMcp({ ...mcp, isFavorite: favorite });
 		} catch (error) {
 			console.error('Failed to toggle favorite:', error);
+		}
+	}
+
+	function isMcpEnabled(mcp: Mcp): boolean {
+		if (mcpLibrary.selectedScope === 'user') {
+			const row = projectsStore.globalMcps.find((g) => g.mcpId === mcp.id);
+			return row?.isEnabled ?? false;
+		}
+		const project = projectsStore.projects.find((p) => p.path === projectsStore.selectedProjectPath);
+		const row = project?.assignedMcps.find((a) => a.mcpId === mcp.id);
+		return row?.isEnabled ?? false;
+	}
+
+	async function handleToggleEnable(mcp: Mcp, enabled: boolean) {
+		try {
+			if (mcpLibrary.selectedScope === 'user') {
+				const row = projectsStore.globalMcps.find((g) => g.mcpId === mcp.id);
+				if (row) {
+					await projectsStore.toggleGlobalMcp(row.id, enabled);
+				} else if (enabled) {
+					await projectsStore.addGlobalMcp(mcp.id);
+				}
+			} else {
+				const project = projectsStore.projects.find((p) => p.path === projectsStore.selectedProjectPath);
+				if (!project) return;
+				const row = project.assignedMcps.find((a) => a.mcpId === mcp.id);
+				if (row) {
+					await projectsStore.toggleProjectMcp(row.id, enabled);
+				} else if (enabled) {
+					await projectsStore.assignMcpToProject(project.id, mcp.id);
+				}
+			}
+		} catch (e) {
+			console.error('Failed to toggle MCP enable:', e);
 		}
 	}
 
@@ -84,6 +118,8 @@
 					{onTest}
 					{showGatewayToggle}
 					isInGateway={gatewayMcpIds.has(mcp.id)}
+					enabled={isMcpEnabled(mcp)}
+					onToggleEnable={handleToggleEnable}
 					{onGatewayToggle}
 					onFavoriteToggle={handleFavoriteToggle}
 				/>

@@ -3,6 +3,7 @@
 	import type { ClaudeSettings, ClaudeSettingsScope } from '$lib/types';
 	import { CLAUDE_SETTINGS_SCOPE_LABELS } from '$lib/types';
 	import { claudeSettingsLibrary, notifications } from '$lib/stores';
+	import { i18n } from '$lib/i18n';
 	import { SETTINGS_CATEGORIES } from '$lib/components/settings';
 	import { FolderOpen, FileText, RefreshCw, Info } from 'lucide-svelte';
 
@@ -94,7 +95,7 @@
 								: 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700/50'}"
 					>
 						<svelte:component this={category.icon} class="w-4 h-4 flex-shrink-0" />
-						{category.label}
+						{i18n.t(category.label)}
 					</button>
 				{/each}
 			</div>

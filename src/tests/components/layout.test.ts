@@ -1,17 +1,10 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen } from '@testing-library/svelte';
 
 vi.mock('$lib/stores', () => ({
 	mcpLibrary: { load: vi.fn(), mcps: [] },
 	projectsStore: { loadProjects: vi.fn(), loadGlobalMcps: vi.fn(), projects: [] },
 	notifications: { success: vi.fn(), error: vi.fn() },
-	sessionStore: {
-		projects: [],
-		isLoading: false,
-		isLoadingProjects: false,
-		load: vi.fn(),
-		loadProjects: vi.fn()
-	},
 	i18n: {
 		t: (key: string) => {
 			const translations: Record<string, string> = {
@@ -20,8 +13,6 @@ vi.mock('$lib/stores', () => ({
 				'nav.core': 'Core',
 				'nav.tools': 'Tools',
 				'nav.configure': 'Configure',
-				'nav.insights': 'Insights',
-				'nav.dashboard': 'Dashboard',
 				'nav.projects': 'Projects',
 				'nav.mcps': 'MCPs',
 				'nav.agents': 'Agents',
@@ -33,9 +24,6 @@ vi.mock('$lib/stores', () => ({
 				'nav.permissions': 'Permissions',
 				'nav.memory': 'Memory',
 				'nav.marketplace': 'Marketplace',
-				'nav.analytics': 'Analytics',
-				'nav.comparison': 'Comparison',
-				'nav.sessions': 'Sessions',
 				'nav.settings': 'Settings',
 				'header.refresh': 'Refresh',
 				'header.toggleTheme': 'Toggle theme',
@@ -45,7 +33,7 @@ vi.mock('$lib/stores', () => ({
 		},
 		setLocale: vi.fn(),
 		currentLabel: 'EN',
-		nextLocale: 'zh-TW'
+		nextLocale: 'zh-CN'
 	}
 }));
 
@@ -60,12 +48,6 @@ vi.mock('$app/stores', () => ({
 
 vi.mock('@tauri-apps/api/app', () => ({
 	getVersion: vi.fn().mockResolvedValue('3.2.4')
-}));
-
-vi.mock('$lib/types/usage', () => ({
-	estimateSessionCost: vi.fn().mockReturnValue(0),
-	formatCost: vi.fn().mockReturnValue('$0.00'),
-	formatCompactNumber: vi.fn().mockReturnValue('0')
 }));
 
 describe('Header Component', () => {
@@ -103,46 +85,6 @@ describe('Header Component', () => {
 	});
 });
 
-describe('TodayUsageWidget Component', () => {
-	let TodayUsageWidget: any;
-
-	beforeAll(async () => {
-		const mod = await import('$lib/components/layout/TodayUsageWidget.svelte');
-		TodayUsageWidget = mod.default;
-	});
-
-	it('should render without data (empty)', () => {
-		render(TodayUsageWidget);
-		// When no projects, widget should not show content
-		expect(screen.queryByText('Usage')).not.toBeInTheDocument();
-	});
-
-	it('should render usage widget when projects exist', async () => {
-		const { sessionStore } = await import('$lib/stores');
-		(sessionStore as any).projects = [
-			{
-				folderName: 'proj',
-				inferredPath: '/proj',
-				sessionCount: 5,
-				totalInputTokens: 1000,
-				totalOutputTokens: 500,
-				totalCacheReadTokens: 0,
-				totalCacheCreationTokens: 0,
-				modelsUsed: ['sonnet'],
-				toolUsage: {},
-				latestSession: null,
-				earliestSession: null
-			}
-		];
-		render(TodayUsageWidget);
-		expect(screen.getByText('Usage')).toBeInTheDocument();
-		expect(screen.getByText('Projects')).toBeInTheDocument();
-		expect(screen.getByText('Sessions')).toBeInTheDocument();
-		expect(screen.getByText('Cost')).toBeInTheDocument();
-		(sessionStore as any).projects = [];
-	});
-});
-
 describe('Sidebar Component', () => {
 	let Sidebar: any;
 
@@ -166,12 +108,10 @@ describe('Sidebar Component', () => {
 		expect(screen.getByText('Core')).toBeInTheDocument();
 		expect(screen.getByText('Tools')).toBeInTheDocument();
 		expect(screen.getByText('Configure')).toBeInTheDocument();
-		expect(screen.getAllByText('Insights').length).toBeGreaterThan(0);
 	});
 
 	it('should render nav items', () => {
 		render(Sidebar);
-		expect(screen.getByText('Dashboard')).toBeInTheDocument();
 		expect(screen.getByText('Projects')).toBeInTheDocument();
 		expect(screen.getByText('MCPs')).toBeInTheDocument();
 		expect(screen.getByText('Skills')).toBeInTheDocument();
@@ -180,8 +120,6 @@ describe('Sidebar Component', () => {
 		expect(screen.getByText('Profiles')).toBeInTheDocument();
 		expect(screen.getByText('Permissions')).toBeInTheDocument();
 		expect(screen.getByText('Memory')).toBeInTheDocument();
-		expect(screen.getByText('Analytics')).toBeInTheDocument();
-		expect(screen.getByText('Sessions')).toBeInTheDocument();
 	});
 
 	it('should render Settings link', () => {

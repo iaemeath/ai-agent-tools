@@ -1,15 +1,42 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Header } from '$lib/components/layout';
 	import { SubAgentLibrary, SubAgentForm } from '$lib/components/subagents';
-	import { ConfirmDialog } from '$lib/components/shared';
-	import { subagentLibrary, notifications } from '$lib/stores';
+	import { ConfirmDialog, ScopeBar } from '$lib/components/shared';
+	import { subagentLibrary, projectsStore, notifications } from '$lib/stores';
 	import { i18n } from '$lib/i18n';
 	import type { SubAgent } from '$lib/types';
-	import { Plus } from 'lucide-svelte';
+	import { User, FolderOpen } from 'lucide-svelte';
 
 	let showAddSubAgent = $state(false);
 	let editingSubAgent = $state<SubAgent | null>(null);
 	let deletingSubAgent = $state<SubAgent | null>(null);
+
+	const subagentScopes = $derived([
+		{ key: 'user', label: i18n.t('scope.user'), description: i18n.t('scope.userDesc'), icon: User },
+		{ key: 'project', label: i18n.t('scope.project'), description: i18n.t('scope.projectDesc'), icon: FolderOpen }
+	]);
+
+	onMount(async () => {
+		await projectsStore.loadProjects();
+		await subagentLibrary.load();
+		await subagentLibrary.loadGlobalSubAgents();
+		if (projectsStore.selectedProjectPath) {
+			await subagentLibrary.setProjectPath(projectsStore.selectedProjectPath);
+		}
+	});
+
+	async function handleRefresh() {
+		await subagentLibrary.load();
+		await subagentLibrary.loadGlobalSubAgents();
+		if (projectsStore.selectedProjectPath) await subagentLibrary.loadProjectSubAgents();
+		notifications.success(i18n.t('common.refreshed'));
+	}
+
+	function scopeCount(scope: string): number {
+		if (scope === 'user') return subagentLibrary.globalSubAgents.filter((g) => g.isEnabled).length;
+		return subagentLibrary.projectSubAgents.filter((p) => p.isEnabled).length;
+	}
 
 	async function handleCreateSubAgent(values: any) {
 		try {
@@ -51,12 +78,18 @@
 />
 
 <div class="flex-1 overflow-auto p-6">
-	<div class="flex justify-end mb-6">
-		<button onclick={() => (showAddSubAgent = true)} class="btn btn-primary">
-			<Plus class="w-4 h-4 mr-2" />
-			{i18n.t('subagent.addAgent')}
-		</button>
-	</div>
+	<ScopeBar
+		projectPath={projectsStore.selectedProjectPath}
+		projects={projectsStore.projects}
+		selectedScope={subagentLibrary.selectedScope}
+		scopes={subagentScopes}
+		getCount={scopeCount}
+		noProjectLabel={i18n.t('settings.scopeNoProject')}
+		refreshLabel={i18n.t('common.refresh')}
+		onProjectChange={(p) => subagentLibrary.setProjectPath(p)}
+		onScopeSelect={(s) => subagentLibrary.setScope(s as 'user' | 'project')}
+		onRefresh={handleRefresh}
+	/>
 
 	<SubAgentLibrary
 		onEdit={(subagent) => (editingSubAgent = subagent)}
