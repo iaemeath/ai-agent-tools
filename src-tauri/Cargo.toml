@@ -1,0 +1,102 @@
+[package]
+name = "claude-code-tool-manager"
+version = "3.8.5"
+description = "Desktop app to manage MCP servers, Skills, and Sub-Agents for Claude Code"
+authors = ["you"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri core
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-shell = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+fern = "0.7"
+
+# Path handling
+directories = "6"
+dirs = "6"
+walkdir = "2"
+
+# SQLite
+rusqlite = { version = "0.39", features = ["bundled"] }
+
+# Docker
+bollard = "0.18"
+once_cell = "1"
+bytes = "1"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP client for GitHub API and MCP testing
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking", "stream"] }
+
+# Async streaming utilities
+futures = "0.3"
+tokio-stream = "0.1"
+
+# Markdown parsing for README-based repos
+pulldown-cmark = "0.13"
+
+# Base64 decoding for GitHub API responses
+base64 = "0.22"
+
+# Regex for parsing
+regex = "1"
+tar = "0.4"
+
+# TOML parsing for Codex CLI config
+toml = "1.0"
+toml_edit = "0.25"
+
+# URL encoding for API queries
+urlencoding = "2"
+
+# UUID generation for session IDs
+uuid = { version = "1", features = ["v4"] }
+
+# MCP Server (exposing our own MCP server)
+rmcp = { version = "1.7", features = ["server", "macros", "transport-streamable-http-server"] }
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors"] }
+schemars = "1.2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tauri-plugin-mcp-bridge = "0.11.1"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-process = "2.3.1"
+tauri-plugin-updater = "2.10.0"
+
+[dev-dependencies]
+rstest = "0.26"                                    # Parameterized tests
+tempfile = "3"                                     # Temp directories for file I/O tests
+pretty_assertions = "1"                            # Better diff output for test failures
+tokio-test = "0.4"                                 # Async test utilities
+insta = { version = "1", features = ["json"] }    # Snapshot testing for JSON output
+wiremock = "0.6"                                   # HTTP mocking for API tests
+serial_test = "3"                                  # Run tests serially when they share global state

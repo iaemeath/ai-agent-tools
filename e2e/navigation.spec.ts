@@ -1,0 +1,102 @@
+import { test, expect } from './fixtures/app';
+
+/**
+ * Helper to navigate via URL (more reliable than clicking)
+ */
+async function navigateToRoute(page: any, route: string, expectedTitle: RegExp) {
+	// Use direct navigation instead of click (SvelteKit client-side routing may not work well with mocks)
+	await page.goto(route, { waitUntil: 'networkidle' });
+
+	// Wait for URL
+	await expect(page).toHaveURL(route);
+
+	// Wait for the header to show the expected title
+	await expect(page.locator('main header h1')).toContainText(expectedTitle, { timeout: 15000 });
+}
+
+test.describe('Navigation', () => {
+	test('should load the dashboard on initial visit', async ({ page }) => {
+		// Dashboard should be visible
+		await expect(page).toHaveURL('/');
+
+		// Sidebar should be visible with navigation items
+		await expect(page.locator('aside')).toBeVisible();
+		await expect(page.locator('aside a[href="/"]')).toBeVisible();
+		await expect(page.locator('aside a[href="/library"]')).toBeVisible();
+	});
+
+	test('should navigate to MCP Library', async ({ page }) => {
+		await navigateToRoute(page, '/library', /MCP Library/i);
+	});
+
+	test('should navigate to Skills Library', async ({ page }) => {
+		await navigateToRoute(page, '/skills', /Skill/i);
+	});
+
+	test('should navigate to Sub-Agents Library', async ({ page }) => {
+		await navigateToRoute(page, '/subagents', /Sub-Agent|Agent/i);
+	});
+
+	test('should navigate to Hooks Library', async ({ page }) => {
+		await navigateToRoute(page, '/hooks', /Hook/i);
+	});
+
+	test('should navigate to Marketplace', async ({ page }) => {
+		await navigateToRoute(page, '/marketplace', /Marketplace/i);
+	});
+
+	test('should navigate to Projects', async ({ page }) => {
+		await navigateToRoute(page, '/projects', /Project/i);
+	});
+
+	test('should navigate to Commands', async ({ page }) => {
+		await navigateToRoute(page, '/commands', /Command/i);
+	});
+
+	test('should navigate to Profiles', async ({ page }) => {
+		await navigateToRoute(page, '/profiles', /Profile/i);
+	});
+
+	test('should navigate to Status Line', async ({ page }) => {
+		await navigateToRoute(page, '/statusline', /Status Line/i);
+	});
+
+	test('should navigate to Global Settings', async ({ page }) => {
+		await navigateToRoute(page, '/settings', /Setting/i);
+	});
+
+	test('should highlight active navigation item', async ({ page }) => {
+		// Go to library and wait for content
+		await navigateToRoute(page, '/library', /MCP Library/i);
+
+		// Library link should have active class (bg-primary-50 in dark mode becomes bg-primary-900)
+		const libraryLink = page.locator('aside a[href="/library"]');
+		await expect(libraryLink).toHaveClass(/primary/);
+	});
+
+	test('should show app title in sidebar', async ({ page }) => {
+		await expect(page.locator('aside')).toContainText('Claude Code');
+		await expect(page.locator('aside')).toContainText('Tool Manager');
+	});
+});
+
+test.describe('Theme Toggle', () => {
+	test('should toggle dark mode', async ({ page }) => {
+		// Theme toggle is in the header, visible on any page
+		const themeToggle = page.locator('[data-testid="theme-toggle"]');
+		await expect(themeToggle).toBeVisible();
+
+		// Get initial state
+		const htmlClass = await page.locator('html').getAttribute('class');
+		const initiallyDark = htmlClass?.includes('dark') ?? false;
+
+		// Click toggle and wait for the class to actually change
+		await themeToggle.click();
+
+		if (initiallyDark) {
+			await expect(page.locator('html')).not.toHaveClass(/dark/);
+		} else {
+			await expect(page.locator('html')).toHaveClass(/dark/);
+		}
+	});
+});

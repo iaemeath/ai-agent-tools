@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+.svelte-kit/
+src-tauri/target/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+*.stackdump
+
+# Logs
+*.log
+npm-debug.log*
+
+# Database
+*.db
+*.db-journal
+
+# Claude Code local settings (may contain tokens)
+.claude/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Coverage
+/coverage/
+homebrew-tap/

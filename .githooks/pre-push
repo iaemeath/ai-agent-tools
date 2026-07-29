@@ -1,0 +1,15 @@
+#!/bin/sh
+# Pre-push hook: run frontend tests before pushing
+
+echo "Running frontend tests..."
+npm run test:run 2>&1
+TEST_EXIT=$?
+
+if [ $TEST_EXIT -ne 0 ]; then
+    echo ""
+    echo "❌ Frontend tests failed. Push aborted."
+    echo "Fix the failing tests and try again."
+    exit 1
+fi
+
+echo "✅ All frontend tests passed."

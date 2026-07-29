@@ -1,0 +1,477 @@
+# Changelog
+
+All notable changes to Claude Code Tool Manager will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [3.9.0] - 2026-05-04
+
+### Added
+- **Model Aliases & 1M Context Toggle**: Default Model dropdown now uses Claude Code aliases (`opus`, `sonnet`, `haiku`, `opusplan`, `best`) so the picker no longer goes stale every time Anthropic ships a new version. New "Use 1M token context window" checkbox appends the documented `[1m]` suffix and auto-disables for Haiku. New "Other (custom model ID)…" option accepts any provider-specific identifier — full model name, Bedrock ARN, Vertex/Foundry deployment names. Round-trips correctly through `settings.model`. (#213)
+- **Rules Disk Scanning**: Rules in `~/.claude/rules/` and `{project}/.claude/rules/` now appear in the UI — previously the `rules` table was only ever written by in-UI `create_rule`, so on-disk rules were invisible. Adds `scan_global_rules` and `scan_project_rules` to startup scan, factors a shared `walk_md_dir` helper across the four pre-existing flat-`.md` scanners (commands, agents), and accepts both JSON-array and legacy comma-separated `paths`/`tags`. Deleting a rule now also removes the backing `.md` file so the scanner doesn't resurrect it as auto-detected. (#200)
+
+### Fixed
+- **Sync Config Externally-Managed Configs**: Extended the #191 (3.8.1) guard from 2 writers to all 7 — `.mcp.json`, `claude.json`, OpenCode, Copilot, Cursor, Gemini, and Codex configs are no longer overwritten with empty MCP data when the app's database has none. Adding a project now also imports MCPs from `.mcp.json` so externally-configured servers show up in the UI instead of looking empty. Corrects `has_mcp_file` to read project-root `.mcp.json` per the spec. (#204)
+- **Tag Round-Trip in Writers**: Skill, command, and sub-agent writers now emit `tags` as JSON-array frontmatter so they round-trip through the DB reader's `serde_json::from_str`. Mirrors the rule_writer fix from #200 — pre-emptive, because once scanners re-ingest these primitives the asymmetry would silently lose or corrupt tags. (#202)
+- **Updater Signing on PR Builds**: Build workflow no longer fails on PRs from forks or Dependabot. PR builds now override `bundle.createUpdaterArtifacts=false` so the signing-key check is skipped; release builds (tag push) keep the existing signed-artifact path with the macOS x86_64 quirk intact. (#203)
+- **Real DB Errors in `delete_rule`**: `delete_rule_inner` no longer silently swallows lock contention / corruption / IO errors as "row absent" — only `QueryReturnedNoRows` maps to `None`, every other rusqlite error is returned before the DELETE runs. Same treatment for `rule_writer::delete_rule_file`. Follow-up to #200.
+
+### Changed
+- **Clippy Zero Warnings**: Brought `cargo clippy --lib --tests` from 134 warnings to 0 across nine commits — `cfg(test)`-gated import relocations, `_var` prefix on unused bindings, `vec!`→array in test code, `&Path` over `&PathBuf` in helpers, dead-code annotations on test helpers and serde-deser false positives, mechanical autofixes (`Option::map`, `assert!`, `next_back`). CI now enforces `-D warnings` on `--lib --tests` so lint debt cannot accumulate invisibly. (#205)
+
+## [3.8.5] - 2026-04-19
+
+### Changed
+- **Dependency Updates**: Rolled up patch and minor bumps from Dependabot (#181–#186, #188, #189). Frontend: `@tauri-apps/cli` 2.10.0 → 2.10.1, `@types/node` 25.5.0 → 25.6.0, `svelte-check` 4.4.4 → 4.4.6. Rust: `tokio` 1.50.0 → 1.52.1, `rmcp` 1.2.0 → 1.5.0, `once_cell` 1.21.3 → 1.21.4 (soundness fix), `pulldown-cmark` 0.13.1 → 0.13.3 (tar 0.4.45 security bump), `env_logger` 0.11.9 → 0.11.10. All 1996 Rust tests and 1564 frontend tests pass. TypeScript 6 (#187) and lucide-svelte 1.0 (#180) deferred — require manual migration (removed `Github` brand icon)
+
+## [3.8.4] - 2026-04-19
+
+### Fixed
+- **Gist Scope Verification**: Verify GitHub token has `gist` scope on cloud sync connect — surfaces a clear error naming the remediation command (`gh auth refresh -h github.com -s gist`) instead of a generic 403 at first push (#201)
+
+## [3.8.3] - 2026-04-14
+
+### Fixed
+- **macOS GUI Launch**: Resolve `gh` CLI path for macOS apps launched from Finder/Spotlight — checks Homebrew install locations before falling back to PATH (#196)
+- **Gist Pagination**: Search all gists (not just first 100) when finding sync gist — users with 100+ gists no longer get orphaned gists on every connect (#197)
+- **Disconnect Auth Status**: Filter empty strings in sync auth status so disconnecting properly shows as disconnected (#198)
+- **Backup File Extensions**: Append `.bak` instead of replacing file extension — fixes `.json` files getting wrong backup names like `settings.md.bak` (#199)
+
+## [3.8.2] - 2026-04-12
+
+### Fixed
+- **File Safety**: All 12 writer modules now create `.bak` backups before modifying user files — shared `utils::backup::backup_file()` utility protects settings, keybindings, CLAUDE.md, skills, agents, rules, commands, and memory files from data loss on first run and subsequent syncs (#193)
+
+## [3.8.1] - 2026-04-12
+
+### Fixed
+- **Sync Config Data Loss**: Sync Config no longer destroys existing `.mcp.json` files — now reads and merges instead of overwriting, with backup creation and corrupt-file protection (#191)
+
+## [3.7.1] - 2026-03-30
+
+### Fixed
+- **Analytics Page Crash**: Added missing `DailyCost` type and `filteredDailyCosts` derived property to usage store — the daily cost chart and projections card referenced these but they were never implemented
+- **Settings & Dashboard Crash**: Implemented full onboarding store API (`completeStep`, `dismiss`, `syncWithStores`, `showOnboarding`, `progress`, `isFirstRun`) — the store was a skeleton that didn't match what the UI components expected
+
+## [3.7.0] - 2026-03-30
+
+### Added
+- **Bulk Select & Actions**: Multi-select checkboxes, select-all, and sticky action bar for project tool assignments (MCPs, Skills, Agents, Commands, Hooks) with Enable/Disable/Remove bulk operations
+- **Cloud Sync**: Gist-based configuration sync via GitHub CLI with push/pull support, per-machine metadata, and settings tab
+- **Rules Engine**: Permission/constraint management with UI for creating, editing, and browsing rules
+- **Agent Memory Management**: Persistent agent memory with UI panel for viewing and editing memory entries
+- **Auto Mode Editor**: Settings tab for configuring Auto Mode behavior
+- **Model Overrides Editor**: UI for per-project model override configuration
+- **CLI Startup Flags**: New card component for configuring CLI startup flags
+- **Sandbox Filesystem Editor**: Expanded sandbox configuration with dedicated filesystem rule editor
+- **Settings Tabs**: New settings tabs for Cloud Sync, Auto Mode, and CLI configuration
+
+### Fixed
+- **Card Dropdown Clipping**: Removed CSS `contain: layout` that was cutting off kebab menus on library cards
+- **Async Tests**: Tests now use `#[tokio::test]` with `.await` instead of silently dropping futures
+- **Blocking I/O**: `get_gh_cli_token` wrapped in `spawn_blocking` to avoid blocking the async runtime
+- **Secret Scrubbing**: MCP `env` and `headers` excluded from cloud sync payload to prevent leaking API keys
+- **File Backup**: Cloud sync pull now creates `.bak` backups before overwriting CLAUDE.md files, with confirmation dialog
+- **Accessibility**: Added focus-visible ring indicators to all bulk-select and checkbox buttons
+- **Glob Matching**: Single-star glob patterns no longer cross directory boundaries
+- **ContainerLogs**: Fixed null reference in `requestAnimationFrame` callback after component unmount
+
+## [3.6.0] - 2026-03-23
+
+### Added
+- **Container Management**: Full container lifecycle management with Docker integration
+  - Template-first container creation wizard with 9 preconfigured devcontainer templates (Node.js, TypeScript, Rust/Tauri, Python, Go, .NET, Ubuntu, PostgreSQL, Redis)
+  - Start/stop/restart controls with live status badges and loading states
+  - Interactive xterm.js terminal (Console tab) with bash/shell support, tab completion, and command history
+  - File browser (Files tab) for navigating container filesystems
+  - Git repo cloning on first container start via Repository URL field
+  - Copy-to-clipboard docker exec commands for connecting via external terminals
+- **Claude Code Integration**: Container settings for auto-mounting `~/.claude/` (Max Plan OAuth) or injecting API key, with optional auto-install of Claude Code in containers
+- **Container Detail Modal**: Tabbed view with Overview, Logs, Stats, Console, and Files tabs
+- **Container Settings Tab**: New Settings > Containers tab for Claude Code auth configuration
+
+### Fixed
+- **Security**: Prevent command injection via unsanitized repo URLs in container shell commands
+- **Security**: Mount `~/.claude` as read-only into containers to prevent auth state tampering
+- **Security**: Bind forwarded container ports to `127.0.0.1` instead of `0.0.0.0`
+- **Security**: Validate volume mount host paths against path traversal and sensitive system directories
+- **Container Deletion**: Delete now properly removes Docker containers (fixes name conflict on recreate)
+- **Test Fixes**: Fixed 8 broken tests — notifications store signature, container component assertions, lucide-svelte mock stubs
+
+## [3.5.1] - 2026-03-20
+
+### Added
+- **Test Coverage**: Comprehensive test suite with 80 test files and 1,527 tests (16% → 61% line coverage)
+  - Store tests: all major stores including hooks, MCP, skills, commands, permissions, memory, sessions, and more
+  - Component tests: layout, shared components, settings tabs, MCP cards/forms, project detail, and more
+  - Type validation tests: all domain types with factory helpers
+  - Utility tests: markdown parser, MCP paste parser, debug logger
+- **Svelte 5 Migration**: Migrated shared components (ActionMenu, Badge, EmptyState, FavoriteButton, LoadingSpinner) to runes syntax
+- **Container Components**: Added stub components for container/Docker management feature
+- **Onboarding**: Added WelcomeHero component
+- **Test Infrastructure**: Added lucide-svelte mock, test factories, and invoke mock helpers
+
+### Fixed
+- **Badge Dark Mode**: Fixed Badge component missing dark mode classes — "Claude" and "OpenCode" badges were unreadable on dark backgrounds; added `info` and `auto` variants
+- **Containers Route**: Added `/containers` route page to prevent 404 when clicking Containers in sidebar nav
+- **i18n Integration**: Fixed test compatibility with i18n-driven component text
+- **SettingsEditorSyncTab**: Fixed null safety when loading app settings
+
+## [3.3.0] - 2026-02-27
+
+### Changed
+- **Dependencies**: Updated npm, Cargo, and GitHub Actions dependencies
+  - @sveltejs/kit 2.51.0 → 2.53.3
+  - @tailwindcss/vite 4.2.0 → 4.2.1
+  - @types/node 25.3.0 → 25.3.2
+  - happy-dom 20.6.1 → 20.7.0
+  - svelte-check 4.4.1 → 4.4.4
+  - chrono 0.4.43 → 0.4.44
+  - pulldown-cmark 0.13.0 → 0.13.1
+  - serial_test 3.3.1 → 3.4.0
+  - tempfile 3.25.0 → 3.26.0
+  - tauri-plugin-mcp-bridge 0.8.3 → 0.9.0
+  - actions/upload-artifact v6 → v7
+
+## [2.1.2] - 2026-01-31
+
+### Changed
+- **Dependencies**: Updated npm and Cargo dependencies
+  - svelte 5.46.1 → 5.49.1
+  - lucide-svelte 0.562.0 → 0.563.0
+  - @playwright/test 1.57.0 → 1.58.0
+  - @sveltejs/vite-plugin-svelte 6.2.3 → 6.2.4
+  - @testing-library/svelte 4.2.3 → 5.3.1
+  - serde_json 1.0.145 → 1.0.149
+  - thiserror 2.0.17 → 2.0.18
+  - toml 0.9.10 → 0.9.11
+  - tokio-test 0.4.4 → 0.4.5
+  - rmcp 0.12.0 → 0.14.0
+
+## [2.1.1] - 2026-01-26
+
+### Changed
+- **Dependencies**: Updated npm and Cargo dependencies
+  - @types/node 25.0.3 → 25.0.9
+  - vitest 4.0.16 → 4.0.17
+  - @vitest/coverage-v8 4.0.16 → 4.0.17
+  - @sveltejs/vite-plugin-svelte 6.2.3 → 6.2.4
+  - @tauri-apps/plugin-dialog 2.5.0 → 2.6.0
+  - insta 1.46.0 → 1.46.1
+  - tokio-stream 0.1.17 → 0.1.18
+  - chrono 0.4.42 → 0.4.43
+  - toml 0.8.2 → 0.9.10
+  - toml_edit 0.22.27 → 0.23.10
+
+## [2.1.0] - 2026-01-26
+
+### Added
+- **Homebrew Cask Support**: Install via `brew tap tylergraydev/cctm && brew install --cask claude-code-tool-manager`
+  - Automatic cask updates when new releases are published
+  - Homebrew tap at [tylergraydev/homebrew-cctm](https://github.com/tylergraydev/homebrew-cctm)
+- **Apple Code Signing & Notarization**: macOS builds are now signed and notarized
+  - No more Gatekeeper warnings when downloading
+  - Hardened runtime enabled for security
+
+## [2.0.1] - 2026-01-17
+
+### Fixed
+- Auto-updater endpoint now includes `latest.json` manifest for proper update detection
+
+## [2.0.0] - 2026-01-12
+
+### Added
+- **Multi-Editor Support**: Sync MCP configurations across 6 AI coding assistants
+  - Claude Code (`~/.claude.json`)
+  - OpenCode (`~/.config/opencode/opencode.json`)
+  - Codex CLI (`~/.codex/config.toml`)
+  - GitHub Copilot CLI (`~/.copilot/mcp-config.json`)
+  - Cursor (`~/.cursor/mcp.json`)
+  - Gemini CLI (`~/.gemini/settings.json`)
+- **Editor Detection**: Automatic detection via PATH binary checks
+- **Config Format Support**: Added TOML parser/writer for Codex CLI
+- **Editor Badges**: Distinct badge colors for each editor in Settings
+
+### Changed
+- Global and project MCPs now sync to all enabled editors automatically
+
+## [1.8.3] - 2026-01-09
+
+### Added
+- **Project Search**: Search functionality for filtering projects by name or path in the Projects list
+- **Project Detail Search**: Search inputs in the project detail modal to filter available MCPs, Skills, Agents, and Commands
+  - Search clears automatically when switching between tabs
+  - Real-time filtering as user types
+
+## [1.8.1] - 2026-01-07
+
+### Fixed
+- Version numbers now properly embedded in v1.8.0 release artifacts
+- Auto-updater will correctly detect version 1.8.1 as newer than 1.7.0
+
+## [1.8.0] - 2026-01-07
+
+### Added
+- **Lazy-Loading MCP Gateway**: New approach to MCP tool management that reduces context pollution
+  - Gateway provides 3 meta-tools instead of exposing all backend tools upfront
+  - `list_available_mcps`: Discover available MCP servers
+  - `load_mcp_tools`: Connect to an MCP and get its tools
+  - `call_mcp_tool`: Execute a tool on a specific MCP
+- **Connection Management**: Backend manager with lazy connection initialization
+  - MCPs loaded from database but not connected until requested
+  - Namespaced tool names (e.g., `mcp_name__tool_name`)
+  - Connection status tracking (Connecting, Connected, Disconnected, Failed, Restarting)
+  - Backend restart capability
+- **Transport Layer**: Uses rmcp's StreamableHttpService for HTTP transport
+- **Server Features**: Axum server with CORS support and graceful shutdown handling
+
+### Fixed
+- Vitest clipboard mock now uses `Object.defineProperty` for happy-dom compatibility
+- ComponentExports test paths now use `$lib` alias
+- Added `$app/stores` mock for Sidebar.svelte imports
+- Skipped flaky ComponentExports tests in CI environment
+
+## [1.5.0] - 2025-12-23
+
+### Added
+- **Built-in MCP Server**: Expose Tool Manager functionality as an MCP server
+  - 31 tools for programmatic management of MCPs, Skills, Sub-Agents, Hooks, and Projects
+  - Streamable HTTP transport on configurable port (default: 23847)
+  - Enable/disable and configure from Settings page
+  - Automatically adds itself to MCP library when enabled
+  - Tools include: `list_mcps`, `create_mcp`, `update_mcp`, `delete_mcp`, `assign_mcp_to_project`, `list_skills`, `create_skill`, `list_subagents`, `create_subagent`, `list_hooks`, `create_hook`, and more
+- **MCP Gateway Server**: Aggregate multiple MCP servers into a single endpoint
+  - Combines tools from multiple backend MCP servers
+  - Tool names prefixed with source MCP (e.g., `filesystem__read_file`)
+  - Streamable HTTP transport on configurable port (default: 23848)
+  - Add/remove backend MCPs dynamically from Settings
+- **Settings UI Enhancements**: New sections for managing built-in servers
+  - Start/stop controls for both MCP Server and Gateway
+  - Port configuration with validation
+  - Connection config display for easy setup
+  - Backend MCP management for Gateway
+
+### Fixed
+- Built-in MCP Server now properly exposes tools via `tools/list` (added missing `#[tool_handler]` macro)
+
+### Changed
+- Extended `mcp_client` service with Streamable HTTP protocol support
+- Added comprehensive unit tests for all database operations
+- Refactored Tauri commands to use testable helper functions
+
+## [1.4.0] - 2025-12-22
+
+### Added
+- **MCP Execution & Exploration**: Interactively execute MCP tools directly from the Tool Manager
+  - **Session Management**: Persistent sessions for stdio MCP servers with proper lifecycle management
+  - **Tool Execution**: Execute any MCP tool with dynamic form-based parameter input
+  - **JSON Schema Form**: Dynamic form generation from JSON schema for tool parameters
+  - **Result Visualization**: Display tool results with JSON formatting and copy functionality
+  - **Execution History**: Track and re-run previous tool executions within a session
+- **E2E Test Infrastructure**: Playwright test framework setup for end-to-end testing
+- **Rust Test CI/CD**: Separate GitHub Actions workflow for Rust tests, Clippy, and formatting checks
+
+### Changed
+- Improved Rust test coverage from 46% to 64%
+- Applied consistent code formatting across all Rust files (cargo fmt)
+
+### Fixed
+- Debug logger tests marked as flaky (require serial execution)
+- CI workflow now builds frontend before running Rust tests
+
+## [1.3.10] - 2025-12-22
+
+### Added
+- Debug mode persistence: Debug logging state now persists between app restarts
+- Version automation in CI/CD
+
+## [1.3.9] - 2025-12-22
+
+### Fixed
+- Default MCP type to "stdio" when type is not specified during import
+
+## [1.3.8] - 2025-12-22
+
+### Added
+- Full SSE MCP tool listing support with async implementation
+
+## [1.3.7] - 2025-12-21
+
+### Added
+- **HTTP MCP Testing**: Full support for Streamable HTTP transport
+  - Session tracking via `mcp-session-id` header
+  - Parses both JSON and SSE-formatted responses
+  - Lists all available tools with descriptions and schemas
+- **SSE MCP Testing**: Basic connectivity verification for SSE transport
+  - Verifies SSE endpoint responds correctly
+  - Shows "connected" status when successful
+  - Note: Full tool listing requires async implementation (coming soon)
+
+### Fixed
+- HTTP MCPs now maintain session across initialize/tools requests
+- Proper Accept header (`application/json, text/event-stream`) for MCP spec compliance
+
+## [1.3.6] - 2025-12-21
+
+### Added
+- **MCP Testing**: Test stdio MCP servers directly from the app
+  - Click "Test" in the MCP card menu to verify a server works
+  - Auto-runs MCP protocol handshake and lists available tools
+  - Displays server info, tool count, and capabilities
+  - Shows tool names, descriptions, and input schemas
+  - Helpful error messages for common issues (npm auth, PATH problems)
+- **OpenCode Support**: Scan and import projects from OpenCode configurations
+  - Auto-detects OpenCode config at `~/.opencode/config.json`
+  - Imports MCP server configurations from OpenCode projects
+
+### Changed
+- Improved process spawning to properly inherit PATH environment
+
+### Fixed
+- npx commands now work correctly by running through shell
+- Better error messages for npm authentication issues
+
+## [1.3.5] - 2025-12-21
+
+### Added
+- **Debug Mode**: Enable file-based logging from Global Settings to help troubleshoot issues
+  - Toggle in Settings > Global Settings
+  - Captures Rust backend logs, frontend console logs, and Tauri invoke calls
+  - Log files saved to app data directory
+  - "Open Folder" button for easy access to log files
+- Debug logging throughout the application for better diagnostics
+- Screenshots added to README documentation
+
+### Fixed
+- "Ambiguous column name: created_at" SQL error when loading hooks
+  - Fixed JOIN queries in hooks commands to use table-prefixed column names
+
+### Changed
+- Bug report template now includes instructions for attaching debug logs
+
+## [1.3.4] - 2025-12-21
+
+### Added
+- Marketplace sort options: sort MCPs by "Recently Updated" (default) or "Name (A-Z)"
+- `updatedAt` field to track when MCPs were last updated in the registry
+
+### Changed
+- Cleaned up debug logging from previous releases
+
+## [1.3.3] - 2025-12-20
+
+### Fixed
+- MCP Registry loading with dynamic JSON parsing
+- Duplicate MCPs in marketplace by deduplicating by registryId
+
+## [1.3.2] - 2025-12-20
+
+### Fixed
+- MCP Registry API response parsing
+- JSON deserialization for MCP Registry
+
+## [1.3.1] - 2025-12-20
+
+### Added
+- What's New modal that displays after auto-updates
+
+## [1.3.0] - 2025-12-20
+
+### Added
+- **MCP Registry Integration**: Browse and import MCPs from the official [MCP Registry](https://registry.modelcontextprotocol.io/)
+  - Official Registry API integration
+  - Search MCPs by name or description
+  - Paginated listing with "Load More" support
+  - One-click import with environment variable placeholders
+  - Multi-package support (npm via `npx -y`, PyPI via `uvx`, Docker)
+  - Environment variable display with descriptions
+
+### Fixed
+- Build workflow signing for CI/CD
+
+## [1.2.0] - 2025-12-20
+
+### Added
+- Auto-updater for seamless updates
+
+## [1.1.0] - 2025-12-20
+
+### Added
+- **Marketplace**: Browse and import Skills and Sub-Agents from GitHub repositories
+  - Browse community repos for Skills and Sub-Agents
+  - One-click import to library
+  - Auto-sync on startup
+  - Add custom GitHub repositories
+  - Support for file-based repos and README-based repos (awesome lists)
+- Default repositories: [wshobson/commands](https://github.com/wshobson/commands), [hesreallyhim/awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code)
+
+### Changed
+- Version now displays dynamically from app config
+
+### Fixed
+- Import status resets when items are deleted from library
+
+## [1.0.1] - 2025-12-20
+
+### Fixed
+- Global MCP config now correctly writes to `~/.claude.json` instead of `~/.claude/settings.json`
+- Global Settings page displays correct config file path
+- Backup functionality now includes `claude.json`
+
+## [1.0.0] - 2025-12-20
+
+### Added
+- Initial release
+- **MCP Server Management**
+  - MCP Library for creating, editing, and organizing configurations
+  - Project-based MCP assignments
+  - Global MCP settings
+  - Paste-to-import for JSON and CLI commands
+  - Support for stdio, HTTP, and SSE transport types
+- **Skills (Slash Commands)**
+  - Command Skills for user-invocable slash commands
+  - Agent Skills for model-invocable actions
+  - Auto-detection from `~/.claude/commands/` and project directories
+  - Global and per-project assignment
+- **Sub-Agents**
+  - Custom sub-agent definitions
+  - Model selection per sub-agent
+  - Auto-detection from `~/.claude/agents/` and project directories
+  - Project scoping
+- **Project Management**
+  - Automatic project scanning
+  - Per-project tool management
+  - Configuration sync to Claude config files
+- **Additional Features**
+  - Dark mode
+  - Search and filter
+
+[Unreleased]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v2.1.2...HEAD
+[2.1.2]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v2.1.1...v2.1.2
+[2.1.1]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v2.1.0...v2.1.1
+[2.1.0]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v2.0.1...v2.1.0
+[2.0.1]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v2.0.0...v2.0.1
+[2.0.0]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.8.3...v2.0.0
+[1.8.3]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.8.1...v1.8.3
+[1.8.1]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.8.0...v1.8.1
+[1.8.0]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.5.0...v1.8.0
+[1.5.0]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.3.10...v1.4.0
+[1.3.10]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.3.9...v1.3.10
+[1.3.9]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.3.8...v1.3.9
+[1.3.8]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.3.7...v1.3.8
+[1.3.7]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.3.6...v1.3.7
+[1.3.6]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.3.5...v1.3.6
+[1.3.5]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.3.4...v1.3.5
+[1.3.4]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.3.3...v1.3.4
+[1.3.3]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.3.2...v1.3.3
+[1.3.2]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/tylergraydev/claude-code-tool-manager/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/tylergraydev/claude-code-tool-manager/releases/tag/v1.0.0

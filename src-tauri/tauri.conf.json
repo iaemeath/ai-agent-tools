@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Claude Code Tool Manager",
+  "identifier": "com.claude-code-tool-manager.app",
+  "version": "3.10.0",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../build"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Claude Code Tool Manager",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "hardenedRuntime": true
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbWVlbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERDOTkyM0Y4NDA3RDdCREUKUldUZWUzMUErQ09aM0RtenVWdnNmRTl1TTNvcmlzU0luM2xZUWpBRkFUbGZuVXV1Z0JHc0tQV3AK",
+      "endpoints": [
+        "https://github.com/tylergraydev/claude-code-tool-manager/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

@@ -1,0 +1,1022 @@
+use crate::db::{Database, Repo, RepoItem, SyncResult};
+use crate::services::github_client::{parse_github_url, GitHubClient};
+use crate::services::repo_parser::{
+    detect_item_type, parse_readme_for_mcps, parse_readme_for_skills, parse_skill_file,
+    parse_subagent_file, should_skip_file, ParsedItem,
+};
+use anyhow::Result;
+use chrono::Utc;
+use rusqlite::params;
+
+/// Default repositories to seed on first run
+pub const DEFAULT_REPOS: &[(&str, &str, &str, &str, &str)] = &[
+    // (name, github_url, repo_type, content_type, description)
+    (
+        "Claude Code Commands",
+        "https://github.com/wshobson/commands",
+        "file_based",
+        "skill",
+        "Production-ready slash commands for Claude Code",
+    ),
+    (
+        "Awesome Claude Code",
+        "https://github.com/hesreallyhim/awesome-claude-code",
+        "readme_based",
+        "skill",
+        "Curated list of Claude Code resources",
+    ),
+];
+
+/// Seed default repositories if none exist
+pub fn seed_default_repos(db: &Database) -> Result<()> {
+    let count: i64 = db
+        .conn()
+        .query_row("SELECT COUNT(*) FROM repos", [], |row| row.get(0))?;
+
+    if count > 0 {
+        return Ok(());
+    }
+
+    for (name, github_url, repo_type, content_type, description) in DEFAULT_REPOS {
+        if let Some((owner, repo)) = parse_github_url(github_url) {
+            db.conn().execute(
+                r#"INSERT INTO repos (name, owner, repo, repo_type, content_type, github_url, description, is_default)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 1)"#,
+                params![name, owner, repo, repo_type, content_type, github_url, description],
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Fetch items from a repository (async, no database access)
+pub async fn fetch_repo_items(repo: &Repo, token: Option<String>) -> Result<Vec<ParsedItem>> {
+    let client = GitHubClient::new(token);
+
+    match repo.repo_type.as_str() {
+        "file_based" => sync_file_based_repo(&client, repo).await,
+        "readme_based" => sync_readme_based_repo(&client, repo).await,
+        _ => Ok(Vec::new()),
+    }
+}
+
+/// Update database with fetched items (sync, requires database)
+pub fn save_repo_items(db: &Database, repo_id: i64, items: &[ParsedItem]) -> Result<SyncResult> {
+    let result = update_repo_items(db, repo_id, items)?;
+
+    // Update last_fetched_at
+    db.conn().execute(
+        "UPDATE repos SET last_fetched_at = ?, updated_at = ? WHERE id = ?",
+        params![Utc::now().to_rfc3339(), Utc::now().to_rfc3339(), repo_id],
+    )?;
+
+    Ok(result)
+}
+
+/// Sync a file-based repository (scans for .md files)
+async fn sync_file_based_repo(client: &GitHubClient, repo: &Repo) -> Result<Vec<ParsedItem>> {
+    let mut items = Vec::new();
+
+    // Determine which directories to scan based on content type
+    // Include common directory names that repos might use
+    let dirs_to_scan: Vec<&str> = match repo.content_type.as_str() {
+        "skill" => vec![
+            "",
+            "commands",
+            "skills",
+            "workflows",
+            "tools",
+            "examples",
+            "prompts",
+        ],
+        "subagent" => vec!["", "agents", "subagents"],
+        "mcp" => vec!["", "src"],
+        "mixed" => vec![
+            "",
+            "commands",
+            "skills",
+            "workflows",
+            "tools",
+            "examples",
+            "prompts",
+            "agents",
+            "subagents",
+        ],
+        _ => vec![""],
+    };
+
+    if let Ok(files) = client
+        .get_markdown_files(&repo.owner, &repo.repo, &dirs_to_scan)
+        .await
+    {
+        for (path, content) in files {
+            // Skip junk files like README.md, CONTRIBUTING.md, etc.
+            if should_skip_file(&path) {
+                continue;
+            }
+
+            let item_type = detect_item_type(&path, &content);
+
+            let parsed = match item_type.as_str() {
+                "subagent" => parse_subagent_file(&content, &path),
+                _ => parse_skill_file(&content, &path),
+            };
+
+            if let Some(mut item) = parsed {
+                item.item_type = item_type;
+                // Build GitHub URL for the file
+                item.source_url = Some(format!(
+                    "https://github.com/{}/{}/blob/main/{}",
+                    repo.owner, repo.repo, path
+                ));
+                items.push(item);
+            }
+        }
+    }
+
+    Ok(items)
+}
+
+/// Sync a README-based repository (parses README for links)
+async fn sync_readme_based_repo(client: &GitHubClient, repo: &Repo) -> Result<Vec<ParsedItem>> {
+    let readme = client.get_readme(&repo.owner, &repo.repo).await?;
+
+    let mut items = match repo.content_type.as_str() {
+        "mcp" => parse_readme_for_mcps(&readme),
+        "skill" => parse_readme_for_skills(&readme),
+        "mixed" => {
+            let mut all = parse_readme_for_mcps(&readme);
+            all.extend(parse_readme_for_skills(&readme));
+            all
+        }
+        _ => Vec::new(),
+    };
+
+    // Fix relative URLs to be proper GitHub URLs
+    for item in &mut items {
+        if let Some(ref url) = item.source_url {
+            // If it's a relative path (doesn't start with http), convert to GitHub URL
+            if !url.starts_with("http") {
+                let clean_path = url.trim_start_matches("./").trim_start_matches('/');
+                item.source_url = Some(format!(
+                    "https://github.com/{}/{}/blob/main/{}",
+                    repo.owner, repo.repo, clean_path
+                ));
+            }
+        }
+    }
+
+    Ok(items)
+}
+
+/// Update repository items in the database
+fn update_repo_items(db: &Database, repo_id: i64, items: &[ParsedItem]) -> Result<SyncResult> {
+    // Don't delete existing items if we got nothing new (likely a fetch error)
+    if items.is_empty() {
+        return Ok(SyncResult {
+            added: 0,
+            updated: 0,
+            removed: 0,
+            errors: vec!["No items fetched - keeping existing data".to_string()],
+        });
+    }
+
+    // Delete all existing items for this repo (clean slate approach)
+    // This ensures junk items that no longer pass filters are removed
+    let removed =
+        db.conn()
+            .execute("DELETE FROM repo_items WHERE repo_id = ?", params![repo_id])? as i32;
+
+    let mut added = 0;
+
+    // Insert all items fresh
+    for item in items {
+        db.conn().execute(
+            r#"INSERT INTO repo_items (repo_id, item_type, name, description, source_url, raw_content, file_path, metadata)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+            params![
+                repo_id,
+                &item.item_type,
+                &item.name,
+                &item.description,
+                &item.source_url,
+                &item.raw_content,
+                &item.file_path,
+                &item.metadata
+            ],
+        )?;
+        added += 1;
+    }
+
+    Ok(SyncResult {
+        added,
+        updated: 0,
+        removed,
+        errors: Vec::new(),
+    })
+}
+
+/// Get all repos from database
+pub fn get_all_repos(db: &Database) -> Result<Vec<Repo>> {
+    let mut stmt = db.conn().prepare(
+        r#"SELECT id, name, owner, repo, repo_type, content_type, github_url, description,
+                  is_default, is_enabled, last_fetched_at, etag, created_at, updated_at
+           FROM repos ORDER BY is_default DESC, name ASC"#,
+    )?;
+
+    let repos = stmt
+        .query_map([], |row| {
+            Ok(Repo {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                owner: row.get(2)?,
+                repo: row.get(3)?,
+                repo_type: row.get(4)?,
+                content_type: row.get(5)?,
+                github_url: row.get(6)?,
+                description: row.get(7)?,
+                is_default: row.get::<_, i32>(8)? != 0,
+                is_enabled: row.get::<_, i32>(9)? != 0,
+                last_fetched_at: row.get(10)?,
+                etag: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(repos)
+}
+
+/// Get items from a specific repo
+pub fn get_repo_items(db: &Database, repo_id: i64) -> Result<Vec<RepoItem>> {
+    let mut stmt = db.conn().prepare(
+        r#"SELECT id, repo_id, item_type, name, description, source_url, raw_content,
+                  file_path, metadata, stars, is_imported, imported_item_id, created_at, updated_at
+           FROM repo_items WHERE repo_id = ? ORDER BY name ASC"#,
+    )?;
+
+    let items = stmt
+        .query_map(params![repo_id], |row| {
+            Ok(RepoItem {
+                id: row.get(0)?,
+                repo_id: row.get(1)?,
+                item_type: row.get(2)?,
+                name: row.get(3)?,
+                description: row.get(4)?,
+                source_url: row.get(5)?,
+                raw_content: row.get(6)?,
+                file_path: row.get(7)?,
+                metadata: row.get(8)?,
+                stars: row.get(9)?,
+                is_imported: row.get::<_, i32>(10)? != 0,
+                imported_item_id: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(items)
+}
+
+/// Get all items from all repos, optionally filtered by type
+pub fn get_all_repo_items(db: &Database, item_type: Option<String>) -> Result<Vec<RepoItem>> {
+    let sql = if item_type.is_some() {
+        r#"SELECT id, repo_id, item_type, name, description, source_url, raw_content,
+                  file_path, metadata, stars, is_imported, imported_item_id, created_at, updated_at
+           FROM repo_items WHERE item_type = ? ORDER BY name ASC"#
+    } else {
+        r#"SELECT id, repo_id, item_type, name, description, source_url, raw_content,
+                  file_path, metadata, stars, is_imported, imported_item_id, created_at, updated_at
+           FROM repo_items ORDER BY name ASC"#
+    };
+
+    let mut stmt = db.conn().prepare(sql)?;
+
+    let items: Vec<RepoItem> = if let Some(ref t) = item_type {
+        stmt.query_map(params![t], |row| {
+            Ok(RepoItem {
+                id: row.get(0)?,
+                repo_id: row.get(1)?,
+                item_type: row.get(2)?,
+                name: row.get(3)?,
+                description: row.get(4)?,
+                source_url: row.get(5)?,
+                raw_content: row.get(6)?,
+                file_path: row.get(7)?,
+                metadata: row.get(8)?,
+                stars: row.get(9)?,
+                is_imported: row.get::<_, i32>(10)? != 0,
+                imported_item_id: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect()
+    } else {
+        stmt.query_map([], |row| {
+            Ok(RepoItem {
+                id: row.get(0)?,
+                repo_id: row.get(1)?,
+                item_type: row.get(2)?,
+                name: row.get(3)?,
+                description: row.get(4)?,
+                source_url: row.get(5)?,
+                raw_content: row.get(6)?,
+                file_path: row.get(7)?,
+                metadata: row.get(8)?,
+                stars: row.get(9)?,
+                is_imported: row.get::<_, i32>(10)? != 0,
+                imported_item_id: row.get(11)?,
+                created_at: row.get(12)?,
+                updated_at: row.get(13)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect()
+    };
+
+    Ok(items)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::repo_parser::ParsedItem;
+    use std::sync::atomic::{AtomicI64, Ordering};
+
+    static TEST_REPO_COUNTER: AtomicI64 = AtomicI64::new(0);
+
+    fn create_test_repo(db: &Database) -> i64 {
+        let id = TEST_REPO_COUNTER.fetch_add(1, Ordering::SeqCst);
+        db.conn().execute(
+            r#"INSERT INTO repos (name, owner, repo, repo_type, content_type, github_url, description, is_default)
+               VALUES (?, 'testowner', ?, 'file_based', 'skill', ?, 'Test description', 0)"#,
+            params![
+                format!("Test Repo {}", id),
+                format!("testrepo{}", id),
+                format!("https://github.com/testowner/testrepo{}", id)
+            ],
+        ).unwrap();
+        db.conn().last_insert_rowid()
+    }
+
+    // =========================================================================
+    // seed_default_repos tests
+    // =========================================================================
+
+    #[test]
+    fn test_seed_default_repos_empty_db() {
+        let db = Database::in_memory().unwrap();
+
+        seed_default_repos(&db).unwrap();
+
+        let repos = get_all_repos(&db).unwrap();
+        assert_eq!(repos.len(), DEFAULT_REPOS.len());
+    }
+
+    #[test]
+    fn test_seed_default_repos_already_has_repos() {
+        let db = Database::in_memory().unwrap();
+
+        // Manually insert a repo first
+        db.conn().execute(
+            r#"INSERT INTO repos (name, owner, repo, repo_type, content_type, github_url, description, is_default)
+               VALUES ('Existing', 'owner', 'repo', 'file_based', 'skill', 'https://github.com/owner/repo', 'desc', 0)"#,
+            [],
+        ).unwrap();
+
+        // seed_default_repos should do nothing if repos already exist
+        seed_default_repos(&db).unwrap();
+
+        let repos = get_all_repos(&db).unwrap();
+        assert_eq!(repos.len(), 1); // Only the manually inserted repo
+    }
+
+    #[test]
+    fn test_seed_default_repos_sets_is_default() {
+        let db = Database::in_memory().unwrap();
+
+        seed_default_repos(&db).unwrap();
+
+        let repos = get_all_repos(&db).unwrap();
+        assert!(repos.iter().all(|r| r.is_default));
+    }
+
+    // =========================================================================
+    // save_repo_items tests
+    // =========================================================================
+
+    #[test]
+    fn test_save_repo_items_updates_last_fetched() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let items = vec![ParsedItem {
+            name: "test-skill".to_string(),
+            description: Some("A test skill".to_string()),
+            item_type: "skill".to_string(),
+            source_url: Some("https://example.com".to_string()),
+            raw_content: Some("# Test".to_string()),
+            file_path: Some("test.md".to_string()),
+            metadata: None,
+        }];
+
+        save_repo_items(&db, repo_id, &items).unwrap();
+
+        let repos = get_all_repos(&db).unwrap();
+        let repo = repos.iter().find(|r| r.id == repo_id).unwrap();
+        assert!(repo.last_fetched_at.is_some());
+    }
+
+    #[test]
+    fn test_save_repo_items_returns_counts() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let items = vec![
+            ParsedItem {
+                name: "skill-1".to_string(),
+                description: None,
+                item_type: "skill".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            },
+            ParsedItem {
+                name: "skill-2".to_string(),
+                description: None,
+                item_type: "skill".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            },
+        ];
+
+        let result = save_repo_items(&db, repo_id, &items).unwrap();
+        assert_eq!(result.added, 2);
+        assert_eq!(result.removed, 0);
+    }
+
+    // =========================================================================
+    // update_repo_items tests
+    // =========================================================================
+
+    #[test]
+    fn test_update_repo_items_empty_returns_error() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let result = update_repo_items(&db, repo_id, &[]).unwrap();
+        assert_eq!(result.added, 0);
+        assert!(!result.errors.is_empty());
+    }
+
+    #[test]
+    fn test_update_repo_items_replaces_existing() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        // First insert
+        let items1 = vec![ParsedItem {
+            name: "old-skill".to_string(),
+            description: None,
+            item_type: "skill".to_string(),
+            source_url: None,
+            raw_content: None,
+            file_path: None,
+            metadata: None,
+        }];
+        update_repo_items(&db, repo_id, &items1).unwrap();
+
+        // Second insert should replace
+        let items2 = vec![ParsedItem {
+            name: "new-skill".to_string(),
+            description: None,
+            item_type: "skill".to_string(),
+            source_url: None,
+            raw_content: None,
+            file_path: None,
+            metadata: None,
+        }];
+        let result = update_repo_items(&db, repo_id, &items2).unwrap();
+
+        assert_eq!(result.added, 1);
+        assert_eq!(result.removed, 1);
+
+        let items = get_repo_items(&db, repo_id).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].name, "new-skill");
+    }
+
+    // =========================================================================
+    // get_all_repos tests
+    // =========================================================================
+
+    #[test]
+    fn test_get_all_repos_empty() {
+        let db = Database::in_memory().unwrap();
+        let repos = get_all_repos(&db).unwrap();
+        assert!(repos.is_empty());
+    }
+
+    #[test]
+    fn test_get_all_repos_returns_all() {
+        let db = Database::in_memory().unwrap();
+        create_test_repo(&db);
+        create_test_repo(&db);
+
+        let repos = get_all_repos(&db).unwrap();
+        assert_eq!(repos.len(), 2);
+    }
+
+    #[test]
+    fn test_get_all_repos_sorted_by_default_then_name() {
+        let db = Database::in_memory().unwrap();
+
+        // Insert non-default first
+        db.conn().execute(
+            r#"INSERT INTO repos (name, owner, repo, repo_type, content_type, github_url, description, is_default)
+               VALUES ('Zebra', 'owner', 'repo', 'file_based', 'skill', 'https://github.com/a/zebra', '', 0)"#,
+            [],
+        ).unwrap();
+
+        // Insert default
+        db.conn().execute(
+            r#"INSERT INTO repos (name, owner, repo, repo_type, content_type, github_url, description, is_default)
+               VALUES ('Alpha', 'owner', 'repo', 'file_based', 'skill', 'https://github.com/a/alpha', '', 1)"#,
+            [],
+        ).unwrap();
+
+        let repos = get_all_repos(&db).unwrap();
+        assert_eq!(repos[0].name, "Alpha"); // Default comes first
+        assert_eq!(repos[1].name, "Zebra");
+    }
+
+    // =========================================================================
+    // get_repo_items tests
+    // =========================================================================
+
+    #[test]
+    fn test_get_repo_items_empty() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let items = get_repo_items(&db, repo_id).unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_get_repo_items_returns_items() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let items = vec![ParsedItem {
+            name: "test-item".to_string(),
+            description: Some("Description".to_string()),
+            item_type: "skill".to_string(),
+            source_url: Some("https://example.com".to_string()),
+            raw_content: Some("# Content".to_string()),
+            file_path: Some("path/to/file.md".to_string()),
+            metadata: Some(r#"{"key": "value"}"#.to_string()),
+        }];
+        update_repo_items(&db, repo_id, &items).unwrap();
+
+        let result = get_repo_items(&db, repo_id).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, "test-item");
+        assert_eq!(result[0].description, Some("Description".to_string()));
+        assert_eq!(result[0].item_type, "skill");
+    }
+
+    #[test]
+    fn test_get_repo_items_only_for_repo() {
+        let db = Database::in_memory().unwrap();
+        let repo_id_1 = create_test_repo(&db);
+        let repo_id_2 = create_test_repo(&db);
+
+        let items1 = vec![ParsedItem {
+            name: "item-1".to_string(),
+            description: None,
+            item_type: "skill".to_string(),
+            source_url: None,
+            raw_content: None,
+            file_path: None,
+            metadata: None,
+        }];
+        update_repo_items(&db, repo_id_1, &items1).unwrap();
+
+        let items2 = vec![ParsedItem {
+            name: "item-2".to_string(),
+            description: None,
+            item_type: "skill".to_string(),
+            source_url: None,
+            raw_content: None,
+            file_path: None,
+            metadata: None,
+        }];
+        update_repo_items(&db, repo_id_2, &items2).unwrap();
+
+        let result = get_repo_items(&db, repo_id_1).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, "item-1");
+    }
+
+    // =========================================================================
+    // get_all_repo_items tests
+    // =========================================================================
+
+    #[test]
+    fn test_get_all_repo_items_no_filter() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let items = vec![
+            ParsedItem {
+                name: "skill-item".to_string(),
+                description: None,
+                item_type: "skill".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            },
+            ParsedItem {
+                name: "subagent-item".to_string(),
+                description: None,
+                item_type: "subagent".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            },
+        ];
+        update_repo_items(&db, repo_id, &items).unwrap();
+
+        let result = get_all_repo_items(&db, None).unwrap();
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_get_all_repo_items_with_filter() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let items = vec![
+            ParsedItem {
+                name: "skill-item".to_string(),
+                description: None,
+                item_type: "skill".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            },
+            ParsedItem {
+                name: "subagent-item".to_string(),
+                description: None,
+                item_type: "subagent".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            },
+        ];
+        update_repo_items(&db, repo_id, &items).unwrap();
+
+        let result = get_all_repo_items(&db, Some("skill".to_string())).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].item_type, "skill");
+    }
+
+    #[test]
+    fn test_get_all_repo_items_from_multiple_repos() {
+        let db = Database::in_memory().unwrap();
+        let repo_id_1 = create_test_repo(&db);
+        let repo_id_2 = create_test_repo(&db);
+
+        let items1 = vec![ParsedItem {
+            name: "repo1-item".to_string(),
+            description: None,
+            item_type: "skill".to_string(),
+            source_url: None,
+            raw_content: None,
+            file_path: None,
+            metadata: None,
+        }];
+        update_repo_items(&db, repo_id_1, &items1).unwrap();
+
+        let items2 = vec![ParsedItem {
+            name: "repo2-item".to_string(),
+            description: None,
+            item_type: "skill".to_string(),
+            source_url: None,
+            raw_content: None,
+            file_path: None,
+            metadata: None,
+        }];
+        update_repo_items(&db, repo_id_2, &items2).unwrap();
+
+        let result = get_all_repo_items(&db, None).unwrap();
+        assert_eq!(result.len(), 2);
+    }
+
+    // =========================================================================
+    // DEFAULT_REPOS tests
+    // =========================================================================
+
+    #[test]
+    fn test_default_repos_have_valid_urls() {
+        for (_, url, _, _, _) in DEFAULT_REPOS {
+            assert!(parse_github_url(url).is_some(), "Invalid URL: {}", url);
+        }
+    }
+
+    #[test]
+    fn test_default_repos_have_valid_types() {
+        for (_, _, repo_type, content_type, _) in DEFAULT_REPOS {
+            assert!(
+                ["file_based", "readme_based"].contains(repo_type),
+                "Invalid repo_type: {}",
+                repo_type
+            );
+            assert!(
+                ["skill", "subagent", "mcp", "mixed"].contains(content_type),
+                "Invalid content_type: {}",
+                content_type
+            );
+        }
+    }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_save_repo_items_empty_keeps_existing() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        // First add some items
+        let items = vec![ParsedItem {
+            name: "existing-skill".to_string(),
+            description: None,
+            item_type: "skill".to_string(),
+            source_url: None,
+            raw_content: None,
+            file_path: None,
+            metadata: None,
+        }];
+        save_repo_items(&db, repo_id, &items).unwrap();
+
+        // Now try to save empty items - should keep existing
+        let result = save_repo_items(&db, repo_id, &[]).unwrap();
+        assert_eq!(result.added, 0);
+        assert!(!result.errors.is_empty());
+
+        // Original items should still be there
+        let existing = get_repo_items(&db, repo_id).unwrap();
+        assert_eq!(existing.len(), 1);
+        assert_eq!(existing[0].name, "existing-skill");
+    }
+
+    #[test]
+    fn test_update_repo_items_with_all_fields() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let items = vec![ParsedItem {
+            name: "full-item".to_string(),
+            description: Some("Full description".to_string()),
+            item_type: "skill".to_string(),
+            source_url: Some("https://github.com/owner/repo/blob/main/skill.md".to_string()),
+            raw_content: Some("# Full Content\nWith body".to_string()),
+            file_path: Some("skills/full-item.md".to_string()),
+            metadata: Some(r#"{"key": "value"}"#.to_string()),
+        }];
+
+        let result = update_repo_items(&db, repo_id, &items).unwrap();
+        assert_eq!(result.added, 1);
+
+        let fetched = get_repo_items(&db, repo_id).unwrap();
+        assert_eq!(fetched.len(), 1);
+        assert_eq!(fetched[0].description, Some("Full description".to_string()));
+        assert!(fetched[0].source_url.is_some());
+        assert!(fetched[0].raw_content.is_some());
+        assert!(fetched[0].file_path.is_some());
+        assert!(fetched[0].metadata.is_some());
+    }
+
+    #[test]
+    fn test_get_all_repo_items_empty() {
+        let db = Database::in_memory().unwrap();
+        let result = get_all_repo_items(&db, None).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_get_all_repo_items_nonexistent_type() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let items = vec![ParsedItem {
+            name: "item".to_string(),
+            description: None,
+            item_type: "skill".to_string(),
+            source_url: None,
+            raw_content: None,
+            file_path: None,
+            metadata: None,
+        }];
+        update_repo_items(&db, repo_id, &items).unwrap();
+
+        // Filter by a type that has no items
+        let result = get_all_repo_items(&db, Some("mcp".to_string())).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_update_repo_items_multiple_types() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let items = vec![
+            ParsedItem {
+                name: "skill-1".to_string(),
+                description: None,
+                item_type: "skill".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            },
+            ParsedItem {
+                name: "mcp-1".to_string(),
+                description: None,
+                item_type: "mcp".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            },
+            ParsedItem {
+                name: "agent-1".to_string(),
+                description: None,
+                item_type: "subagent".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            },
+        ];
+
+        let result = update_repo_items(&db, repo_id, &items).unwrap();
+        assert_eq!(result.added, 3);
+        assert_eq!(result.errors.len(), 0);
+
+        // Filter each type
+        let skills = get_all_repo_items(&db, Some("skill".to_string())).unwrap();
+        assert_eq!(skills.len(), 1);
+
+        let mcps = get_all_repo_items(&db, Some("mcp".to_string())).unwrap();
+        assert_eq!(mcps.len(), 1);
+
+        let agents = get_all_repo_items(&db, Some("subagent".to_string())).unwrap();
+        assert_eq!(agents.len(), 1);
+    }
+
+    #[test]
+    fn test_save_repo_items_updates_timestamp() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let items = vec![ParsedItem {
+            name: "ts-item".to_string(),
+            description: None,
+            item_type: "skill".to_string(),
+            source_url: None,
+            raw_content: None,
+            file_path: None,
+            metadata: None,
+        }];
+
+        save_repo_items(&db, repo_id, &items).unwrap();
+
+        // Verify updated_at was set
+        let updated_at: Option<String> = db
+            .conn()
+            .query_row(
+                "SELECT updated_at FROM repos WHERE id = ?",
+                params![repo_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(updated_at.is_some());
+    }
+
+    #[test]
+    fn test_get_all_repos_repo_fields() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let repos = get_all_repos(&db).unwrap();
+        let repo = repos.iter().find(|r| r.id == repo_id).unwrap();
+        assert_eq!(repo.owner, "testowner");
+        assert_eq!(repo.repo_type, "file_based");
+        assert_eq!(repo.content_type, "skill");
+        assert!(!repo.is_default);
+        assert!(repo.is_enabled);
+        assert!(repo.last_fetched_at.is_none());
+        assert!(repo.etag.is_none());
+    }
+
+    #[test]
+    fn test_get_repo_items_sorted_by_name() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        let items = vec![
+            ParsedItem {
+                name: "zebra".to_string(),
+                description: None,
+                item_type: "skill".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            },
+            ParsedItem {
+                name: "alpha".to_string(),
+                description: None,
+                item_type: "skill".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            },
+        ];
+        update_repo_items(&db, repo_id, &items).unwrap();
+
+        let fetched = get_repo_items(&db, repo_id).unwrap();
+        assert_eq!(fetched[0].name, "alpha");
+        assert_eq!(fetched[1].name, "zebra");
+    }
+
+    #[test]
+    fn test_default_repos_descriptions_non_empty() {
+        for (name, _, _, _, description) in DEFAULT_REPOS {
+            assert!(
+                !description.is_empty(),
+                "Default repo {} has empty description",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn test_update_repo_items_complete_replacement() {
+        let db = Database::in_memory().unwrap();
+        let repo_id = create_test_repo(&db);
+
+        // Insert 5 items
+        let items1: Vec<ParsedItem> = (0..5)
+            .map(|i| ParsedItem {
+                name: format!("item-{}", i),
+                description: None,
+                item_type: "skill".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            })
+            .collect();
+        update_repo_items(&db, repo_id, &items1).unwrap();
+
+        // Replace with 3 different items
+        let items2: Vec<ParsedItem> = (10..13)
+            .map(|i| ParsedItem {
+                name: format!("new-item-{}", i),
+                description: None,
+                item_type: "skill".to_string(),
+                source_url: None,
+                raw_content: None,
+                file_path: None,
+                metadata: None,
+            })
+            .collect();
+        let result = update_repo_items(&db, repo_id, &items2).unwrap();
+
+        assert_eq!(result.added, 3);
+        assert_eq!(result.removed, 5);
+
+        let all = get_repo_items(&db, repo_id).unwrap();
+        assert_eq!(all.len(), 3);
+    }
+}

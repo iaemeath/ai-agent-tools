@@ -1,0 +1,65 @@
+// Discriminator used by the markdown parser to distinguish slash-command markdown
+// (`.claude/commands/`) from agent-skill markdown (`.claude/skills/`). The two
+// formats share frontmatter but route to different stores.
+export type SkillType = 'skill' | 'command';
+
+export interface Skill {
+	id: number;
+	name: string;
+	description?: string;
+	content: string;
+	allowedTools?: string[];
+	model?: string;
+	disableModelInvocation: boolean;
+	tags?: string[];
+	source: string;
+	sourcePath?: string;
+	isFavorite: boolean;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface CreateSkillRequest {
+	name: string;
+	description?: string;
+	content: string;
+	allowedTools?: string[];
+	model?: string;
+	disableModelInvocation?: boolean;
+	tags?: string[];
+	skillType?: SkillType;
+}
+
+export interface ProjectSkill {
+	id: number;
+	skillId: number;
+	skill: Skill;
+	isEnabled: boolean;
+}
+
+export interface GlobalSkill {
+	id: number;
+	skillId: number;
+	skill: Skill;
+	isEnabled: boolean;
+}
+
+// Skill Files (references, assets, scripts)
+export type SkillFileType = 'reference' | 'asset' | 'script';
+
+export interface SkillFile {
+	id: number;
+	skillId: number;
+	fileType: SkillFileType;
+	name: string;
+	content: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface CreateSkillFileRequest {
+	skillId: number;
+	fileType: SkillFileType;
+	name: string;
+	content: string;
+}
