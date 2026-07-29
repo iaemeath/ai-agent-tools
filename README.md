@@ -3,7 +3,41 @@
 Toggle Claude Code **tools** on/off across scopes (global / project / local), see status at a glance.
 **Only toggles — no content editing.** Source of truth is Claude Code own config.
 
-> Design baseline: `../claude-code-config-ui/docs/REWRITE_PROPOSAL_zh.md`.
+> Design baseline: see `docs/REWRITE_PROPOSAL_zh.md` on the `attempts/claude-code-tool-manager` branch.
+
+---
+
+## Project evolution & branch map
+
+This repository consolidates the full history of this project — the production rewrite **and** the earlier
+attempts that explored the design space. Each attempt is preserved as an **orphan branch** (isolated history,
+never merged into `main`) so the evolution is readable in one place.
+
+| branch | what it holds | license | merged into `main`? |
+|---|---|---|---|
+| **`main`** | production rewrite (this code) | MIT | — (trunk) |
+| `attempts/rewrite` | the rewrite, before it was merged into `main` | MIT | ✅ yes |
+| `attempts/glyphic` | attempt #1 — fork of [caioricciuti/glyphic](https://github.com/caioricciuti/glyphic) (v0.20.0) + i18n / page-trim work | AGPL-3.0 | ❌ orphan, reference only |
+| `attempts/claude-code-tool-manager` | attempt #2 — fork of [tylergraydev/claude-code-tool-manager](https://github.com/tylergraydev/claude-code-tool-manager) (v3.10.0) + trim work + the Chinese rewrite proposal | MIT | ❌ orphan, reference only |
+
+**Why orphan branches?** The two attempts have no common ancestor with `main` (or with each other), so they
+cannot be cleanly merged — and they carry different licenses (AGPL-3.0 vs MIT). They are kept as readable
+snapshots of "what was tried", not as code that ships. Only `attempts/rewrite` shares `main`'s root commit,
+so it is the one that fast-forward-merges cleanly.
+
+**Per-branch licensing:** each branch is an independent work; licenses do not cross-contaminate as long as the
+orphan branches are not merged. `main` stays MIT-clean because no AGPL glyphic code lives on it.
+
+## Acknowledgements
+
+This project stands on the shoulders of two open-source projects, explored on the attempt branches above:
+
+- **[tylergraydev/claude-code-tool-manager](https://github.com/tylergraydev/claude-code-tool-manager)** — the
+  Tauri 2 + SvelteKit + Rust + SQLite foundation and UI patterns that this rewrite builds on (MIT).
+- **[caioricciuti/glyphic](https://github.com/caioricciuti/glyphic)** — an alternative Claude Code manager
+  whose i18n approach and card UI informed early design exploration (AGPL-3.0, kept on its own branch only).
+
+---
 
 ## Scope
 
