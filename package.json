@@ -1,31 +1,24 @@
 {
   "name": "ccc-ui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
+  "description": "Manage Claude Code skills and plugins (Config-as-SSOT). Node + Hono + Vue 3 + Element Plus.",
+  "workspaces": [
+    "server",
+    "web"
+  ],
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "tauri": "tauri"
-  },
-  "dependencies": {
-    "@tauri-apps/api": "^2.11.0",
-    "@tauri-apps/plugin-dialog": "^2.6.0",
-    "@tauri-apps/plugin-shell": "^2.3.5",
-    "lucide-svelte": "^1.0.1"
+    "dev:server": "tsx watch server/src/index.ts",
+    "dev:web": "npm -w web run dev",
+    "dev": "concurrently -k -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
+    "build": "npm -w web run build",
+    "start": "tsx server/src/index.ts",
+    "typecheck": "npm -w server exec tsc --noEmit && npm -w web exec vue-tsc --noEmit"
   },
   "devDependencies": {
-    "@sveltejs/adapter-static": "^3.0.6",
-    "@sveltejs/kit": "^2.55.0",
-    "@sveltejs/vite-plugin-svelte": "^7.0.0",
-    "@tailwindcss/vite": "^4.2.4",
-    "@tauri-apps/cli": "^2.11.1",
-    "svelte": "^5.55.5",
-    "svelte-check": "^4.4.4",
-    "tailwindcss": "^4.2.0",
-    "typescript": "^5.7.2",
-    "vite": "^8.0.10"
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
   }
 }
