@@ -88,11 +88,6 @@ const projectGroups = computed<[string, ToolInstance[]][]>(() => {
 	return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 });
 
-function scopeStatus(t_: ToolInstance): Status {
-	const level = isUserScope.value ? 'user' : projectPath.value ? 'project' : 'user';
-	return t_.perScope.find((s) => s.scope.level === level)?.status ?? 'inherited';
-}
-
 async function toggleScope(t_: ToolInstance, next: Status) {
 	// Project-origin skill → write project scope (its own settings.json).
 	// Global skill → write user scope (or project scope when one is selected).
