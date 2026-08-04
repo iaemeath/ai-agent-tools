@@ -61,8 +61,9 @@ impl ToolAdapter for SkillAdapter {
                 let name = entry.file_name().to_string_lossy().to_string();
                 let marker = entry.path().join("SKILL.md");
                 if !marker.exists() { continue; }
-                // Skip if a global skill with the same name already exists.
-                if out.iter().any(|i| i.kind == ToolKind::Skill && i.name == name && i.origin_project.as_deref() == Some(proj.as_str())) { continue; }
+                // Skip if a global skill with the same name already exists
+                // (global shadows project-scoped in Claude Code's own resolution).
+                if out.iter().any(|i| i.kind == ToolKind::Skill && i.origin == Origin::Global && i.name == name) { continue; }
                 out.push(ToolInstance {
                     kind: ToolKind::Skill,
                     name: name.clone(),

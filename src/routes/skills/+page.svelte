@@ -2,8 +2,8 @@
 	import { onMount } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import { Header } from '$lib/components/layout';
-	import { ScopeSelector } from '$lib/components/shared';
-	import type { ScopeOption } from '$lib/components/shared/ScopeSelector.svelte';
+	import { ListToolbar } from '$lib/components/shared';
+	import type { ToolbarOption } from '$lib/components/shared';
 	import { i18n } from '$lib/i18n';
 	import { ArrowUpCircle, ChevronDown, ChevronRight } from 'lucide-svelte';
 	import type { ToolOverview, ToolInstance, ProjectInfo, Status } from '$lib/types/tool';
@@ -27,12 +27,13 @@
 	const isUserScope = $derived(selected === 'user');
 	const isAllScope = $derived(selected === null);
 
-	const scopeOptions = $derived<ScopeOption[]>([
-		{ value: 'user', label: i18n.t('scope.userLabel') },
+	const scopeOptions = $derived<ToolbarOption[]>([
+		{ value: 'user', label: i18n.t('scope.userLabel'), icon: 'user' },
 		...projects.map((p) => ({
 			value: p.path,
 			label: p.path.split('/').filter(Boolean).pop() ?? p.path,
-			sublabel: p.path
+			sublabel: p.path,
+			icon: 'folder' as const
 		}))
 	]);
 
@@ -112,11 +113,12 @@
 
 <Header title={i18n.t('page.skills.title')} subtitle={i18n.t('page.skills.subtitle')} onRefresh={reload} />
 <div class="flex-1 overflow-auto p-6">
-	<ScopeSelector
+	<ListToolbar
 		{scopeOptions}
 		bind:selected
 		bind:search
-		placeholder={i18n.t('scope.selectScope')}
+		searchPlaceholder={i18n.t('scope.searchPlaceholder')}
+		scopePlaceholder={i18n.t('scope.selectScope')}
 		onScopeChange={onScopeChange}
 	/>
 
@@ -147,7 +149,6 @@
 									<div class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{t.name}</div>
 									<div class="truncate text-xs text-gray-500">{t.description ?? '—'}</div>
 								</div>
-								
 							</div>
 							<div class="flex items-center justify-between">
 								<span class="text-xs text-gray-400">{i18n.t('common.effective')}: <b>{i18n.t('status.' + t.effective)}</b></span>
@@ -178,7 +179,6 @@
 									<div class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{t.name}</div>
 									<div class="truncate text-xs text-gray-500">{t.description ?? '—'}</div>
 								</div>
-								
 							</div>
 							<div class="flex items-center justify-between">
 								<span class="break-all text-[10px] text-gray-400">{projPath}</span>

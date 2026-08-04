@@ -17,5 +17,5 @@ pub fn run() {
             commands::promote_skill,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running claude-tool-manager");
+        .expect("error while running ccc-ui");
 }
