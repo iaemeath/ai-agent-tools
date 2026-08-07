@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { decodeProjectFolder } from '../decode.js';
-import { projectsDir } from '../paths.js';
+import { projectSettings, projectsDir } from '../paths.js';
+import { profileOf } from '../profiles.js';
 import type { ProjectInfo } from '../model.js';
 
 export const projects = new Hono();
@@ -15,11 +16,14 @@ function isValidEncoded(encoded: string): boolean {
 		&& !encoded.includes('..') && !encoded.includes('\0');
 }
 
-/** GET /api/projects — list all Claude Code projects (decoded from ~/.claude/projects/). */
+/** GET /api/projects?tool=<claude|zcode> — list projects (decoded from the tool's session-history dir). */
 projects.get('/', (c) => {
-	const dir = projectsDir();
+	const profile = profileOf(c.req.query('tool') ?? 'claude');
+	const dir = projectsDir(profile);
 	const out: ProjectInfo[] = [];
-	if (!fs.existsSync(dir)) return c.json(out);
+	// Tools without a session-history dir (ZCode) return an empty list for now.
+	// TODO: project discovery for such tools needs a different mechanism.
+	if (!dir || !fs.existsSync(dir)) return c.json(out);
 
 	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;
@@ -40,7 +44,7 @@ projects.get('/', (c) => {
 			}
 		} catch { /* skip */ }
 
-		const hasSettings = fs.existsSync(path.join(decoded, '.claude', 'settings.json'));
+		const hasSettings = fs.existsSync(projectSettings(decoded, profile));
 		out.push({
 			path: decoded,
 			encoded,
@@ -55,12 +59,15 @@ projects.get('/', (c) => {
 	return c.json(out);
 });
 
-/** DELETE /api/projects/:encoded — delete session history folder only (never the real project). */
+/** DELETE /api/projects/:encoded?tool= — delete session history folder only (never the real project). */
 projects.delete('/:encoded', (c) => {
 	const encoded = c.req.param('encoded');
 	if (!isValidEncoded(encoded)) return c.json({ error: 'invalid project id' }, 400);
 
-	const dir = projectsDir();
+	const profile = profileOf(c.req.query('tool') ?? 'claude');
+	const dir = projectsDir(profile);
+	// Tools without a session-history dir (ZCode) have nothing to delete.
+	if (!dir) return c.json({ error: 'this tool has no session history' }, 400);
 	const target = path.join(dir, encoded);
 
 	// Canonicalize both and verify containment (defeats symlink tricks).

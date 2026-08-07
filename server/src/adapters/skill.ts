@@ -1,54 +1,37 @@
 // SkillAdapter — ported from src-tauri/src/adapters/skill.rs.
-// Skills live in ~/.claude/skills/<name>/ (global) or {project}/.claude/skills/<name>/ (project).
-// Toggle key: skillOverrides in settings.json (on/off/name-only/user-only).
+// Skills live in <configRoot>/skills/<name>/ (global) or {project}/<prefix>/skills/<name>/ (project).
+// Toggle key: skillOverrides in settings (on/off/name-only/user-only).
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { readProject, readUser, writeProject, writeUser } from '../settings.js';
 import { globalSkillsDir, projectSkillsDir } from '../paths.js';
 import { allProjectPaths } from '../decode.js';
+import type { ToolProfile } from '../profiles.js';
 import {
 	type Mechanism, type Origin, resolveEffective, type ScanCtx, type Scope, type ScopeCtx,
 	type ScopeStatus, type Status, type ToolContent, type ToolInstance,
 } from '../model.js';
+import { readJsonKey, writeJsonKey, type JsonKeyEncoding } from '../mutations/jsonKey.js';
 import type { ToolAdapter } from './types.js';
 
 type Json = Record<string, unknown>;
 
-/** Read skillOverrides[name]; unknown/missing → 'inherited'. */
+// skillOverrides encoding: string values on/off/name-only/user-only (inherited = key absent).
+const SKILL_ENCODING: JsonKeyEncoding = {
+	kind: 'string',
+	toNative: { enabled: 'on', disabled: 'off', 'name-only': 'name-only', 'user-only': 'user-only', inherited: undefined },
+	fromNative: { on: 'enabled', off: 'disabled', 'name-only': 'name-only', 'user-only': 'user-only' },
+};
+
+/** Read skillOverrides[name]; unknown/missing → 'inherited'. Delegates to jsonKey mutation. */
 export function readOverride(settings: Json, name: string): Status {
-	const overrides = settings['skillOverrides'];
-	if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return 'inherited';
-	const v = (overrides as Json)[name];
-	if (typeof v !== 'string') return 'inherited';
-	switch (v) {
-		case 'on': return 'enabled';
-		case 'off': return 'disabled';
-		case 'name-only': return 'name-only';
-		case 'user-only': return 'user-only';
-		default: return 'inherited';
-	}
+	return readJsonKey(settings, 'skillOverrides', name, SKILL_ENCODING);
 }
 
-/**
- * Set skillOverrides[name] (or remove it for 'inherited'). Preserves every other top-level key.
- * Cleans up: if the map is empty, removes the whole skillOverrides key.
- */
+/** Set skillOverrides[name]; 'inherited' removes the key. Delegates to jsonKey mutation. */
 export function writeOverride(settings: Json, name: string, status: Status): void {
-	let map = settings['skillOverrides'];
-	if (!map || typeof map !== 'object' || Array.isArray(map)) {
-		map = {};
-		settings['skillOverrides'] = map;
-	}
-	const m = map as Record<string, unknown>;
-	switch (status) {
-		case 'enabled': m[name] = 'on'; break;
-		case 'disabled': m[name] = 'off'; break;
-		case 'name-only': m[name] = 'name-only'; break;
-		case 'user-only': m[name] = 'user-only'; break;
-		case 'inherited': delete m[name]; break;
-	}
-	if (Object.keys(m).length === 0) delete settings['skillOverrides'];
+	writeJsonKey(settings, 'skillOverrides', name, status, SKILL_ENCODING);
 }
 
 /** Parse a SKILL.md front-matter description: (trimmed, quotes stripped) or first non-heading line. */
@@ -85,11 +68,14 @@ export class SkillAdapter implements ToolAdapter {
 	kind = 'skill' as const;
 	mechanism: Mechanism = 'nativeToggle';
 
+	constructor(private readonly profile: ToolProfile) {}
+
 	scan(ctx: ScanCtx): ToolInstance[] {
 		const out: ToolInstance[] = [];
+		const p = this.profile;
 
-		// 1. Global skills: ~/.claude/skills/*
-		const globalDir = globalSkillsDir();
+		// 1. Global skills: <configRoot>/skills/*
+		const globalDir = globalSkillsDir(p);
 		if (fs.existsSync(globalDir)) {
 			for (const entry of fs.readdirSync(globalDir, { withFileTypes: true })) {
 				if (!entry.isDirectory()) continue;
@@ -106,14 +92,15 @@ export class SkillAdapter implements ToolAdapter {
 					sourcePath: path.join(globalDir, name),
 					perScope,
 					effective: resolveEffective(perScope),
+					profile: p.id,
 				});
 			}
 		}
 
 		// 2. Project skills. Specific project → just that one; null → all known projects.
-		const projectPaths = ctx.project ? [ctx.project] : allProjectPaths();
+		const projectPaths = ctx.project ? [ctx.project] : allProjectPaths(p);
 		for (const proj of projectPaths) {
-			const projDir = projectSkillsDir(proj);
+			const projDir = projectSkillsDir(proj, p);
 			if (!fs.existsSync(projDir)) continue;
 			let entries: fs.Dirent[];
 			try {
@@ -131,7 +118,7 @@ export class SkillAdapter implements ToolAdapter {
 				const scope: Scope = { level: 'project', path: proj };
 				// Project-origin skill: read project-level override (default inherited → enabled).
 				let prStatus: Status = 'inherited';
-				try { prStatus = readOverride(readProject(proj), name); } catch { /* default inherited */ }
+				try { prStatus = readOverride(readProject(proj, p), name); } catch { /* default inherited */ }
 				const perScope: ScopeStatus[] = [{ scope, status: prStatus }];
 				out.push({
 					kind: 'skill',
@@ -143,6 +130,7 @@ export class SkillAdapter implements ToolAdapter {
 					originProject: proj,
 					perScope,
 					effective: resolveEffective(perScope),
+					profile: p.id,
 				});
 			}
 		}
@@ -153,31 +141,33 @@ export class SkillAdapter implements ToolAdapter {
 
 	/** Build per-scope status list: [user, ...project?]. Order matters for resolveEffective. */
 	private statuses(name: string, project: string | null): ScopeStatus[] {
+		const p = this.profile;
 		let userStatus: Status = 'inherited';
-		try { userStatus = readOverride(readUser(), name); } catch { /* default inherited */ }
+		try { userStatus = readOverride(readUser(p), name); } catch { /* default inherited */ }
 		const v: ScopeStatus[] = [{ scope: { level: 'user' }, status: userStatus }];
 		if (project) {
 			let prStatus: Status = 'inherited';
-			try { prStatus = readOverride(readProject(project), name); } catch { /* default inherited */ }
+			try { prStatus = readOverride(readProject(project, p), name); } catch { /* default inherited */ }
 			v.push({ scope: { level: 'project', path: project }, status: prStatus });
 		}
 		return v;
 	}
 
 	setStatus(name: string, scope: Scope, status: Status, _ctx: ScopeCtx): void {
+		const p = this.profile;
 		if (scope.level === 'user') {
-			const s = readUser();
+			const s = readUser(p);
 			writeOverride(s, name, status);
-			writeUser(s);
+			writeUser(p, s);
 		} else {
-			const s = readProject(scope.path);
+			const s = readProject(scope.path, p);
 			writeOverride(s, name, status);
-			writeProject(scope.path, s);
+			writeProject(scope.path, p, s);
 		}
 	}
 
 	view(name: string): ToolContent {
-		const p = path.join(globalSkillsDir(), name, 'SKILL.md');
+		const p = path.join(globalSkillsDir(this.profile), name, 'SKILL.md');
 		const raw = fs.readFileSync(p, 'utf8'); // throws → caller maps to 404/error
 		return { kind: 'skill', name, raw };
 	}

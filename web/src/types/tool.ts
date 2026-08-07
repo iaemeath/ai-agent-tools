@@ -1,6 +1,7 @@
 // Ported 1:1 from the previous Svelte version (src/lib/types/tool.ts).
 // These mirror the server's wire format exactly (camelCase, level-tagged scope union).
 
+export type ToolId = 'claude' | 'zcode';
 export type ToolKind = 'skill' | 'plugin';
 export type Status = 'enabled' | 'disabled' | 'name-only' | 'user-only' | 'inherited';
 export type Mechanism = 'nativeToggle';
@@ -22,6 +23,8 @@ export interface ToolInstance {
 	originProject?: string;
 	perScope: ScopeStatus[];
 	effective: Status;
+	/** Which tool this instance belongs to. */
+	profile: ToolId;
 }
 export interface ToolOverview {
 	items: ToolInstance[];

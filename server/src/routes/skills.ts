@@ -1,10 +1,11 @@
 // Skill routes — ported from src-tauri/src/commands.rs promote_skill.
-// promote = copy {project}/.claude/skills/{name}/ → ~/.claude/skills/{name}/, then remove source.
+// promote = copy {project}/<prefix>/skills/{name}/ → ~/<configDir>/skills/{name}/, then remove source.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { globalSkillsDir, projectSkillsDir } from '../paths.js';
+import { profileOf } from '../profiles.js';
 
 export const skills = new Hono();
 
@@ -14,13 +15,14 @@ function isValidName(name: string): boolean {
 		&& !name.includes('..') && !name.includes('\0');
 }
 
-/** POST /api/skills/promote — body: { name, project }. */
+/** POST /api/skills/promote — body: { name, project, tool? }. */
 skills.post('/promote', async (c) => {
-	const { name, project } = await c.req.json<{ name: string; project: string }>();
+	const { name, project, tool } = await c.req.json<{ name: string; project: string; tool?: string }>();
+	const profile = profileOf(tool ?? 'claude');
 	if (!isValidName(name)) return c.json({ error: 'invalid skill name' }, 400);
 
-	const src = path.join(projectSkillsDir(project), name);
-	const dst = path.join(globalSkillsDir(), name);
+	const src = path.join(projectSkillsDir(project, profile), name);
+	const dst = path.join(globalSkillsDir(profile), name);
 
 	if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) {
 		return c.json({ error: 'project skill not found' }, 404);
@@ -53,18 +55,20 @@ skills.post('/promote', async (c) => {
 });
 
 /**
- * POST /api/skills/delete — body: { name, scope: 'user' | 'project', project? }.
- * Removes the skill directory from disk. Global → ~/.claude/skills/<name>;
- * project → {project}/.claude/skills/<name> (with canonicalize containment check).
+ * POST /api/skills/delete — body: { name, scope: 'user' | 'project', project?, tool? }.
+ * Removes the skill directory from disk. Global → ~/<configDir>/skills/<name>;
+ * project → {project}/<prefix>/skills/<name> (with canonicalize containment check).
  */
 skills.post('/delete', async (c) => {
-	const { name, scope, project } = await c.req.json<{ name: string; scope: 'user' | 'project'; project?: string }>();
+	const body = await c.req.json<{ name: string; scope: 'user' | 'project'; project?: string; tool?: string }>();
+	const { name, scope, project } = body;
+	const profile = profileOf(body.tool ?? 'claude');
 	if (!isValidName(name)) return c.json({ error: 'invalid skill name' }, 400);
 
 	const isProject = scope === 'project';
 	if (isProject && !project) return c.json({ error: 'project required for project scope' }, 400);
 
-	const base = isProject ? projectSkillsDir(project!) : globalSkillsDir();
+	const base = isProject ? projectSkillsDir(project!, profile) : globalSkillsDir(profile);
 	const target = path.join(base, name);
 
 	if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {

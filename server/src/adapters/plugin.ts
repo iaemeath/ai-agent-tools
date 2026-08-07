@@ -1,14 +1,16 @@
 // PluginAdapter — ported from src-tauri/src/adapters/plugin.rs.
-// Plugins are recorded in ~/.claude/plugins/installed_plugins.json; toggle key is
-// enabledPlugins in settings.json (name@marketplace → boolean).
+// Plugins are recorded in <configRoot>/plugins/installed_plugins.json; toggle key is
+// enabledPlugins in settings (name@marketplace → boolean).
 
 import fs from 'node:fs';
 import { installedPluginsFile } from '../paths.js';
 import { readProject, readUser, writeProject, writeUser } from '../settings.js';
+import type { ToolProfile } from '../profiles.js';
 import {
 	type Mechanism, resolveEffective, type ScanCtx, type Scope, type ScopeCtx,
 	type ScopeStatus, type Status, type ToolContent, type ToolInstance,
 } from '../model.js';
+import { readJsonKey, writeJsonKey, type JsonKeyEncoding } from '../mutations/jsonKey.js';
 import type { ToolAdapter } from './types.js';
 
 type Json = Record<string, unknown>;
@@ -19,9 +21,9 @@ interface InstallRecord {
 	version?: string | null;
 }
 
-/** Read ~/.claude/plugins/installed_plugins.json → map of name → records. Parse error → empty. */
-function readInstalled(): Map<string, InstallRecord[]> {
-	const p = installedPluginsFile();
+/** Read installed_plugins.json → map of name → records. Parse error → empty. */
+function readInstalled(profile: ToolProfile): Map<string, InstallRecord[]> {
+	const p = installedPluginsFile(profile);
 	if (!fs.existsSync(p)) return new Map();
 	try {
 		const parsed = JSON.parse(fs.readFileSync(p, 'utf8')) as { plugins?: Record<string, InstallRecord[]> };
@@ -35,41 +37,29 @@ function readInstalled(): Map<string, InstallRecord[]> {
 	}
 }
 
-/** enabledPlugins[name]: boolean → enabled/disabled; missing/non-boolean → inherited. */
+// enabledPlugins encoding: boolean (true=enabled, false=disabled). name-only/user-only collapse to true.
+const PLUGIN_ENCODING: JsonKeyEncoding = { kind: 'boolean' };
+
+/** enabledPlugins[name]: boolean → enabled/disabled; missing/non-boolean → inherited. Delegates to jsonKey. */
 function readEnabled(settings: Json, name: string): Status {
-	const ep = settings['enabledPlugins'];
-	if (!ep || typeof ep !== 'object' || Array.isArray(ep)) return 'inherited';
-	const v = (ep as Json)[name];
-	if (typeof v !== 'boolean') return 'inherited';
-	return v ? 'enabled' : 'disabled';
+	return readJsonKey(settings, 'enabledPlugins', name, PLUGIN_ENCODING);
 }
 
-/** Set enabledPlugins[name] boolean; 'inherited' removes the key; empty map removes the key. */
+/** Set enabledPlugins[name] boolean; 'inherited' removes the key. Delegates to jsonKey. */
 function writeEnabled(settings: Json, name: string, status: Status): void {
-	let map = settings['enabledPlugins'];
-	if (!map || typeof map !== 'object' || Array.isArray(map)) {
-		map = {};
-		settings['enabledPlugins'] = map;
-	}
-	const m = map as Record<string, unknown>;
-	// NativeToggle can't express name-only/user-only; they collapse to enabled (true).
-	if (status === 'enabled' || status === 'name-only' || status === 'user-only') {
-		m[name] = true;
-	} else if (status === 'disabled') {
-		m[name] = false;
-	} else {
-		delete m[name];
-	}
-	if (Object.keys(m).length === 0) delete settings['enabledPlugins'];
+	writeJsonKey(settings, 'enabledPlugins', name, status, PLUGIN_ENCODING);
 }
 
 export class PluginAdapter implements ToolAdapter {
 	kind = 'plugin' as const;
 	mechanism: Mechanism = 'nativeToggle';
 
+	constructor(private readonly profile: ToolProfile) {}
+
 	scan(ctx: ScanCtx): ToolInstance[] {
 		const out: ToolInstance[] = [];
-		const installed = readInstalled();
+		const p = this.profile;
+		const installed = readInstalled(p);
 		for (const [full, records] of installed) {
 			const rec = records[0];
 			if (!rec) continue;
@@ -83,6 +73,7 @@ export class PluginAdapter implements ToolAdapter {
 				sourcePath: rec.installPath,
 				perScope,
 				effective: resolveEffective(perScope),
+				profile: p.id,
 			});
 		}
 		out.sort((a, b) => a.name.localeCompare(b.name));
@@ -90,31 +81,33 @@ export class PluginAdapter implements ToolAdapter {
 	}
 
 	private statuses(name: string, project: string | null): ScopeStatus[] {
+		const p = this.profile;
 		let userStatus: Status = 'inherited';
-		try { userStatus = readEnabled(readUser(), name); } catch { /* inherited */ }
+		try { userStatus = readEnabled(readUser(p), name); } catch { /* inherited */ }
 		const v: ScopeStatus[] = [{ scope: { level: 'user' }, status: userStatus }];
 		if (project) {
 			let prStatus: Status = 'inherited';
-			try { prStatus = readEnabled(readProject(project), name); } catch { /* inherited */ }
+			try { prStatus = readEnabled(readProject(project, p), name); } catch { /* inherited */ }
 			v.push({ scope: { level: 'project', path: project }, status: prStatus });
 		}
 		return v;
 	}
 
 	setStatus(name: string, scope: Scope, status: Status, _ctx: ScopeCtx): void {
+		const p = this.profile;
 		if (scope.level === 'user') {
-			const s = readUser();
+			const s = readUser(p);
 			writeEnabled(s, name, status);
-			writeUser(s);
+			writeUser(p, s);
 		} else {
-			const s = readProject(scope.path);
+			const s = readProject(scope.path, p);
 			writeEnabled(s, name, status);
-			writeProject(scope.path, s);
+			writeProject(scope.path, p, s);
 		}
 	}
 
 	view(name: string): ToolContent {
-		const installed = readInstalled();
+		const installed = readInstalled(this.profile);
 		const rec = installed.get(name)?.[0];
 		if (!rec) throw new Error(`plugin not found: ${name}`);
 		const raw = `plugin ${name} installed at ${rec.installPath} (scope ${rec.scope ?? '?'})`;

@@ -1,6 +1,8 @@
-// Data model — ported 1:1 from src-tauri/src/core/model.rs.
-// JSON wire format is camelCase (Rust used #[serde(rename_all = "camelCase")]),
-// so TS fields are already aligned.
+// Data model — ported 1:1 from src-tauri/src/core/model.rs, then generalized for
+// multi-tool support (profile field on ctx/instance). JSON wire format is camelCase
+// (Rust used #[serde(rename_all = "camelCase")]), so TS fields are already aligned.
+
+import type { ToolId, ToolProfile } from './profiles.js';
 
 export type ToolKind = 'skill' | 'plugin';
 export type Status = 'enabled' | 'disabled' | 'name-only' | 'user-only' | 'inherited';
@@ -26,6 +28,8 @@ export interface ToolInstance {
 	originProject?: string;
 	perScope: ScopeStatus[];
 	effective: Status;
+	/** Which tool this instance belongs to (lets the UI group by tool). */
+	profile: ToolId;
 }
 
 export interface ToolOverview {
@@ -49,9 +53,13 @@ export interface ProjectInfo {
 export interface ScanCtx {
 	/** null = overview mode (scan all projects). */
 	project: string | null;
+	/** Which tool's filesystem layout to scan. */
+	profile: ToolProfile;
 }
 export interface ScopeCtx {
 	project: string | null;
+	/** Which tool's filesystem layout to target. */
+	profile: ToolProfile;
 }
 
 /**

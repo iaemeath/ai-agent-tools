@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { projectSettings, userSettings } from './paths.js';
+import { DEFAULT_PROFILE, type ToolProfile } from './profiles.js';
 
 type Json = Record<string, unknown>;
 
@@ -52,15 +53,15 @@ export function write(p: string, value: Json): void {
 	fs.writeFileSync(p, JSON.stringify(value, null, 2) + '\n', 'utf8');
 }
 
-export function readUser(): Json {
-	return read(userSettings());
+export function readUser(p: ToolProfile = DEFAULT_PROFILE): Json {
+	return read(userSettings(p));
 }
-export function writeUser(v: Json): void {
-	write(userSettings(), v);
+export function writeUser(p: ToolProfile, v: Json): void {
+	write(userSettings(p), v);
 }
-export function readProject(project: string): Json {
-	return read(projectSettings(project));
+export function readProject(project: string, p: ToolProfile = DEFAULT_PROFILE): Json {
+	return read(projectSettings(project, p));
 }
-export function writeProject(project: string, v: Json): void {
-	write(projectSettings(project), v);
+export function writeProject(project: string, p: ToolProfile, v: Json): void {
+	write(projectSettings(project, p), v);
 }

@@ -1,13 +1,16 @@
-// Project-folder decode — ported from src-tauri/src/commands.rs decode_project_folder().
+// Project-folder decode — ported from src-tauri/src/commands.rs decode_project_folder(),
+// then profile-aware: Claude Code encodes the absolute cwd by replacing `/` with `-`,
+// so `/home/user/my-project` → `-home-user-my-project`. ZCode has no such folder, so
+// allProjectPaths returns [] for it (sessions live in SQLite).
 //
-// Claude Code encodes the absolute cwd as a folder name by replacing every `/` with `-`,
-// so `/home/user/my-project` → `-home-user-my-project`. Because `-` is ambiguous (separator
-// OR part of a real dir name), we greedily reconstruct by walking the real filesystem from
-// `/`, matching the longest possible directory-name prefix at each step.
+// Because `-` is ambiguous (separator OR part of a real dir name), we greedily reconstruct
+// by walking the real filesystem from `/`, matching the longest possible directory-name
+// prefix at each step.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { projectsDir } from './paths.js';
+import { DEFAULT_PROFILE, type ToolProfile } from './profiles.js';
 
 export function decodeProjectFolder(name: string): string {
 	// Not encoded (empty or doesn't start with '-') → return as-is.
@@ -46,13 +49,19 @@ export function decodeProjectFolder(name: string): string {
 }
 
 /**
- * All known project filesystem paths (decoded from ~/.claude/projects/ folder names).
+ * All known project filesystem paths (decoded from the tool's session-history folder names).
  * Only paths that successfully decode to a real path (path !== encoded) are returned.
  * Used by the skill scanner to discover project-scoped skills across all projects.
+ *
+ * Returns [] when the tool has no session-history dir (ZCode) — project discovery for
+ * such tools needs a different mechanism (TODO).
  */
-export function allProjectPaths(): string[] {
-	const dir = projectsDir();
-	if (!fs.existsSync(dir)) return [];
+export function allProjectPaths(p: ToolProfile = DEFAULT_PROFILE): string[] {
+	// Only Claude's 'dash' encoding is understood; other tools: nothing to decode.
+	if (p.projectEncoding !== 'dash') return [];
+
+	const dir = projectsDir(p);
+	if (!dir || !fs.existsSync(dir)) return [];
 	const out: string[] = [];
 	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
 		if (!entry.isDirectory()) continue;

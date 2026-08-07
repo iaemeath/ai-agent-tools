@@ -1,13 +1,15 @@
 // Overview aggregator — ported from src-tauri/src/scan.rs.
-// Runs every adapter; an adapter that throws is warned and skipped (never fails the whole overview).
+// Runs every adapter for the given profile; an adapter that throws is warned and
+// skipped (never fails the whole overview).
 
 import { registry } from './adapters/types.js';
 import type { ToolOverview, ScanCtx } from './model.js';
+import { DEFAULT_PROFILE, type ToolProfile } from './profiles.js';
 
-export function overview(project: string | null): ToolOverview {
-	const ctx: ScanCtx = { project };
+export function overview(project: string | null, profile: ToolProfile = DEFAULT_PROFILE): ToolOverview {
+	const ctx: ScanCtx = { project, profile };
 	const items: ToolOverview['items'] = [];
-	for (const adapter of registry()) {
+	for (const adapter of registry(profile)) {
 		try {
 			items.push(...adapter.scan(ctx));
 		} catch (e) {

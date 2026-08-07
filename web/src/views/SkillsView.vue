@@ -5,10 +5,16 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search } from '@element-plus/icons-vue';
 import { api } from '../api';
 import SkillCard from '../components/SkillCard.vue';
-import type { ProjectInfo, Scope, Status, ToolInstance, ToolOverview } from '../types/tool';
+import type { ProjectInfo, Scope, Status, ToolId, ToolInstance, ToolOverview } from '../types/tool';
 
 const { t } = useI18n();
 
+const TOOL_OPTIONS: { value: ToolId; label: string }[] = [
+	{ value: 'claude', label: 'Claude Code' },
+	{ value: 'zcode', label: 'ZCode' },
+];
+
+const tool = ref<ToolId>('claude');
 const projects = ref<ProjectInfo[]>([]);
 const overview = ref<ToolOverview | null>(null);
 const errorMsg = ref<string | null>(null);
@@ -38,7 +44,7 @@ const scopeOptions = computed<ScopeOption[]>(() => [
 async function reload() {
 	errorMsg.value = null;
 	try {
-		overview.value = await api.getOverview(projectPath.value);
+		overview.value = await api.getOverview(projectPath.value, tool.value);
 	} catch (e) {
 		errorMsg.value = (e as Error).message;
 	} finally {
@@ -48,10 +54,21 @@ async function reload() {
 
 async function loadProjects() {
 	try {
-		projects.value = await api.listProjects();
+		projects.value = await api.listProjects(tool.value);
 	} catch {
 		projects.value = [];
 	}
+}
+
+/** Switching tool resets all view state — each tool has its own projects/skills. */
+async function switchTool(next: ToolId) {
+	tool.value = next;
+	selected.value = null;
+	search.value = '';
+	overview.value = null;
+	loading.value = true;
+	await loadProjects();
+	await reload();
 }
 
 onMounted(async () => {
@@ -97,7 +114,7 @@ async function toggleScope(t_: ToolInstance, next: Status) {
 			? { level: 'user' }
 			: { level: 'project', path: projectPath.value! });
 	try {
-		await api.setToolStatus({ kind: 'skill', name: t_.name, scope: scopeArg, status: next, project: projectPath.value });
+		await api.setToolStatus({ kind: 'skill', name: t_.name, scope: scopeArg, status: next, project: projectPath.value, tool: tool.value });
 		await reload();
 	} catch (e) {
 		errorMsg.value = (e as Error).message;
@@ -113,7 +130,7 @@ async function promote(t_: ToolInstance) {
 	}
 	promoting.value = t_.name;
 	try {
-		await api.promoteSkill(t_.name, t_.originProject);
+		await api.promoteSkill(t_.name, t_.originProject, tool.value);
 		ElMessage.success(t('skill.promoted'));
 		await reload();
 	} catch (e) {
@@ -133,7 +150,7 @@ async function removeSkill(t_: ToolInstance) {
 	}
 	deleting.value = t_.name;
 	try {
-		await api.deleteSkill({ name: t_.name, scope, project: isProject ? t_.originProject : undefined });
+		await api.deleteSkill({ name: t_.name, scope, project: isProject ? t_.originProject : undefined, tool: tool.value });
 		ElMessage.success(t('skill.deleted'));
 		await reload();
 	} catch (e) {
@@ -150,8 +167,20 @@ function basename(p: string): string {
 
 <template>
   <div class="skills-view">
-    <!-- Toolbar: search + scope -->
+    <!-- Toolbar: tool selector + search + scope -->
     <div class="toolbar">
+      <el-select
+        v-model="tool"
+        class="tool-select"
+        @change="switchTool"
+      >
+        <el-option
+          v-for="opt in TOOL_OPTIONS"
+          :key="opt.value"
+          :value="opt.value"
+          :label="opt.label"
+        />
+      </el-select>
       <el-input
         v-model="search"
         :placeholder="t('scope.searchPlaceholder')"
@@ -232,11 +261,14 @@ function basename(p: string): string {
   gap: 16px;
   margin-bottom: 16px;
 }
+.tool-select {
+  flex: 0 0 130px;
+}
 .search {
-  flex: 0 0 calc(74% - 8px);
+  flex: 1 1 auto;
 }
 .scope-select {
-  flex: 0 0 calc(24% - 8px);
+  flex: 0 0 220px;
 }
 .opt-sub {
   float: right;
