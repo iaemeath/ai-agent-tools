@@ -1,7 +1,11 @@
-# Claude Tool Manager
+# ccc-ui
 
-Toggle Claude Code **tools** on/off across scopes (global / project / local), see status at a glance.
-**Only toggles — no content editing.** Source of truth is Claude Code own config.
+Manage Claude Code **skills** and **plugins**: toggle them on/off across scopes (user / project),
+see status at a glance, promote project skills to global, and browse session history.
+**Only toggles and file-level ops — no content editing.** Source of truth is Claude Code's own config.
+
+Node + Hono backend, Vue 3 + Element Plus frontend. Replaces an earlier Tauri/Rust/SvelteKit design
+(see *Project evolution* below).
 
 > Design baseline: see `docs/REWRITE_PROPOSAL_zh.md` on the `attempts/claude-code-tool-manager` branch.
 
@@ -48,39 +52,82 @@ Only **skill** and **plugin** are toggle-able, because these are the only kinds 
 
 | kind | real (source of truth) | toggle key | reload |
 |---|---|---|---|
-| **skill** | `~/.claude/skills/<name>/` | `skillOverrides` (on/off/name-only/user-only) | `/reload-skills` |
-| **plugin** | `~/.claude/plugins/installed_plugins.json` | `enabledPlugins` (`name@marketplace`: bool) | `/reload-plugins` |
+| **skill** | `~/.claude/skills/<name>/` (global) or `{project}/.claude/skills/<name>/` | `skillOverrides` in `settings.json` (on/off/name-only/user-only) | `/reload-skills` |
+| **plugin** | `~/.claude/plugins/installed_plugins.json` | `enabledPlugins` in `settings.json` (`name@marketplace`: bool) | `/reload-plugins` |
 
 Other kinds (agent / command / rule / hook / mcp) have **no native on/off**, so they are out of toggle scope.
+
+Beyond toggling, ccc-ui also:
+- **promotes** a project skill to global (moves `{project}/.claude/skills/<name>/` → `~/.claude/skills/<name>/`),
+- **deletes** a skill from disk (user or project scope),
+- **lists / deletes** Claude Code session-history folders under `~/.claude/projects/`.
 
 ## Philosophy
 
 **Config-as-SSOT.** This app holds no parallel copy of any tool. It only reads/scans CC-native config
 (`skillOverrides`, `enabledPlugins`) and writes it back with key-preserving merges (other keys untouched).
+Every write is preceded by a `.bak` backup of the file it overwrites.
 
 ## Status
 
-- **Phase 0** — scaffold (Tauri 2 + Rust + SvelteKit + Tailwind). done.
-- **Phase 1** — skill + plugin single-axis toggle (scan -> overview -> native key -> in-session reload).
+- **Phase 0** — scaffold. done. (Now Node + Hono + Vue 3 + Element Plus; the earlier
+  Tauri 2 + Rust + SvelteKit + Tailwind scaffold was retired — see *Project evolution*.)
+- **Phase 1** — skill + plugin toggle (scan → overview → native key → in-session reload). **in progress.**
+  The `Skills` view is live; projects/plugins/agents/commands/hooks/instructions/rules/mcps/settings are
+  placeholder routes (`PlaceholderView`) awaiting implementation.
 
 ## Dev
 
+Prerequisites: Node 18+ (developed on Node 22+). It's a plain npm workspace — no native toolchain.
+
 ```bash
-npm install
-npm run tauri dev      # or: npm run dev (frontend) / cd src-tauri && cargo test
+npm install            # installs both server and web workspaces
+npm run dev            # concurrently starts backend (:8787) + frontend (:5173)
 ```
 
-> WSLg note: if the window is blank, install GPU drivers: `sudo apt install mesa-vulkan-drivers libgl1-mesa-dri`.
+Then open **http://localhost:5173**. Vite proxies `/api` → `:8787`, so the frontend talks to the
+Hono API in dev. (In production, `npm run build` emits `web/dist/` and the server serves it at `/`.)
+
+Other scripts:
+
+```bash
+npm run dev:server     # backend only (tsx watch)
+npm run dev:web        # frontend only (vite)
+npm run build          # type-check (vue-tsc) + vite build → web/dist
+npm run typecheck      # tsc (server) + vue-tsc (web), no emit
+npm start              # run server (serves API + built frontend) on $PORT or 8787
+```
+
+> WSL2: `vite.config.ts` binds `host: true` (0.0.0.0) so a Windows browser can reach the dev server
+> over the WSL port forward. No GPU drivers needed (this is a web app, not Tauri/WSLg).
 
 ## Architecture
 
 ```
-src-tauri/src/
-  core/        model, paths, settings_io (3-scope, preserve-key), backup
-  adapters/    ToolAdapter trait + registry; skill.rs, plugin.rs
-  scan.rs      aggregate adapters -> ToolOverview
-  commands.rs  slim Tauri commands (get_overview / set_tool_status / view_tool_content ...)
-src/lib/       types, api, stores, components
+server/src/                      Hono API (tsx, runs on :8787)
+  index.ts                       entry: mounts /api/* and (in prod) serves web/dist
+  paths.ts                       path helpers — all rooted at ~/.claude/
+  model.ts                       data model + resolveEffective (two-level status resolution)
+  settings.ts                    SSOT-safe JSON read/write (key-preserving merge + .bak backup)
+  scan.ts                        overview aggregator — runs every adapter
+  decode.ts                      decode Claude-encoded project folder names (greedy fs walk)
+  adapters/
+    types.ts                     ToolAdapter interface + registry (core extension point)
+    skill.ts                     SkillAdapter   (toggle key: skillOverrides)
+    plugin.ts                    PluginAdapter  (toggle key: enabledPlugins)
+  routes/
+    tools.ts                     overview / detail / set-status / view-content
+    projects.ts                  list / delete session-history folders
+    skills.ts                    promote / delete skills
+web/src/                         Vue 3 SPA (Vite dev on :5173, proxies /api → :8787)
+  api/index.ts                   fetch client — mirrors the server route table 1:1
+  views/SkillsView.vue           the one live view (others are PlaceholderView)
+  components/                    AppHeader / AppSidebar / SkillCard
+  i18n/                          vue-i18n (zh / en)
+  router/                        /skills is real; rest are placeholders
 ```
 
-Add a toggle-able kind = add one `ToolAdapter`. Frontend commands and cards stay unchanged.
+**Core idea:** add a toggle-able kind = add one `ToolAdapter` (`scan` / `setStatus` / `view`).
+Routes and the frontend card stay unchanged. The two-level status model walks
+`[user, ...project?]` from most-specific outward; first non-`inherited` status wins, defaulting to
+`enabled`.
