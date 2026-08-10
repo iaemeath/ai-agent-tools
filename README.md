@@ -1,94 +1,84 @@
 # ccc-ui
 
-Manage Claude Code **skills** and **plugins**: toggle them on/off across scopes (user / project),
-see status at a glance, promote project skills to global, and browse session history.
-**Only toggles and file-level ops — no content editing.** Source of truth is Claude Code's own config.
+A web UI to manage AI coding-agent config — across scopes (user / project), across tools
+(Claude Code, ZCode, …). Toggle **skills** and **plugins** on/off, browse **projects** (session
+history), view **instructions** (CLAUDE.md / AGENTS.md), inspect **MCP** servers, and explore plugin
+files — all from one place.
 
-Node + Hono backend, Vue 3 + Element Plus frontend. Replaces an earlier Tauri/Rust/SvelteKit design
-(see *Project evolution* below).
+**Skills and plugins are toggle-able (live, no restart). Everything else is read-only browsing.**
+Source of truth is each tool's own native config; this app is a read/project/edit-back layer over it,
+never a parallel database.
 
-> Design baseline: see `docs/REWRITE_PROPOSAL_zh.md` on the `attempts/claude-code-tool-manager` branch.
-
----
-
-## Project evolution & branch map
-
-This repository is the **new `ccc-ui` project mainline** — the architecture is confirmed, development is in
-progress (not a finished product). It also preserves the earlier attempts that explored the design space, each
-as an **orphan branch** (isolated history, never merged into `main`) so the evolution is readable in one place.
-
-> **Status:** architecture confirmed. Phase 0 scaffold done; Phase 1 (skill + plugin toggle) in progress.
-
-| branch | what it holds | license | merged into `main`? |
-|---|---|---|---|
-| **`main`** | new project mainline — initial implementation on the confirmed architecture | MIT | — (trunk) |
-| `attempts/claude-code-config-ui` | the same mainline code, branch kept as the development line | MIT | ✅ yes |
-| `attempts/glyphic` | attempt #1 — fork of [caioricciuti/glyphic](https://github.com/caioricciuti/glyphic) (v0.20.0) + i18n / page-trim work | AGPL-3.0 | ❌ orphan, reference only |
-| `attempts/claude-code-tool-manager` | attempt #2 — fork of [tylergraydev/claude-code-tool-manager](https://github.com/tylergraydev/claude-code-tool-manager) (v3.10.0) + trim work + the Chinese architecture proposal | MIT | ❌ orphan, reference only |
-
-**Why orphan branches?** The two fork attempts have no common ancestor with `main` (or with each other), so
-they cannot be cleanly merged — and they carry different licenses (AGPL-3.0 vs MIT). They are kept as readable
-snapshots of "what was tried", not as code that ships. Only `attempts/claude-code-config-ui` shares `main`'s
-root commit, so it is the one that fast-forward-merges cleanly.
-
-**Per-branch licensing:** each branch is an independent work; licenses do not cross-contaminate as long as the
-orphan branches are not merged. `main` stays MIT-clean because no AGPL glyphic code lives on it.
-
-## Acknowledgements
-
-This project stands on the shoulders of two open-source projects, explored on the attempt branches above:
-
-- **[tylergraydev/claude-code-tool-manager](https://github.com/tylergraydev/claude-code-tool-manager)** — the
-  Tauri 2 + SvelteKit + Rust + SQLite foundation and UI patterns that this project builds on (MIT).
-- **[caioricciuti/glyphic](https://github.com/caioricciuti/glyphic)** — an alternative Claude Code manager
-  whose i18n approach and card UI informed early design exploration (AGPL-3.0, kept on its own branch only).
+Node + Hono backend, Vue 3 + Element Plus frontend.
 
 ---
+
+## Why multi-tool
+
+Different AI coding tools (Claude Code, ZCode, …) store their config under different directories,
+with different settings-file layouts, different plugin-manifest formats, and different key-nesting for
+the on/off switch. ccc-ui abstracts all those differences into a **declarative profile** per tool, so:
+
+- **Adding a new tool = adding one profile object.** No engine/adapter changes.
+- The read/write engine, the adapters, and the path helpers are **tool-agnostic** — they hold zero
+  tool-specific string literals.
+
+See *Architecture → ResourceLocator* below for how.
 
 ## Scope
 
-Only **skill** and **plugin** are toggle-able, because these are the only kinds that support
-**in-session reload** (`/reload-skills`, `/reload-plugins`) — so a toggle is **live**, no new session needed.
+**Skill** and **plugin** are toggle-able (live, no restart) — they carry a native per-name on/off switch
+in the tool's settings. Other resources are **read-only browsing**.
 
-| kind | real (source of truth) | toggle key | reload |
+| kind | mode | source of truth | notes |
 |---|---|---|---|
-| **skill** | `~/.claude/skills/<name>/` (global) or `{project}/.claude/skills/<name>/` | `skillOverrides` in `settings.json` (on/off/name-only/user-only) | `/reload-skills` |
-| **plugin** | `~/.claude/plugins/installed_plugins.json` | `enabledPlugins` in `settings.json` (`name@marketplace`: bool) | `/reload-plugins` |
+| **skill** | toggle | `skillOverrides` (on/off/name-only/user-only) | also: promote project→global, delete |
+| **plugin** | toggle | `enabledPlugins` (`name@marketplace`: bool) | also: inline file explorer (browse plugin dir + preview file content) |
+| **project** | read-only | session-history folders (Claude) / SQLite DB (ZCode) | list + delete session history |
+| **instruction** | read-only | `CLAUDE.md` / `AGENTS.md` (global + per-project) | split-pane markdown viewer + open in file manager |
+| **mcp** | read-only | `mcpServers` (Claude) / `mcp.servers` (ZCode) | list servers + view config detail (command/args/env/url/headers) |
+| ~~rule~~ | removed | — | Claude Code only, no native toggle; menu removed after analysis |
 
-Other kinds (agent / command / rule / hook / mcp) have **no native on/off**, so they are out of toggle scope.
-
-Beyond toggling, ccc-ui also:
-- **promotes** a project skill to global (moves `{project}/.claude/skills/<name>/` → `~/.claude/skills/<name>/`),
-- **deletes** a skill from disk (user or project scope),
-- **lists / deletes** Claude Code session-history folders under `~/.claude/projects/`.
+MCP edit/toggle is deferred — the three tools' on/off mechanisms differ too widely (ZCode has `enabled`,
+Claude has project-block arrays, Codex has none), so a unified toggle would create "fake" switches the
+tool ignores. Read-only aggregation is the honest MVP.
 
 ## Philosophy
 
-**Config-as-SSOT.** This app holds no parallel copy of any tool. It only reads/scans CC-native config
-(`skillOverrides`, `enabledPlugins`) and writes it back with key-preserving merges (other keys untouched).
-Every write is preceded by a `.bak` backup of the file it overwrites.
+**Config-as-SSOT.** This app holds no parallel copy of any tool's data. It only reads each tool's native
+config (`skillOverrides`, `enabledPlugins`) and writes it back with key-preserving merges (other top-level
+keys untouched). Every write is preceded by a `.bak` backup of the file it overwrites.
 
 ## Status
 
-- **Phase 0** — scaffold. done. (Now Node + Hono + Vue 3 + Element Plus; the earlier
-  Tauri 2 + Rust + SvelteKit + Tailwind scaffold was retired — see *Project evolution*.)
-- **Phase 1** — skill + plugin toggle (scan → overview → native key → in-session reload). **in progress.**
-  The `Skills` view is live; projects/plugins/agents/commands/hooks/instructions/rules/mcps/settings are
-  placeholder routes (`PlaceholderView`) awaiting implementation.
+- **Phase 0** — scaffold (Node + Hono + Vue 3 + Element Plus). done.
+- **Phase 1** — skill + plugin toggle, profile-aware. **done** for Claude Code + ZCode.
+  - `Skills` view: live (toggle / promote / delete, tool switcher in header).
+  - `Plugins` view: live (toggle + inline **file explorer** — browse plugin dir, preview file content,
+    open in file manager).
+  - Tool switching (Claude Code ⇄ ZCode) is global, in the header.
+- **Phase 2** — read-only browsing pages. **done** for Claude Code + ZCode.
+  - `Projects` view: card grid (session count / last activity) + delete session history.
+    Supports both fs folders (Claude) and SQLite DB (ZCode) via unified `ProjectsLocator`.
+  - `Instructions` view: split-pane markdown viewer (global CLAUDE.md/AGENTS.md left, project cards right,
+    draggable splitter) + open in file manager.
+  - `MCP` view: card grid + inline detail (transport / command / args / env / url / headers).
+    Claude + ZCode only (Codex TOML deferred).
+- **Placeholder** — agents / commands / hooks / settings (not yet implemented).
+
+---
 
 ## Dev
 
-Prerequisites: Node 18+ (developed on Node 22+). It's a plain npm workspace — no native toolchain.
+Prerequisites: Node 18+ (developed on Node 22+). Plain npm workspace — no native toolchain.
 
 ```bash
 npm install            # installs both server and web workspaces
 npm run dev            # concurrently starts backend (:8787) + frontend (:5173)
 ```
 
-Then open **http://localhost:5173**. Vite proxies `/api` → `:8787`, so the frontend talks to the
-Hono API in dev. (In production, `npm run build` emits `web/dist/` and the server serves it at `/`.)
-
-Other scripts:
+Open **http://localhost:5173**. Vite proxies `/api` → `:8787`, so the frontend talks to the Hono API
+in dev. (In production, `npm run build` emits `web/dist/` and the server serves it at `/`.)
 
 ```bash
 npm run dev:server     # backend only (tsx watch)
@@ -98,36 +88,142 @@ npm run typecheck      # tsc (server) + vue-tsc (web), no emit
 npm start              # run server (serves API + built frontend) on $PORT or 8787
 ```
 
-> WSL2: `vite.config.ts` binds `host: true` (0.0.0.0) so a Windows browser can reach the dev server
-> over the WSL port forward. No GPU drivers needed (this is a web app, not Tauri/WSLg).
+---
 
 ## Architecture
+
+### The ResourceLocator model (core design)
+
+Every tool-specific difference — where skills live, how the plugin manifest is keyed, where the
+enabled-switch nests in settings JSON, how values are encoded — is declared in one place
+(`profiles.ts`) as a **profile**. Everything else is a tool-agnostic engine.
+
+```
+profiles.ts         ToolProfile — the single source of truth for per-tool layout
+                      skills:       { dirName, marker, overridesKeyPath, overridesEncoding }
+                      plugins:      { dirRelative, manifestFile, manifestIsArray, manifestIdField,
+                                       enabledKeyPath, enabledEncoding }
+                      projects:     ProjectsLocator — fs (dash-encoded folders) OR sqlite (session DB)
+                      instructions: { fileName }   — CLAUDE.md / AGENTS.md
+                      mcps:         { userFile, userKeyPath, projectFile, projectDir, projectKeyPath }
+                    ↓ read by
+locator.ts          tool-agnostic engine:
+                      readRegistry(profile)   — parse manifest (array OR map) → normalized Map
+                      readFlag(enc, json, keyPath, name)   — walk nested key path → Status
+                      writeFlag(enc, json, keyPath, name, status) — walk + auto-create + write
+                    ↓ used by
+adapters/           SkillAdapter / PluginAdapter — scan / setStatus / view / detail
+                      (hold NO tool-specific literals; everything comes from the profile)
+paths.ts            path helpers — derive from profile locator fields, no hardcoded segments
+mutations/jsonKey.ts  leaf-level read/write of settings[key][name] (boolean OR string encoding)
+projects-reader.ts  unified project discovery (fs folders OR sqlite rows) + delete
+instructions-reader.ts  read-only instruction file discovery + content read
+mcp-reader.ts       read-only MCP server discovery (user-level + project-level) + transport inference
+decode.ts           decode dash-encoded project folder names (Windows drive + underscore recombination)
+```
+
+**The invariant:** no tool-specific string literal ('skills', 'SKILL.md', 'enabledPlugins', 'id', …)
+lives outside `profiles.ts`. Adding a tool never touches the engine, adapters, or paths.
+
+### Adding a new tool (e.g. Codex)
+
+Add one entry to `PROFILES` in `profiles.ts`. That's the whole change:
+
+```typescript
+codex: {
+  id: 'codex', label: 'Codex', configDir: '.codex', projectPrefix: '.codex',
+  settingsFile: ['config.json'],
+  projects: { source: 'fs', dirRelative: 'sessions', encoding: 'dash' },
+  skills: {
+    dirName: 'skills', marker: 'SKILL.md',
+    overridesKeyPath: ['skillOverrides'], overridesEncoding: SKILL_STR,
+  },
+  plugins: {
+    dirRelative: ['plugins'], manifestFile: 'plugins.json',
+    manifestIsArray: false, manifestIdField: null,
+    enabledKeyPath: ['enabledPlugins'], enabledEncoding: PLUGIN_BOOL,
+  },
+  instructions: { fileName: 'AGENTS.md' },
+  mcps: {
+    userFile: ['.codex', 'config.toml'],       // NB: TOML needs its own reader (not JSON)
+    userKeyPath: ['mcp_servers'],
+    projectFile: 'config.toml', projectDir: '.codex', projectKeyPath: ['mcp_servers'],
+  },
+}
+```
+
+Then add `'codex'` to `ToolId` in `profiles.ts` and to the frontend `TOOL_OPTIONS` in `stores/tool.ts`.
+Skill/plugin toggle, projects, instructions all work without further change. MCP needs a TOML reader
+(the JSON-based `mcp-reader.ts` won't parse `.toml`).
+
+### File map
 
 ```
 server/src/                      Hono API (tsx, runs on :8787)
   index.ts                       entry: mounts /api/* and (in prod) serves web/dist
-  paths.ts                       path helpers — all rooted at ~/.claude/
+  profiles.ts                    ★ ToolProfile declarations (the ONLY place tool differences live)
+  locator.ts                     ★ tool-agnostic read/write engine (readRegistry / readFlag / writeFlag)
+  paths.ts                       path helpers — all derived from profile fields
   model.ts                       data model + resolveEffective (two-level status resolution)
   settings.ts                    SSOT-safe JSON read/write (key-preserving merge + .bak backup)
-  scan.ts                        overview aggregator — runs every adapter
-  decode.ts                      decode Claude-encoded project folder names (greedy fs walk)
+  scan.ts                        overview aggregator — runs every adapter for a profile
+  decode.ts                      decode dash-encoded project folder names (Windows drive + underscore)
+  projects-reader.ts             unified project discovery (fs folders OR sqlite) + delete
+  instructions-reader.ts         read-only instruction file discovery + content read
+  mcp-reader.ts                  read-only MCP server discovery + transport inference
   adapters/
-    types.ts                     ToolAdapter interface + registry (core extension point)
-    skill.ts                     SkillAdapter   (toggle key: skillOverrides)
-    plugin.ts                    PluginAdapter  (toggle key: enabledPlugins)
+    types.ts                     ToolAdapter interface + registry(profile) (extension point)
+    skill.ts                     SkillAdapter   (delegates to locator engine)
+    plugin.ts                    PluginAdapter  (delegates to locator engine + manifest parsing)
+  mutations/
+    jsonKey.ts                   leaf primitive: read/write settings[key][name] with encoding
   routes/
-    tools.ts                     overview / detail / set-status / view-content
-    projects.ts                  list / delete session-history folders
+    tools.ts                     overview / detail / set-status / view-content (?tool= param)
+    plugins.ts                   plugin detail + file browser (list dir / read file, path-traversal-guarded)
+    projects.ts                  list / delete session-history
     skills.ts                    promote / delete skills
+    instructions.ts              list / content / open-in-explorer
+    mcps.ts                      list / detail / open-in-explorer
 web/src/                         Vue 3 SPA (Vite dev on :5173, proxies /api → :8787)
-  api/index.ts                   fetch client — mirrors the server route table 1:1
-  views/SkillsView.vue           the one live view (others are PlaceholderView)
-  components/                    AppHeader / AppSidebar / SkillCard
+  stores/tool.ts                 ★ global tool selector (Claude ⇄ ZCode) shared by header + views
+  api/index.ts                   fetch client — every method takes an optional `tool`
+  views/SkillsView.vue           skills page (toggle / promote / delete)
+  views/PluginsView.vue          plugins page (toggle + inline file explorer with content preview)
+  views/ProjectsView.vue         projects page (card grid + delete session history)
+  views/InstructionsView.vue     instructions page (split-pane markdown viewer)
+  views/MCPsView.vue             MCP page (card grid + inline detail)
+  components/                    AppHeader / AppSidebar / SkillCard / PluginCard / FileExplorer / MarkdownView
   i18n/                          vue-i18n (zh / en)
-  router/                        /skills is real; rest are placeholders
+  router/                        /plugins /skills /projects /instructions /mcps live; agents/commands/hooks/settings placeholders
 ```
 
-**Core idea:** add a toggle-able kind = add one `ToolAdapter` (`scan` / `setStatus` / `view`).
-Routes and the frontend card stay unchanged. The two-level status model walks
-`[user, ...project?]` from most-specific outward; first non-`inherited` status wins, defaulting to
-`enabled`.
+### Two-level status resolution
+
+Each tool instance carries a `perScope` list: `[user, ...project?]`. `resolveEffective()` walks from
+the most-specific scope (project — last) outward to user; the first non-`inherited` status wins.
+If everything is `inherited` (or the list is empty), the default is `enabled`. The UI shows both the
+per-scope breakdown and the computed effective status.
+
+---
+
+## Project evolution & branch map
+
+This repository is the **`ccc-ui` mainline**. It also preserves earlier attempts that explored the
+design space, each as an **orphan branch** (isolated history, never merged into `main`).
+
+| branch | what it holds | license | merged? |
+|---|---|---|---|
+| **`main`** | mainline — profile-aware multi-tool architecture | MIT | — (trunk) |
+| `attempts/claude-code-config-ui` | earlier mainline snapshot (pre-profile) | MIT | ✅ fast-forwards |
+| `attempts/glyphic` | attempt #1 — fork of [caioricciuti/glyphic](https://github.com/caioricciuti/glyphic) + i18n / card UI | AGPL-3.0 | ❌ orphan, reference only |
+| `attempts/claude-code-tool-manager` | attempt #2 — fork of [tylergraydev/claude-code-tool-manager](https://github.com/tylergraydev/claude-code-tool-manager) + the architecture proposal | MIT | ❌ orphan, reference only |
+
+**Per-branch licensing:** orphan branches are not merged, so `main` stays MIT-clean (no AGPL glyphic
+code lives on it).
+
+## Acknowledgements
+
+- **[tylergraydev/claude-code-tool-manager](https://github.com/tylergraydev/claude-code-tool-manager)** —
+  the Tauri 2 + SvelteKit + Rust foundation and UI patterns explored earlier (MIT).
+- **[caioricciuti/glyphic](https://github.com/caioricciuti/glyphic)** — i18n approach and card UI that
+  informed early design exploration (AGPL-3.0, kept on its own branch only).

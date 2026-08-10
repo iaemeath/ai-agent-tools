@@ -1,52 +1,44 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { EllipsisVertical, ArrowUpToLine, Trash2 } from 'lucide-vue-next';
+import { EllipsisVertical, FolderOpen } from 'lucide-vue-next';
 import type { ToolInstance } from '../types/tool';
 
 const props = defineProps<{
-	skill: ToolInstance;
-	/** True while a promote request for this card is in flight. */
-	promoting?: boolean;
-	/** True while a delete request for this card is in flight. */
-	deleting?: boolean;
+	plugin: ToolInstance;
 }>();
 
 const emit = defineEmits<{
 	(e: 'toggle', status: 'enabled' | 'disabled'): void;
-	(e: 'promote'): void;
-	(e: 'delete'): void;
 	(e: 'detail'): void;
+	(e: 'open'): void;
 }>();
 
 const { t } = useI18n();
 
-const isProject = computed(() => props.skill.origin === 'project');
-const isEnabled = computed(() => props.skill.effective === 'enabled');
-const busy = computed(() => props.promoting || props.deleting);
+const isEnabled = computed(() => props.plugin.effective === 'enabled');
 
 function onSwitch(v: boolean) {
 	emit('toggle', v ? 'enabled' : 'disabled');
 }
 
 function onCommand(cmd: string) {
-	if (cmd === 'promote') emit('promote');
-	else if (cmd === 'delete') emit('delete');
+	if (cmd === 'open') emit('open');
 }
 
-// Clicking switch/dropdown must not bubble to the card click (which opens detail).
+// Clicking the switch or the ⋮ dropdown must not bubble up to the card's click handler
+// (which opens detail). Stop propagation at these interactive zones.
 function stop(e: Event) {
 	e.stopPropagation();
 }
 </script>
 
 <template>
-  <el-card class="skill-card" :class="{ 'skill-card--project': isProject }" shadow="hover" body-style="padding: 14px;" @click="emit('detail')">
-    <div class="card-name">{{ skill.name }}</div>
-    <div class="card-desc">{{ skill.description ?? '—' }}</div>
+  <el-card class="plugin-card" shadow="hover" body-style="padding: 14px;" @click="emit('detail')">
+    <div class="card-name" :title="plugin.name">{{ plugin.name }}</div>
+    <div class="card-desc" :title="plugin.description ?? ''">{{ plugin.description ?? '—' }}</div>
 
     <div class="card-foot">
-      <!-- Left → right: switch, then more menu. -->
       <el-switch
         :model-value="isEnabled"
         class="toggle-switch"
@@ -64,11 +56,8 @@ function stop(e: Event) {
         </el-button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item v-if="isProject" command="promote" :icon="ArrowUpToLine" :disabled="busy">
-              {{ promoting ? t('skill.promoting') : t('skill.promote') }}
-            </el-dropdown-item>
-            <el-dropdown-item command="delete" :icon="Trash2" :disabled="busy">
-              {{ deleting ? t('skill.deleting') : t('common.delete') }}
+            <el-dropdown-item command="open" :icon="FolderOpen">
+              {{ t('plugin.openInExplorer') }}
             </el-dropdown-item>
           </el-dropdown-menu>
         </template>
@@ -78,14 +67,11 @@ function stop(e: Event) {
 </template>
 
 <style scoped>
-.skill-card {
+.plugin-card {
   cursor: pointer;
   transition: border-color 0.2s;
 }
-.skill-card:hover {
-  border-color: var(--el-color-primary-light-5);
-}
-.skill-card--project {
+.plugin-card:hover {
   border-color: var(--el-color-primary-light-5);
 }
 .card-name {

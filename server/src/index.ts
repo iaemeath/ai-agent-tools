@@ -6,7 +6,11 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { plugins } from './routes/plugins.js';
 import { projects } from './routes/projects.js';
+import { instructions } from './routes/instructions.js';
+import { mcps } from './routes/mcps.js';
+import { settings } from './routes/settings.js';
 import { skills } from './routes/skills.js';
 import { tools } from './routes/tools.js';
 
@@ -18,8 +22,12 @@ const app = new Hono();
 // API
 app.get('/api/health', (c) => c.json({ ok: true }));
 app.route('/api/tools', tools);
+app.route('/api/plugins', plugins);
 app.route('/api/projects', projects);
 app.route('/api/skills', skills);
+app.route('/api/instructions', instructions);
+app.route('/api/mcps', mcps);
+app.route('/api/settings', settings);
 
 // Static frontend (production). In dev, Vite serves the frontend on :5173 and proxies /api here.
 if (fs.existsSync(webDist)) {

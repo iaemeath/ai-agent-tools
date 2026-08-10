@@ -34,10 +34,56 @@ export interface ToolContent {
 	name: string;
 	raw: string;
 }
+
+export type ComponentKind = 'skill' | 'command' | 'agent' | 'hook' | 'mcp' | 'lsp' | 'monitor';
+
+export interface PluginComponent {
+	kind: ComponentKind;
+	name: string;
+	detail?: string;
+}
+
+export interface PluginDetail {
+	kind: 'plugin';
+	name: string;
+	description: string | null;
+	version: string | null;
+	installPath: string;
+	scope: string | null;
+	profile: ToolId;
+	perScope: ScopeStatus[];
+	effective: Status;
+	components: PluginComponent[];
+}
 export interface ProjectInfo {
 	path: string;
 	encoded: string;
 	sessionCount: number;
 	lastActivity: string | null;
 	hasSettings: boolean;
+}
+
+export interface InstructionInfo {
+	scope: 'global' | 'project';
+	path: string;
+	lineCount: number;
+	project?: string | null;
+}
+
+/** One MCP server entry (read-only view model, mirrors server McpServer). */
+export interface McpServer {
+	name: string;
+	tool: ToolId;
+	scope: 'user' | 'project';
+	sourceFile: string;
+	project?: string | null;
+	transport: 'stdio' | 'sse' | 'http';
+	type?: string;
+	command?: string;
+	args?: string[];
+	env?: Record<string, string>;
+	url?: string;
+	headers?: Record<string, string>;
+	enabled?: boolean;
+	timeoutMs?: number;
 }

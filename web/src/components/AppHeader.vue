@@ -4,9 +4,11 @@ import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { Refresh, Sunny, Moon, } from '@element-plus/icons-vue';
 import { availableLocales, i18n, nextLocale } from '../i18n';
+import { useTool } from '../stores/tool';
 
 const route = useRoute();
 const { t } = useI18n();
+const { tool, TOOL_OPTIONS, setTool } = useTool();
 
 const isDark = ref(document.documentElement.classList.contains('dark'));
 const isRefreshing = ref(false);
@@ -60,6 +62,9 @@ function switchLanguage() {
       <p v-if="subtitleKey" class="subtitle">{{ t(subtitleKey) }}</p>
     </div>
     <div class="actions">
+      <el-radio-group :model-value="tool" size="small" class="tool-switch" @change="setTool">
+        <el-radio-button v-for="opt in TOOL_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</el-radio-button>
+      </el-radio-group>
       <el-button text :title="t('header.switchLanguage')" @click="switchLanguage">
         {{ availableLocales.find((l) => l.code === (i18n.global.locale.value as string))?.label }}
       </el-button>
@@ -93,5 +98,8 @@ function switchLanguage() {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+.tool-switch {
+  margin-right: 8px;
 }
 </style>

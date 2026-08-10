@@ -2,19 +2,16 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Search } from '@element-plus/icons-vue';
+import { Search, ArrowLeft } from '@element-plus/icons-vue';
 import { api } from '../api';
 import SkillCard from '../components/SkillCard.vue';
-import type { ProjectInfo, Scope, Status, ToolId, ToolInstance, ToolOverview } from '../types/tool';
+import FileExplorer from '../components/FileExplorer.vue';
+import { useTool } from '../stores/tool';
+import type { ProjectInfo, Scope, Status, ToolInstance, ToolOverview } from '../types/tool';
 
 const { t } = useI18n();
+const { tool } = useTool();
 
-const TOOL_OPTIONS: { value: ToolId; label: string }[] = [
-	{ value: 'claude', label: 'Claude Code' },
-	{ value: 'zcode', label: 'ZCode' },
-];
-
-const tool = ref<ToolId>('claude');
 const projects = ref<ProjectInfo[]>([]);
 const overview = ref<ToolOverview | null>(null);
 const errorMsg = ref<string | null>(null);
@@ -24,6 +21,18 @@ const selected = ref<string | null>(null); // 'user' | project path | null (all)
 const search = ref('');
 const promoting = ref<string | null>(null);
 const deleting = ref<string | null>(null);
+
+// Inline detail state: when selectedSkill is set, the list hides and detail shows.
+const selectedSkill = ref<ToolInstance | null>(null);
+
+/** Resolve the skill scope ('user' | 'project') from its origin. */
+function skillScope(s: ToolInstance): 'user' | 'project' {
+	return s.origin === 'project' ? 'project' : 'user';
+}
+/** Resolve the project path for a skill (null for user-level). */
+function skillProject(s: ToolInstance): string | null {
+	return s.origin === 'project' ? (s.originProject ?? null) : null;
+}
 
 // 'user' or 'all' both resolve to user-level project arg; a project path selects it.
 const projectPath = computed(() => (selected.value && selected.value !== 'user' ? selected.value : null));
@@ -43,6 +52,7 @@ const scopeOptions = computed<ScopeOption[]>(() => [
 
 async function reload() {
 	errorMsg.value = null;
+	selectedSkill.value = null;
 	try {
 		overview.value = await api.getOverview(projectPath.value, tool.value);
 	} catch (e) {
@@ -60,12 +70,12 @@ async function loadProjects() {
 	}
 }
 
-/** Switching tool resets all view state — each tool has its own projects/skills. */
-async function switchTool(next: ToolId) {
-	tool.value = next;
+/** Tool switched from the header — reset all view state and reload. */
+async function onToolChange() {
 	selected.value = null;
 	search.value = '';
 	overview.value = null;
+	selectedSkill.value = null;
 	loading.value = true;
 	await loadProjects();
 	await reload();
@@ -74,10 +84,13 @@ async function switchTool(next: ToolId) {
 onMounted(async () => {
 	await loadProjects();
 	await reload();
-	// Header refresh button dispatches this event.
 	window.addEventListener('ccc-ui:reload', reload);
+	window.addEventListener('ccc-ui:tool-change', onToolChange);
 });
-onUnmounted(() => window.removeEventListener('ccc-ui:reload', reload));
+onUnmounted(() => {
+	window.removeEventListener('ccc-ui:reload', reload);
+	window.removeEventListener('ccc-ui:tool-change', onToolChange);
+});
 
 const allSkills = computed(() => overview.value?.items.filter((i) => i.kind === 'skill') ?? []);
 
@@ -163,24 +176,22 @@ async function removeSkill(t_: ToolInstance) {
 function basename(p: string): string {
 	return p.split('/').filter(Boolean).pop() ?? p;
 }
+
+// ---- Detail view ----
+
+function showDetail(s: ToolInstance) {
+	selectedSkill.value = s;
+}
+
+function closeDetail() {
+	selectedSkill.value = null;
+}
 </script>
 
 <template>
   <div class="skills-view">
-    <!-- Toolbar: tool selector + search + scope -->
-    <div class="toolbar">
-      <el-select
-        v-model="tool"
-        class="tool-select"
-        @change="switchTool"
-      >
-        <el-option
-          v-for="opt in TOOL_OPTIONS"
-          :key="opt.value"
-          :value="opt.value"
-          :label="opt.label"
-        />
-      </el-select>
+    <!-- Toolbar: search + scope — only in list mode (hidden in detail) -->
+    <div v-if="!selectedSkill" class="toolbar">
       <el-input
         v-model="search"
         :placeholder="t('scope.searchPlaceholder')"
@@ -209,10 +220,10 @@ function basename(p: string): string {
 
     <div v-if="loading" class="state">{{ t('common.loading') }}</div>
     <el-alert v-else-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
-    <div v-else-if="skills.length === 0" class="state">{{ t('skill.empty') }}</div>
 
-    <template v-else>
-      <!-- Global skills -->
+    <!-- List mode -->
+    <template v-else-if="!selectedSkill">
+      <div v-if="skills.length === 0" class="state">{{ t('skill.empty') }}</div>
       <section v-if="globalSkills.length" class="group">
         <div class="group-head">
           <h2 class="group-title">{{ t('skill.groupGlobal') }}</h2>
@@ -225,6 +236,7 @@ function basename(p: string): string {
             :deleting="deleting === t_.name"
             @toggle="(s) => toggleScope(t_, s)"
             @delete="removeSkill(t_)"
+            @detail="showDetail(t_)"
           />
         </div>
       </section>
@@ -244,25 +256,43 @@ function basename(p: string): string {
             @toggle="(s) => toggleScope(t_, s)"
             @promote="promote(t_)"
             @delete="removeSkill(t_)"
+            @detail="showDetail(t_)"
           />
         </div>
       </section>
     </template>
+
+    <!-- Detail mode: file explorer for the skill directory -->
+    <div v-else class="detail-panel">
+      <div class="detail-toolbar">
+        <el-button text :icon="ArrowLeft" @click="closeDetail">{{ t('skill.backToList') }}</el-button>
+        <span class="detail-skill-name">{{ selectedSkill.name }}</span>
+        <el-tag v-if="selectedSkill.origin === 'project'" size="small" type="info">
+          {{ basename(selectedSkill.originProject ?? '') }}
+        </el-tag>
+      </div>
+      <FileExplorer
+        :root-label="selectedSkill.name"
+        :list-fn="(sp: string) => api.listSkillFiles(selectedSkill!.name, skillScope(selectedSkill!), sp, skillProject(selectedSkill!), tool)"
+        :read-fn="(sp: string) => api.readSkillFile(selectedSkill!.name, skillScope(selectedSkill!), sp, skillProject(selectedSkill!), tool)"
+      />
+    </div>
   </div>
 </template>
 
 <style scoped>
 .skills-view {
   padding: 24px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
 }
 .toolbar {
   display: flex;
   align-items: center;
   gap: 16px;
   margin-bottom: 16px;
-}
-.tool-select {
-  flex: 0 0 130px;
 }
 .search {
   flex: 1 1 auto;
@@ -305,5 +335,24 @@ function basename(p: string): string {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+/* ---- Detail panel ---- */
+.detail-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.detail-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.detail-skill-name {
+  font-size: 15px;
+  font-weight: 600;
 }
 </style>

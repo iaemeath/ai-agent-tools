@@ -3,35 +3,20 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
-  FolderOpen, ScrollText, BookOpen, Sparkles, Library, Zap, Bot, Terminal, Plug, Settings,
+  FolderOpen, ScrollText, Sparkles, Library, Plug, Settings,
 } from 'lucide-vue-next';
 
 const { t } = useI18n();
 const route = useRoute();
 
 interface NavItem { index: string; labelKey: string; icon: any; }
-interface NavGroup { labelKey: string; items: NavItem[]; }
 
-const navGroups = computed<NavGroup[]>(() => [
-	{
-		labelKey: 'nav.core',
-		items: [
-			{ index: '/projects', labelKey: 'nav.projects', icon: FolderOpen },
-			{ index: '/instructions', labelKey: 'nav.instructions', icon: ScrollText },
-			{ index: '/rules', labelKey: 'nav.rules', icon: BookOpen },
-		],
-	},
-	{
-		labelKey: 'nav.tools',
-		items: [
-			{ index: '/skills', labelKey: 'nav.skills', icon: Sparkles },
-			{ index: '/mcps', labelKey: 'nav.mcps', icon: Library },
-			{ index: '/hooks', labelKey: 'nav.hooks', icon: Zap },
-			{ index: '/agents', labelKey: 'nav.agents', icon: Bot },
-			{ index: '/commands', labelKey: 'nav.commands', icon: Terminal },
-			{ index: '/plugins', labelKey: 'nav.plugins', icon: Plug },
-		],
-	},
+const navItems = computed<NavItem[]>(() => [
+	{ index: '/projects', labelKey: 'nav.projects', icon: FolderOpen },
+	{ index: '/instructions', labelKey: 'nav.instructions', icon: ScrollText },
+	{ index: '/plugins', labelKey: 'nav.plugins', icon: Plug },
+	{ index: '/skills', labelKey: 'nav.skills', icon: Sparkles },
+	{ index: '/mcps', labelKey: 'nav.mcps', icon: Library },
 ]);
 
 const activeIndex = computed(() => '/' + (route.path.split('/')[1] ?? ''));
@@ -48,14 +33,10 @@ const activeIndex = computed(() => '/' + (route.path.split('/')[1] ?? ''));
     </div>
 
     <el-menu :default-active="activeIndex" router class="sidebar-menu">
-      <template v-for="(group, gi) in navGroups" :key="group.labelKey">
-        <div v-if="gi > 0" class="group-gap"></div>
-        <div class="group-label">{{ t(group.labelKey) }}</div>
-        <el-menu-item v-for="item in group.items" :key="item.index" :index="item.index">
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ t(item.labelKey) }}</span>
-        </el-menu-item>
-      </template>
+      <el-menu-item v-for="item in navItems" :key="item.index" :index="item.index">
+        <el-icon><component :is="item.icon" /></el-icon>
+        <span>{{ t(item.labelKey) }}</span>
+      </el-menu-item>
     </el-menu>
 
     <div class="settings-entry">
@@ -107,18 +88,6 @@ const activeIndex = computed(() => '/' + (route.path.split('/')[1] ?? ''));
   border-right: none;
   overflow-y: auto;
   padding: 12px 8px;
-}
-.group-label {
-  padding: 0 12px;
-  margin-bottom: 6px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--el-text-color-secondary);
-}
-.group-gap {
-  margin-top: 12px;
 }
 .settings-entry {
   border-top: var(--el-border-color) solid 1px;

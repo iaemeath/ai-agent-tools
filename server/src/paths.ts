@@ -1,5 +1,6 @@
 // Path helpers — every path is derived from a ToolProfile so the codebase is tool-agnostic.
-// Ported from src-tauri/src/core/paths.rs, then generalized for multi-tool support.
+// No tool-specific string literals live here: 'skills', 'installed_plugins.json', etc.
+// all come from the profile's locator blocks.
 
 import os from 'node:os';
 import path from 'node:path';
@@ -24,25 +25,40 @@ export function projectSettings(project: string, p: ToolProfile = DEFAULT_PROFIL
 	return path.join(project, p.projectPrefix, ...p.settingsFile);
 }
 
-/** Global skills dir (e.g. ~/.claude/skills/). */
+/** Global skills dir (e.g. ~/.claude/skills/). Dir name comes from the profile locator. */
 export function globalSkillsDir(p: ToolProfile = DEFAULT_PROFILE): string {
-	return path.join(configRoot(p), 'skills');
+	return path.join(configRoot(p), p.skills.dirName);
 }
 
-/** Project skills dir (e.g. {project}/.claude/skills/). */
+/** Project skills dir (e.g. {project}/.claude/skills/). Dir name comes from the profile locator. */
 export function projectSkillsDir(project: string, p: ToolProfile = DEFAULT_PROFILE): string {
-	return path.join(project, p.projectPrefix, 'skills');
+	return path.join(project, p.projectPrefix, p.skills.dirName);
 }
 
 /**
- * Session-history dir (e.g. ~/.claude/projects/), or null if the tool has none.
- * ZCode indexes sessions in SQLite and has no equivalent folder.
+ * Session-history dir for fs-based tools (e.g. ~/.claude/projects/), or null for
+ * sqlite-based tools (ZCode) that have no such folder. Skill scanning uses this to
+ * discover project-scoped skills across all known projects.
  */
 export function projectsDir(p: ToolProfile = DEFAULT_PROFILE): string | null {
-	return p.projectsDirRelative ? path.join(configRoot(p), p.projectsDirRelative) : null;
+	const loc = p.projects;
+	return loc.source === 'fs' ? path.join(configRoot(p), loc.dirRelative) : null;
 }
 
-/** installed_plugins.json location (e.g. ~/.claude/plugins/installed_plugins.json). */
+/** installed_plugins.json location. Path segments + filename come from the profile locator. */
 export function installedPluginsFile(p: ToolProfile = DEFAULT_PROFILE): string {
-	return path.join(configRoot(p), 'plugins', 'installed_plugins.json');
+	return path.join(configRoot(p), ...p.plugins.dirRelative, p.plugins.manifestFile);
+}
+
+/**
+ * User-level MCP config file. NB: joined from HOME, not configRoot — Claude keeps its
+ * user-level MCP map in ~/.claude.json (a home file), not under ~/.claude/.
+ */
+export function userMcpFile(p: ToolProfile = DEFAULT_PROFILE): string {
+	return path.join(homeDir(), ...p.mcps.userFile);
+}
+
+/** Project-level MCP config file (e.g. <proj>/.mcp.json, <proj>/.zcode/config.json). */
+export function projectMcpFile(project: string, p: ToolProfile = DEFAULT_PROFILE): string {
+	return path.join(project, p.mcps.projectDir, p.mcps.projectFile);
 }
