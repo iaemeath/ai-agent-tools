@@ -19,6 +19,7 @@ const titleKey = computed(() => {
 		skills: 'page.skills.title',
 		projects: 'page.projects.title',
 		plugins: 'page.plugins.title',
+		rules: 'nav.rules',
 		settings: 'nav.settings',
 	};
 	const seg = route.path.split('/')[1];

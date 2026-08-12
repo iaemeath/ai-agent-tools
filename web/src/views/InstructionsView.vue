@@ -4,11 +4,16 @@ import { useI18n } from 'vue-i18n';
 import { ArrowLeft } from '@element-plus/icons-vue';
 import { api } from '../api';
 import { useTool } from '../stores/tool';
+import { useDragOrder } from '../composables/useDragOrder';
 import MarkdownView from '../components/MarkdownView.vue';
 import type { InstructionInfo } from '../types/tool';
 
 const { t } = useI18n();
 const { tool } = useTool();
+
+// Drag-to-reorder for project instruction cards (pure UI preference, persisted to localStorage).
+const drag = useDragOrder('instructions-order');
+const { dragPath, dragOverPath } = drag;
 
 const items = ref<InstructionInfo[]>([]);
 const errorMsg = ref<string | null>(null);
@@ -84,6 +89,7 @@ async function openInExplorer(path: string) {
 
 onMounted(async () => {
 	// Initial left width: 40% of viewport, clamped to [240, 70%].
+	drag.loadOrder();
 	leftWidth.value = Math.min(window.innerWidth * 0.7, Math.max(240, window.innerWidth * 0.4));
 	await reload();
 	window.addEventListener('ccc-ui:reload', reload);
@@ -98,7 +104,13 @@ onUnmounted(() => {
 	window.removeEventListener('mouseup', stopDrag);
 });
 
-const projectItems = computed(() => items.value.filter((i) => i.scope === 'project'));
+const projectItems = computed(() =>
+	drag.sortByOrder(items.value.filter((i) => i.scope === 'project'), drag.orderMap.value['projects'] ?? [], (i) => i.path),
+);
+/** Drop wrapper for the project instruction cards (single group). */
+function dropAt(e: DragEvent, targetPath: string) {
+	drag.onDrop(e, 'projects', targetPath, projectItems.value.map((i) => i.path));
+}
 const globalItem = computed(() => items.value.find((i) => i.scope === 'global') ?? null);
 
 function basename(p: string): string {
@@ -109,16 +121,22 @@ function projectBasename(i: InstructionInfo): string {
 }
 
 // ---- Splitter drag ----
+// Track drag origin so width changes by mouse delta, not absolute clientX
+// (which includes the sidebar width and causes a rightward jump on grab).
+let dragStartX = 0;
+let dragStartWidth = 0;
 function startDrag(e: MouseEvent) {
 	e.preventDefault();
 	dragging.value = true;
+	dragStartX = e.clientX;
+	dragStartWidth = leftWidth.value;
 }
 function onDrag(e: MouseEvent) {
 	if (!dragging.value) return;
 	// Clamp: 240px .. 70% of viewport.
 	const min = 240;
 	const max = window.innerWidth * 0.7;
-	leftWidth.value = Math.min(max, Math.max(min, e.clientX));
+	leftWidth.value = Math.min(max, Math.max(min, dragStartWidth + (e.clientX - dragStartX)));
 }
 function stopDrag() {
 	dragging.value = false;
@@ -167,8 +185,14 @@ function stopDrag() {
                 v-for="i in projectItems"
                 :key="i.path"
                 class="proj-card"
+                :class="{ dragging: dragPath === i.path, 'drag-over': dragOverPath === i.path && dragPath !== i.path }"
                 shadow="hover"
                 body-style="padding: 14px;"
+                draggable="true"
+                @dragstart="drag.onDragStart($event, i.path)"
+                @dragover="drag.onDragOver($event, i.path)"
+                @drop="dropAt($event, i.path)"
+                @dragend="drag.onDragEnd"
                 @click="openProject(i)"
               >
                 <div class="card-name">📁 {{ projectBasename(i) }}</div>
@@ -312,7 +336,14 @@ function stopDrag() {
 }
 .proj-card {
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, opacity 0.15s;
+}
+.proj-card.dragging {
+  opacity: 0.4;
+}
+.proj-card.drag-over {
+  border-color: var(--el-color-primary);
+  border-style: dashed;
 }
 .proj-card:hover {
   border-color: var(--el-color-primary-light-5);

@@ -7,10 +7,15 @@ import { api } from '../api';
 import SkillCard from '../components/SkillCard.vue';
 import FileExplorer from '../components/FileExplorer.vue';
 import { useTool } from '../stores/tool';
+import { useDragOrder } from '../composables/useDragOrder';
 import type { ProjectInfo, Scope, Status, ToolInstance, ToolOverview } from '../types/tool';
 
 const { t } = useI18n();
 const { tool } = useTool();
+
+// Drag-to-reorder (pure UI preference, persisted to localStorage).
+const drag = useDragOrder('skills-order');
+const { dragPath, dragOverPath } = drag;
 
 const projects = ref<ProjectInfo[]>([]);
 const overview = ref<ToolOverview | null>(null);
@@ -82,6 +87,7 @@ async function onToolChange() {
 }
 
 onMounted(async () => {
+	drag.loadOrder();
 	await loadProjects();
 	await reload();
 	window.addEventListener('ccc-ui:reload', reload);
@@ -104,7 +110,9 @@ const skills = computed(() => {
 	);
 });
 
-const globalSkills = computed(() => skills.value.filter((s) => s.origin === 'global'));
+const globalSkills = computed(() =>
+	drag.sortByOrder(skills.value.filter((s) => s.origin === 'global'), drag.orderMap.value['global'] ?? [], (s) => s.name),
+);
 const projectSkills = computed(() => skills.value.filter((s) => s.origin === 'project'));
 
 // Group project skills by owning project, sorted by project path.
@@ -115,8 +123,21 @@ const projectGroups = computed<[string, ToolInstance[]][]>(() => {
 		if (!map.has(key)) map.set(key, []);
 		map.get(key)!.push(s);
 	}
-	return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+	return [...map.entries()]
+		.map(([proj, list]) => [proj, drag.sortByOrder(list, drag.orderMap.value['project:' + proj] ?? [], (s) => s.name)] as [string, ToolInstance[]])
+		.sort((a, b) => a[0].localeCompare(b[0]));
 });
+
+/** Drop wrapper: supplies the group's current name[] order to the composable. */
+function groupCurrentIds(groupKey: string): string[] {
+	if (groupKey === 'global') return globalSkills.value.map((s) => s.name);
+	const proj = groupKey.slice('project:'.length);
+	const g = projectGroups.value.find(([p]) => p === proj);
+	return g ? g[1].map((s) => s.name) : [];
+}
+function dropAt(e: DragEvent, groupKey: string, targetName: string) {
+	drag.onDrop(e, groupKey, targetName, groupCurrentIds(groupKey));
+}
 
 async function toggleScope(t_: ToolInstance, next: Status) {
 	// Project-origin skill → write project scope (its own settings.json).
@@ -229,15 +250,25 @@ function closeDetail() {
           <h2 class="group-title">{{ t('skill.groupGlobal') }}</h2>
         </div>
         <div class="card-grid">
-          <SkillCard
+          <div
             v-for="t_ in globalSkills"
             :key="t_.name"
-            :skill="t_"
-            :deleting="deleting === t_.name"
-            @toggle="(s) => toggleScope(t_, s)"
-            @delete="removeSkill(t_)"
-            @detail="showDetail(t_)"
-          />
+            class="drag-wrap"
+            :class="{ dragging: dragPath === t_.name, 'drag-over': dragOverPath === t_.name && dragPath !== t_.name }"
+            draggable="true"
+            @dragstart="drag.onDragStart($event, t_.name)"
+            @dragover="drag.onDragOver($event, t_.name)"
+            @drop="dropAt($event, 'global', t_.name)"
+            @dragend="drag.onDragEnd"
+          >
+            <SkillCard
+              :skill="t_"
+              :deleting="deleting === t_.name"
+              @toggle="(s) => toggleScope(t_, s)"
+              @delete="removeSkill(t_)"
+              @detail="showDetail(t_)"
+            />
+          </div>
         </div>
       </section>
 
@@ -247,17 +278,27 @@ function closeDetail() {
           <h2 class="group-title">{{ t('skill.groupProject') }} — {{ basename(projPath) }}</h2>
         </div>
         <div class="card-grid">
-          <SkillCard
+          <div
             v-for="t_ in list"
             :key="projPath + '/' + t_.name"
-            :skill="t_"
-            :promoting="promoting === t_.name"
-            :deleting="deleting === t_.name"
-            @toggle="(s) => toggleScope(t_, s)"
-            @promote="promote(t_)"
-            @delete="removeSkill(t_)"
-            @detail="showDetail(t_)"
-          />
+            class="drag-wrap"
+            :class="{ dragging: dragPath === t_.name, 'drag-over': dragOverPath === t_.name && dragPath !== t_.name }"
+            draggable="true"
+            @dragstart="drag.onDragStart($event, t_.name)"
+            @dragover="drag.onDragOver($event, t_.name)"
+            @drop="dropAt($event, 'project:' + projPath, t_.name)"
+            @dragend="drag.onDragEnd"
+          >
+            <SkillCard
+              :skill="t_"
+              :promoting="promoting === t_.name"
+              :deleting="deleting === t_.name"
+              @toggle="(s) => toggleScope(t_, s)"
+              @promote="promote(t_)"
+              @delete="removeSkill(t_)"
+              @detail="showDetail(t_)"
+            />
+          </div>
         </div>
       </section>
     </template>
@@ -335,6 +376,14 @@ function closeDetail() {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.drag-wrap.dragging {
+  opacity: 0.4;
+}
+.drag-wrap.drag-over {
+  outline: 2px dashed var(--el-color-primary);
+  outline-offset: 2px;
+  border-radius: 8px;
 }
 
 /* ---- Detail panel ---- */

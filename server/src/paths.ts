@@ -36,6 +36,22 @@ export function projectSkillsDir(project: string, p: ToolProfile = DEFAULT_PROFI
 }
 
 /**
+ * Global rules dir (e.g. ~/.claude/rules/). Returns null when the tool has no
+ * rules support (profile.rules undefined) so callers can short-circuit.
+ */
+export function globalRulesDir(p: ToolProfile = DEFAULT_PROFILE): string | null {
+	return p.rules ? path.join(configRoot(p), p.rules.dirName) : null;
+}
+
+/**
+ * Project rules dir (e.g. {project}/.claude/rules/). Returns null when the tool
+ * has no rules support (profile.rules undefined).
+ */
+export function projectRulesDir(project: string, p: ToolProfile = DEFAULT_PROFILE): string | null {
+	return p.rules ? path.join(project, p.projectPrefix, p.rules.dirName) : null;
+}
+
+/**
  * Session-history dir for fs-based tools (e.g. ~/.claude/projects/), or null for
  * sqlite-based tools (ZCode) that have no such folder. Skill scanning uses this to
  * discover project-scoped skills across all known projects.

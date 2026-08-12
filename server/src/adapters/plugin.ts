@@ -93,7 +93,7 @@ function parseSkillDescription(skillMd: string): string | undefined {
 }
 
 /** Build a structured component inventory from the manifest fields + skills/ directory. */
-function buildComponents(installPath: string, manifest: Record<string, unknown> | null): PluginComponent[] {
+function buildComponents(installPath: string, manifest: Record<string, unknown> | null, supported: readonly PluginComponent['kind'][]): PluginComponent[] {
 	const out: PluginComponent[] = [];
 	const skillNames = new Set<string>();
 	if (manifest) {
@@ -134,7 +134,9 @@ function buildComponents(installPath: string, manifest: Record<string, unknown> 
 			}
 		}
 	}
-	return out;
+	// Filter out component kinds the current tool runtime does not load (capability
+	// gap, e.g. ZCode ignores plugin-level agents). See PluginLocator.supportedComponents.
+	return out.filter((c) => supported.includes(c.kind));
 }
 
 export class PluginAdapter implements ToolAdapter {
@@ -231,7 +233,7 @@ export class PluginAdapter implements ToolAdapter {
 			profile: this.profile.id,
 			perScope,
 			effective: resolveEffective(perScope),
-			components: buildComponents(rec.installPath, manifest),
+			components: buildComponents(rec.installPath, manifest, this.profile.plugins.supportedComponents),
 		};
 	}
 }

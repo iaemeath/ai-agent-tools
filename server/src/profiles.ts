@@ -16,6 +16,13 @@ import type { JsonKeyEncoding } from './mutations/jsonKey.js';
 /** Supported tool identifiers. */
 export type ToolId = 'claude' | 'zcode';
 
+/**
+ * Plugin component type identifiers. Structurally compatible with
+ * `PluginComponent['kind']` in model.ts (declared separately here to avoid a
+ * circular import: profiles → model → profiles).
+ */
+export type PluginComponentKind = 'skill' | 'command' | 'agent' | 'hook' | 'mcp' | 'lsp' | 'monitor';
+
 /** Locator for the skill resource: where skills live + how their toggle map encodes. */
 export interface SkillLocator {
 	/** Directory name under configRoot / projectPrefix (e.g. 'skills'). */
@@ -46,6 +53,14 @@ export interface PluginLocator {
 	enabledKeyPath: string[];
 	/** Value encoding for the enabled map. */
 	enabledEncoding: JsonKeyEncoding;
+	/**
+	 * Component kinds the tool RUNTIME actually loads from a plugin manifest.
+	 * Kinds absent here are hidden from the UI even when the manifest declares
+	 * them — this is how capability gaps between tools are expressed honestly
+	 * (e.g. ZCode ignores plugin-level `agents`) rather than showing components
+	 * the tool will never use.
+	 */
+	supportedComponents: readonly PluginComponentKind[];
 }
 
 /**
@@ -105,6 +120,12 @@ export interface ToolProfile {
 	plugins: PluginLocator;
 	/** Instruction-file locator (global CLAUDE.md / AGENTS.md + project-level). */
 	instructions: { fileName: string };
+	/**
+	 * Rules locator (optional — capability gap). Claude Code loads rule files
+	 * from a directory; ZCode has no rules mechanism so this is undefined there.
+	 * Undefined = the tool does not support rules; reader returns empty.
+	 */
+	rules?: { dirName: string };
 	/** MCP server locator (read-only: list + detail). */
 	mcps: McpLocator;
 }
@@ -140,8 +161,12 @@ export const PROFILES: Record<ToolId, ToolProfile> = {
 			manifestIdField: null,
 			enabledKeyPath: ['enabledPlugins'],
 			enabledEncoding: PLUGIN_BOOL,
+			supportedComponents: ['skill', 'command', 'agent', 'hook', 'mcp', 'lsp'],
 		},
 		instructions: { fileName: 'CLAUDE.md' },
+		// Rules: Claude Code loads ~/.claude/rules/*.md + <proj>/.claude/rules/*.md
+		// at startup. ZCode has no rules mechanism → field omitted (undefined).
+		rules: { dirName: 'rules' },
 		// MCP: user-level map lives in ~/.claude.json (home file, not under .claude/),
 		// project-level in <proj>/.mcp.json. Both keyed by top-level `mcpServers`.
 		mcps: {
@@ -178,6 +203,9 @@ export const PROFILES: Record<ToolId, ToolProfile> = {
 			manifestIdField: 'id',
 			enabledKeyPath: ['plugins', 'enabledPlugins'],
 			enabledEncoding: PLUGIN_BOOL,
+			// ZCode runtime ignores plugin-level agents → omit 'agent' so the UI
+			// never offers an Agent tab that the tool itself would not honor.
+			supportedComponents: ['skill', 'command', 'hook', 'mcp', 'lsp'],
 		},
 		instructions: { fileName: 'AGENTS.md' },
 		// MCP: user-level map in ~/.zcode/cli/config.json at nested `mcp.servers`,

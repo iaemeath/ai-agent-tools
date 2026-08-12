@@ -6,10 +6,15 @@ import { Search, Delete } from '@element-plus/icons-vue';
 import { EllipsisVertical } from 'lucide-vue-next';
 import { api } from '../api';
 import { useTool } from '../stores/tool';
+import { useDragOrder } from '../composables/useDragOrder';
 import type { ProjectInfo } from '../types/tool';
 
 const { t } = useI18n();
 const { tool } = useTool();
+
+// Drag-to-reorder (pure UI preference, persisted to localStorage).
+const drag = useDragOrder('projects-order');
+const { dragPath, dragOverPath } = drag;
 
 const projects = ref<ProjectInfo[]>([]);
 const errorMsg = ref<string | null>(null);
@@ -30,6 +35,7 @@ async function reload() {
 }
 
 onMounted(async () => {
+	drag.loadOrder();
 	await reload();
 	window.addEventListener('ccc-ui:reload', reload);
 	window.addEventListener('ccc-ui:tool-change', reload);
@@ -41,9 +47,14 @@ onUnmounted(() => {
 
 const filtered = computed(() => {
 	const q = search.value.trim().toLowerCase();
-	if (!q) return projects.value;
-	return projects.value.filter((p) => p.path.toLowerCase().includes(q));
+	const base = !q ? projects.value : projects.value.filter((p) => p.path.toLowerCase().includes(q));
+	return drag.sortByOrder(base, drag.orderMap.value['all'] ?? [], (p) => p.encoded);
 });
+
+/** Drop wrapper: projects have no sub-groups, so groupKey is 'all'. */
+function dropAt(e: DragEvent, targetEncoded: string) {
+	drag.onDrop(e, 'all', targetEncoded, filtered.value.map((p) => p.encoded));
+}
 
 function fmtDate(iso: string | null): string {
 	if (!iso) return '—';
@@ -96,7 +107,19 @@ async function removeProject(p: ProjectInfo) {
     <div v-else-if="filtered.length === 0" class="state">{{ t('project.empty') }}</div>
 
     <div v-else class="card-grid">
-      <el-card v-for="p in filtered" :key="p.encoded" class="proj-card" shadow="hover" body-style="padding: 14px;">
+      <el-card
+        v-for="p in filtered"
+        :key="p.encoded"
+        class="proj-card"
+        :class="{ dragging: dragPath === p.encoded, 'drag-over': dragOverPath === p.encoded && dragPath !== p.encoded }"
+        shadow="hover"
+        body-style="padding: 14px;"
+        draggable="true"
+        @dragstart="drag.onDragStart($event, p.encoded)"
+        @dragover="drag.onDragOver($event, p.encoded)"
+        @drop="dropAt($event, p.encoded)"
+        @dragend="drag.onDragEnd"
+      >
         <div class="card-name" :title="p.path">{{ basename(p.path) }}</div>
         <div class="card-path" :title="p.path">{{ p.path }}</div>
         <div class="card-meta">
@@ -148,7 +171,14 @@ async function removeProject(p: ProjectInfo) {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 }
 .proj-card {
-  transition: none;
+  transition: opacity 0.15s;
+}
+.proj-card.dragging {
+  opacity: 0.4;
+}
+.proj-card.drag-over {
+  border-color: var(--el-color-primary);
+  border-style: dashed;
 }
 .card-name {
   font-size: 14px;

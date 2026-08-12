@@ -4,10 +4,15 @@ import { useI18n } from 'vue-i18n';
 import { Search, ArrowLeft } from '@element-plus/icons-vue';
 import { api } from '../api';
 import { useTool } from '../stores/tool';
+import { useDragOrder } from '../composables/useDragOrder';
 import type { McpServer } from '../types/tool';
 
 const { t } = useI18n();
 const { tool } = useTool();
+
+// Drag-to-reorder (pure UI preference, persisted to localStorage).
+const drag = useDragOrder('mcps-order');
+const { dragPath, dragOverPath } = drag;
 
 const servers = ref<McpServer[]>([]);
 const errorMsg = ref<string | null>(null);
@@ -44,6 +49,7 @@ async function onToolChange() {
 }
 
 onMounted(async () => {
+	drag.loadOrder();
 	await reload();
 	window.addEventListener('ccc-ui:reload', reload);
 	window.addEventListener('ccc-ui:tool-change', onToolChange);
@@ -65,7 +71,9 @@ const filtered = computed(() => {
 	);
 });
 
-const userServers = computed(() => filtered.value.filter((s) => s.scope === 'user'));
+const userServers = computed(() =>
+	drag.sortByOrder(filtered.value.filter((s) => s.scope === 'user'), drag.orderMap.value['user'] ?? [], (s) => s.name),
+);
 const projectServers = computed(() => filtered.value.filter((s) => s.scope === 'project'));
 
 // Group project servers by owning project, sorted by project path.
@@ -76,8 +84,21 @@ const projectGroups = computed<[string, McpServer[]][]>(() => {
 		if (!map.has(key)) map.set(key, []);
 		map.get(key)!.push(s);
 	}
-	return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+	return [...map.entries()]
+		.map(([proj, list]) => [proj, drag.sortByOrder(list, drag.orderMap.value['project:' + proj] ?? [], (s) => s.name)] as [string, McpServer[]])
+		.sort((a, b) => a[0].localeCompare(b[0]));
 });
+
+/** Drop wrapper: supplies the group's current name[] order to the composable. */
+function groupCurrentIds(groupKey: string): string[] {
+	if (groupKey === 'user') return userServers.value.map((s) => s.name);
+	const proj = groupKey.slice('project:'.length);
+	const g = projectGroups.value.find(([p]) => p === proj);
+	return g ? g[1].map((s) => s.name) : [];
+}
+function dropAt(e: DragEvent, groupKey: string, targetName: string) {
+	drag.onDrop(e, groupKey, targetName, groupCurrentIds(groupKey));
+}
 
 function transportIcon(tp: string): string {
 	if (tp === 'stdio') return '🔌';
@@ -169,8 +190,14 @@ function headerEntries(s: McpServer | null): [string, string][] {
             v-for="s in userServers"
             :key="s.name"
             class="mcp-card"
+            :class="{ dragging: dragPath === s.name, 'drag-over': dragOverPath === s.name && dragPath !== s.name }"
             shadow="hover"
             body-style="padding: 14px;"
+            draggable="true"
+            @dragstart="drag.onDragStart($event, s.name)"
+            @dragover="drag.onDragOver($event, s.name)"
+            @drop="dropAt($event, 'user', s.name)"
+            @dragend="drag.onDragEnd"
             @click="openDetail(s)"
           >
             <div class="card-name">{{ transportIcon(s.transport) }} {{ s.name }}</div>
@@ -194,8 +221,14 @@ function headerEntries(s: McpServer | null): [string, string][] {
             v-for="s in list"
             :key="projPath + '/' + s.name"
             class="mcp-card"
+            :class="{ dragging: dragPath === s.name, 'drag-over': dragOverPath === s.name && dragPath !== s.name }"
             shadow="hover"
             body-style="padding: 14px;"
+            draggable="true"
+            @dragstart="drag.onDragStart($event, s.name)"
+            @dragover="drag.onDragOver($event, s.name)"
+            @drop="dropAt($event, 'project:' + projPath, s.name)"
+            @dragend="drag.onDragEnd"
             @click="openDetail(s)"
           >
             <div class="card-name">{{ transportIcon(s.transport) }} {{ s.name }}</div>
@@ -335,7 +368,14 @@ function headerEntries(s: McpServer | null): [string, string][] {
 }
 .mcp-card {
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, opacity 0.15s;
+}
+.mcp-card.dragging {
+  opacity: 0.4;
+}
+.mcp-card.drag-over {
+  border-color: var(--el-color-primary);
+  border-style: dashed;
 }
 .mcp-card:hover {
   border-color: var(--el-color-primary-light-5);

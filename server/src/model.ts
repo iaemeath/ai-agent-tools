@@ -87,6 +87,26 @@ export interface InstructionInfo {
 }
 
 /**
+ * One rule file entry (global or project-level). Rules are Claude Code only
+ * (ZCode has no rules mechanism); they live in a directory as multiple .md
+ * files, unlike instructions which are a single file per scope.
+ */
+export interface RuleInfo {
+	/** 'global' = under configRoot/rules; 'project' = inside a project's rules dir. */
+	scope: 'global' | 'project';
+	/** Full filesystem path to the file. */
+	path: string;
+	/** File name without directory (e.g. 'env-toolchain.md'). */
+	name: string;
+	/** One-line description extracted from frontmatter, if present. */
+	description?: string;
+	/** Line count of the file (0 if empty/unreadable). */
+	lineCount: number;
+	/** For project scope: the project directory. null for global. */
+	project?: string | null;
+}
+
+/**
  * One MCP server entry, normalized across Claude Code / ZCode (read-only view model).
  * User-level servers come from the tool's user config file; project-level from a
  * per-project config file. `transport` is inferred when the tool omits an explicit type.

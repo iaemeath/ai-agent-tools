@@ -7,12 +7,20 @@ import PluginCard from '../components/PluginCard.vue';
 import FileExplorer from '../components/FileExplorer.vue';
 import MarkdownView from '../components/MarkdownView.vue';
 import { useTool } from '../stores/tool';
+import { useDragOrder } from '../composables/useDragOrder';
 import type {
 	ComponentKind, PluginComponent, PluginDetail, ProjectInfo, Scope, Status, ToolInstance, ToolOverview,
 } from '../types/tool';
 
 const { t } = useI18n();
 const { tool } = useTool();
+
+// Drag-to-reorder for the plugin list (pure UI preference, persisted to localStorage).
+const drag = useDragOrder('plugins-order');
+const { dragPath, dragOverPath } = drag;
+// Separate order store for the component list inside plugin detail (each tab sorts independently).
+const compDrag = useDragOrder('plugin-components-order');
+const { dragPath: compDragPath, dragOverPath: compDragOverPath } = compDrag;
 
 const projects = ref<ProjectInfo[]>([]);
 const overview = ref<ToolOverview | null>(null);
@@ -74,6 +82,8 @@ async function onToolChange() {
 }
 
 onMounted(async () => {
+	drag.loadOrder();
+	compDrag.loadOrder();
 	await loadProjects();
 	await reload();
 	window.addEventListener('ccc-ui:reload', reload);
@@ -113,8 +123,20 @@ const marketplaceGroups = computed<[string, ToolInstance[]][]>(() => {
 		if (!map.has(key)) map.set(key, []);
 		map.get(key)!.push(p);
 	}
-	return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+	return [...map.entries()]
+		.map(([mp, list]) => [mp, drag.sortByOrder(list, drag.orderMap.value['marketplace:' + mp] ?? [], (p) => p.name)] as [string, ToolInstance[]])
+		.sort((a, b) => a[0].localeCompare(b[0]));
 });
+
+/** Drop wrapper: supplies the marketplace group's current name[] order to the composable. */
+function groupCurrentIds(groupKey: string): string[] {
+	const mp = groupKey.slice('marketplace:'.length);
+	const g = marketplaceGroups.value.find(([k]) => k === mp);
+	return g ? g[1].map((p) => p.name) : [];
+}
+function dropAt(e: DragEvent, groupKey: string, targetName: string) {
+	drag.onDrop(e, groupKey, targetName, groupCurrentIds(groupKey));
+}
 
 async function toggleScope(p: ToolInstance, next: Status) {
 	const scopeArg: Scope = isUserScope.value || isAllScope.value
@@ -185,10 +207,17 @@ const availableKinds = computed<Set<ComponentKind>>(() => {
 });
 
 /** Components filtered by the active tab kind. */
+/** Group key for component ordering: per plugin + per tab (each tab sorts independently). */
+const compGroupKey = computed(() => 'comp:' + (detailData.value?.name ?? '') + ':' + activeTab.value);
 const tabComponents = computed<PluginComponent[]>(() => {
 	if (activeTab.value === 'files') return [];
-	return (detailData.value?.components ?? []).filter((c) => c.kind === activeTab.value);
+	const base = (detailData.value?.components ?? []).filter((c) => c.kind === activeTab.value);
+	return compDrag.sortByOrder(base, compDrag.orderMap.value[compGroupKey.value] ?? [], (c) => c.name);
 });
+/** Drop wrapper for the component list. */
+function compDropAt(e: DragEvent, targetName: string) {
+	compDrag.onDrop(e, compGroupKey.value, targetName, tabComponents.value.map((c) => c.name));
+}
 
 // ---- Component detail (right pane when a type tab is active) ----
 
@@ -230,15 +259,21 @@ function switchTab(tab: TabKind) {
 const compListWidth = ref(260);
 const compDragging = ref(false);
 
+// Track drag origin so width changes by mouse delta, not absolute clientX
+// (which includes the sidebar width and causes a rightward jump on grab).
+let compDragStartX = 0;
+let compDragStartWidth = 0;
 function startCompDrag(e: MouseEvent) {
 	e.preventDefault();
 	compDragging.value = true;
+	compDragStartX = e.clientX;
+	compDragStartWidth = compListWidth.value;
 }
 function onCompDrag(e: MouseEvent) {
 	if (!compDragging.value) return;
 	const min = 180;
 	const max = window.innerWidth * 0.6;
-	compListWidth.value = Math.min(max, Math.max(min, e.clientX));
+	compListWidth.value = Math.min(max, Math.max(min, compDragStartWidth + (e.clientX - compDragStartX)));
 }
 function stopCompDrag() {
 	compDragging.value = false;
@@ -294,14 +329,24 @@ async function openInExplorer(p: ToolInstance) {
           <h2 class="group-title">{{ t('plugin.groupMarketplace') }} — {{ mp }}</h2>
         </div>
         <div class="card-grid">
-          <PluginCard
+          <div
             v-for="p in list"
             :key="p.name"
-            :plugin="p"
-            @toggle="(s) => toggleScope(p, s)"
-            @detail="showDetail(p)"
-            @open="openInExplorer(p)"
-          />
+            class="drag-wrap"
+            :class="{ dragging: dragPath === p.name, 'drag-over': dragOverPath === p.name && dragPath !== p.name }"
+            draggable="true"
+            @dragstart="drag.onDragStart($event, p.name)"
+            @dragover="drag.onDragOver($event, p.name)"
+            @drop="dropAt($event, 'marketplace:' + mp, p.name)"
+            @dragend="drag.onDragEnd"
+          >
+            <PluginCard
+              :plugin="p"
+              @toggle="(s) => toggleScope(p, s)"
+              @detail="showDetail(p)"
+              @open="openInExplorer(p)"
+            />
+          </div>
         </div>
       </section>
     </template>
@@ -354,7 +399,12 @@ async function openInExplorer(p: ToolInstance) {
             v-for="c in tabComponents"
             :key="c.name"
             class="comp-card"
-            :class="{ selected: selectedComponent?.name === c.name }"
+            :class="{ selected: selectedComponent?.name === c.name, dragging: compDragPath === c.name, 'drag-over': compDragOverPath === c.name && compDragPath !== c.name }"
+            draggable="true"
+            @dragstart="compDrag.onDragStart($event, c.name)"
+            @dragover="compDrag.onDragOver($event, c.name)"
+            @drop="compDropAt($event, c.name)"
+            @dragend="compDrag.onDragEnd"
             @click="selectComponent(c)"
           >
             <div class="comp-card-name">{{ c.name }}</div>
@@ -446,6 +496,14 @@ async function openInExplorer(p: ToolInstance) {
   gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
+.drag-wrap.dragging {
+  opacity: 0.4;
+}
+.drag-wrap.drag-over {
+  outline: 2px dashed var(--el-color-primary);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
 
 /* ---- Inline detail panel ---- */
 .detail-panel {
@@ -492,6 +550,13 @@ async function openInExplorer(p: ToolInstance) {
   background: var(--el-bg-color);
   overflow-y: auto;
   padding: 6px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  align-content: start;
+}
+.comp-list-pane > .state {
+  grid-column: 1 / -1;
 }
 .comp-splitter {
   flex: 0 0 5px;
@@ -516,11 +581,18 @@ async function openInExplorer(p: ToolInstance) {
   background: var(--el-color-primary);
 }
 .comp-card {
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
-  margin-bottom: 4px;
-  transition: background 0.15s;
+  border: 1px solid var(--el-border-color-lighter);
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.comp-card.dragging {
+  opacity: 0.4;
+}
+.comp-card.drag-over {
+  outline: 2px dashed var(--el-color-primary);
+  outline-offset: -2px;
 }
 .comp-card:hover {
   background: var(--el-fill-color-light);

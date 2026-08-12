@@ -2,7 +2,7 @@
 // Mirrors the server's route table 1:1. Every method takes an optional `tool` so the
 // same UI can target multiple AI tools (claude / zcode).
 
-import type { InstructionInfo, McpServer, PluginDetail, ProjectInfo, Scope, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
+import type { InstructionInfo, McpServer, PluginDetail, ProjectInfo, RuleInfo, Scope, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
 
 async function getJson<T>(url: string): Promise<T> {
 	const res = await fetch(url);
@@ -68,6 +68,12 @@ export const api = {
 		getJson<{ path: string; raw: string }>(`/api/instructions/content?path=${encodeURIComponent(filePath)}${tool && tool !== 'claude' ? `&tool=${tool}` : ''}`),
 	openInExplorer: (filePath: string, tool?: ToolId) =>
 		postJson<{ ok: true }>('/api/instructions/open', { path: filePath, tool }),
+	listRules: (tool?: ToolId) =>
+		getJson<RuleInfo[]>(`/api/rules${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
+	readRule: (filePath: string, tool?: ToolId) =>
+		getJson<{ path: string; raw: string }>(`/api/rules/content?path=${encodeURIComponent(filePath)}${tool && tool !== 'claude' ? `&tool=${tool}` : ''}`),
+	openRuleInExplorer: (filePath: string, tool?: ToolId) =>
+		postJson<{ ok: true }>('/api/rules/open', { path: filePath, tool }),
 	listMcps: (tool?: ToolId) =>
 		getJson<McpServer[]>(`/api/mcps${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	getMcpDetail: (name: string, scope: 'user' | 'project', project: string | null, tool?: ToolId) =>

@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
-  FolderOpen, ScrollText, Sparkles, Library, Plug, Settings,
+  FolderOpen, ScrollText, Sparkles, Library, Plug, Settings, Scale,
 } from 'lucide-vue-next';
 
 const { t } = useI18n();
@@ -14,6 +14,7 @@ interface NavItem { index: string; labelKey: string; icon: any; }
 const navItems = computed<NavItem[]>(() => [
 	{ index: '/projects', labelKey: 'nav.projects', icon: FolderOpen },
 	{ index: '/instructions', labelKey: 'nav.instructions', icon: ScrollText },
+	{ index: '/rules', labelKey: 'nav.rules', icon: Scale },
 	{ index: '/plugins', labelKey: 'nav.plugins', icon: Plug },
 	{ index: '/skills', labelKey: 'nav.skills', icon: Sparkles },
 	{ index: '/mcps', labelKey: 'nav.mcps', icon: Library },

@@ -10,3 +10,10 @@ Thumbs.db
 # (the repo is the manager, not a place to store managed configs)
 .claude/
 .zcode/
+
+# Local-only instruction / tooling artifacts (personal setup, not source)
+CLAUDE.md
+
+# Tooling scratch dirs
+.playwright-mcp/
+.stfolder/

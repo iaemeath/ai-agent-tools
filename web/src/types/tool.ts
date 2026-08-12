@@ -70,6 +70,15 @@ export interface InstructionInfo {
 	project?: string | null;
 }
 
+export interface RuleInfo {
+	scope: 'global' | 'project';
+	path: string;
+	name: string;
+	description?: string;
+	lineCount: number;
+	project?: string | null;
+}
+
 /** One MCP server entry (read-only view model, mirrors server McpServer). */
 export interface McpServer {
 	name: string;

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { plugins } from './routes/plugins.js';
 import { projects } from './routes/projects.js';
 import { instructions } from './routes/instructions.js';
+import { rules } from './routes/rules.js';
 import { mcps } from './routes/mcps.js';
 import { settings } from './routes/settings.js';
 import { skills } from './routes/skills.js';
@@ -26,6 +27,7 @@ app.route('/api/plugins', plugins);
 app.route('/api/projects', projects);
 app.route('/api/skills', skills);
 app.route('/api/instructions', instructions);
+app.route('/api/rules', rules);
 app.route('/api/mcps', mcps);
 app.route('/api/settings', settings);
 
