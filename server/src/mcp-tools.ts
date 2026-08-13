@@ -209,19 +209,28 @@ async function listHttpTools(server: McpServer, timeoutMs: number): Promise<McpT
 	return normalizeTools((listResult as { tools?: unknown })?.tools);
 }
 
+/** Parse one SSE block (text between blank-line separators) into its event name + data. */
+function parseSseBlock(block: string): { event?: string; data?: string } {
+	const lines = block.split('\n');
+	const eventLine = lines.find((l) => l.startsWith('event:'));
+	const event = eventLine ? eventLine.replace(/^event:\s?/, '').trim() : undefined;
+	const data = lines
+		.filter((l) => l.startsWith('data:'))
+		.map((l) => l.replace(/^data:\s?/, ''))
+		.join('\n');
+	return { event, data: data || undefined };
+}
+
 /** Parse an SSE response body and return the JSON-RPC message matching `id`. */
 function extractSseMessage(text: string, id: number): unknown {
 	for (const block of text.split(/\n\n/)) {
-		const dataLines = block
-			.split('\n')
-			.filter((l) => l.startsWith('data:'))
-			.map((l) => l.replace(/^data:\s?/, ''));
-		if (!dataLines.length) continue;
+		const { data } = parseSseBlock(block);
+		if (!data) continue;
 		// Only JSON *parse* failures are skippable (comment/heartbeat events);
 		// a matching RPC-level error must propagate.
 		let msg: { id?: number; result?: unknown; error?: { message?: string } };
 		try {
-			msg = JSON.parse(dataLines.join('\n'));
+			msg = JSON.parse(data);
 		} catch {
 			continue;
 		}
@@ -266,11 +275,7 @@ async function listSseTools(server: McpServer, timeoutMs: number): Promise<McpTo
 			while ((idx = buffer.indexOf('\n\n')) >= 0) {
 				const block = buffer.slice(0, idx);
 				buffer = buffer.slice(idx + 2);
-				const lines = block.split('\n');
-				const eventLine = lines.find((l) => l.startsWith('event:'));
-				const eventName = eventLine ? eventLine.replace(/^event:\s?/, '').trim() : undefined;
-				const dataLines = lines.filter((l) => l.startsWith('data:')).map((l) => l.replace(/^data:\s?/, ''));
-				const data = dataLines.join('\n');
+				const { event: eventName, data } = parseSseBlock(block);
 				if (eventName === 'endpoint' && data) {
 					endpointUrl = resolveUrl(server.url!, data);
 					continue;

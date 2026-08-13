@@ -36,8 +36,12 @@ in the tool's settings. Other resources are **read-only browsing**.
 | **plugin** | toggle | `enabledPlugins` (`name@marketplace`: bool) | also: inline file explorer (browse plugin dir + preview file content) |
 | **project** | read-only | session-history folders (Claude) / SQLite DB (ZCode) | list + delete session history |
 | **instruction** | read-only | `CLAUDE.md` / `AGENTS.md` (global + per-project) | split-pane markdown viewer + open in file manager |
-| **mcp** | read-only | `mcpServers` (Claude) / `mcp.servers` (ZCode) | list servers + view config detail (command/args/env/url/headers) |
-| ~~rule~~ | removed | — | Claude Code only, no native toggle; menu removed after analysis |
+| **mcp** | read-only | `mcpServers` (Claude) / `mcp.servers` (ZCode) | list servers + view config detail (command/args/env/url/headers) + live tool probe |
+| **rule** | read-only | `~/.{tool}/rules/*.md` + `<proj>/.{tool}/rules/*.md` | split-pane viewer; Claude only (ZCode has no rules mechanism → empty state) |
+| **command** | read-only | `~/.{tool}/commands/*.md` + `<proj>/.{tool}/commands/*.md` | split-pane viewer; custom slash commands |
+| **agent** | read-only | `~/.{tool}/agents/*.md` + `<proj>/.{tool}/agents/*.md` | split-pane viewer; standalone subagents |
+| **hook** | read-only | nested JSON in settings (`hooks` / `hooks.events`) | list + detail (event / matcher / command / timeout); Claude `settings.local.json` merged in |
+| **settings** | read-only | settings JSON | overview of toggles / env vars / permissions / marketplaces |
 
 MCP edit/toggle is deferred — the three tools' on/off mechanisms differ too widely (ZCode has `enabled`,
 Claude has project-block arrays, Codex has none), so a unified toggle would create "fake" switches the
@@ -64,7 +68,12 @@ keys untouched). Every write is preceded by a `.bak` backup of the file it overw
     draggable splitter) + open in file manager.
   - `MCP` view: card grid + inline detail (transport / command / args / env / url / headers).
     Claude + ZCode only (Codex TOML deferred).
-- **Placeholder** — agents / commands / hooks / settings (not yet implemented).
+- **Phase 3** — markdown-resource browsing + config overview. **done** for Claude Code + ZCode.
+  - `Rules` / `Commands` / `Agents` views: split-pane markdown viewer (global left, project cards right)
+    + open in file manager. Rules is Claude-only (ZCode has no rules mechanism → empty state).
+  - `Hooks` view: list + detail (event / matcher / command / timeout / source file); Claude
+    `settings.local.json` merged in, ZCode `hooks.enabled` kill-switch reflected.
+  - `Settings` view: read-only overview of toggles / env vars / permissions / marketplaces.
 
 ---
 
@@ -160,7 +169,7 @@ Skill/plugin toggle, projects, instructions all work without further change. MCP
 
 ```
 server/src/                      Hono API (tsx, runs on :8787)
-  index.ts                       entry: mounts /api/* and (in prod) serves web/dist
+  index.ts                       entry: mounts 11 /api/* routes and (in prod) serves web/dist
   profiles.ts                    ★ ToolProfile declarations (the ONLY place tool differences live)
   locator.ts                     ★ tool-agnostic read/write engine (readRegistry / readFlag / writeFlag)
   paths.ts                       path helpers — all derived from profile fields
@@ -170,7 +179,13 @@ server/src/                      Hono API (tsx, runs on :8787)
   decode.ts                      decode dash-encoded project folder names (Windows drive + underscore)
   projects-reader.ts             unified project discovery (fs folders OR sqlite) + delete
   instructions-reader.ts         read-only instruction file discovery + content read
-  mcp-reader.ts                  read-only MCP server discovery + transport inference
+  mcp-reader.ts                  read-only MCP server discovery (user-level + project-level) + transport inference
+  rules-reader.ts                read-only rule discovery (Claude only — ZCode has no rules mechanism)
+  commands-reader.ts             read-only slash-command discovery (*.md)
+  agents-reader.ts               read-only subagent discovery (*.md)
+  hooks-reader.ts                read-only hook discovery from nested settings JSON
+  markdown-resource.ts           shared scan/parse primitives (frontmatter, line count, dedupe)
+  mcp-tools.ts                   live MCP tool probe (stdio/http/sse JSON-RPC handshake → tools/list)
   adapters/
     types.ts                     ToolAdapter interface + registry(profile) (extension point)
     skill.ts                     SkillAdapter   (delegates to locator engine)
@@ -183,7 +198,9 @@ server/src/                      Hono API (tsx, runs on :8787)
     projects.ts                  list / delete session-history
     skills.ts                    promote / delete skills
     instructions.ts              list / content / open-in-explorer
-    mcps.ts                      list / detail / open-in-explorer
+    mcps.ts                      list / detail / open-in-explorer + live tool probe
+    rules.ts commands.ts agents.ts hooks.ts   list / content / open-in-explorer (markdown resources)
+    settings.ts                  read-only settings overview (toggles / env / permissions / marketplaces)
 web/src/                         Vue 3 SPA (Vite dev on :5173, proxies /api → :8787)
   stores/tool.ts                 ★ global tool selector (Claude ⇄ ZCode) shared by header + views
   api/index.ts                   fetch client — every method takes an optional `tool`
@@ -191,10 +208,15 @@ web/src/                         Vue 3 SPA (Vite dev on :5173, proxies /api → 
   views/PluginsView.vue          plugins page (toggle + inline file explorer with content preview)
   views/ProjectsView.vue         projects page (card grid + delete session history)
   views/InstructionsView.vue     instructions page (split-pane markdown viewer)
-  views/MCPsView.vue             MCP page (card grid + inline detail)
+  views/MCPsView.vue             MCP page (card grid + inline detail + tool list)
+  views/RulesView.vue            rules page (split-pane viewer; Claude only → empty state on ZCode)
+  views/CommandsView.vue         commands page (split-pane slash-command viewer)
+  views/AgentsView.vue           agents page (split-pane subagent viewer)
+  views/HooksView.vue            hooks page (list + detail: event / matcher / command / timeout)
+  views/SettingsView.vue         settings page (read-only toggles / env / permissions overview)
   components/                    AppHeader / AppSidebar / SkillCard / PluginCard / FileExplorer / MarkdownView
   i18n/                          vue-i18n (zh / en)
-  router/                        /plugins /skills /projects /instructions /mcps live; agents/commands/hooks/settings placeholders
+  router/                        /plugins /skills /projects /instructions /rules /commands /agents /hooks /mcps /settings — all live
 ```
 
 ### Two-level status resolution
