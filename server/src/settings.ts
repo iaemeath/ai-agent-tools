@@ -53,6 +53,16 @@ export function write(p: string, value: Json): void {
 	fs.writeFileSync(p, JSON.stringify(value, null, 2) + '\n', 'utf8');
 }
 
+/**
+ * Write a plain-text file (for editing raw markdown, etc.): mkdir -p parent, back up, write utf8.
+ * Unlike write() this does NOT JSON-stringify — content is written verbatim.
+ */
+export function writeText(p: string, content: string): void {
+	fs.mkdirSync(path.dirname(p), { recursive: true });
+	backupFile(p);
+	fs.writeFileSync(p, content, 'utf8');
+}
+
 export function readUser(p: ToolProfile = DEFAULT_PROFILE): Json {
 	return read(userSettings(p));
 }

@@ -66,6 +66,8 @@ export const api = {
 		getJson<InstructionInfo[]>(`/api/instructions${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	readInstruction: (filePath: string, tool?: ToolId) =>
 		getJson<{ path: string; raw: string }>(`/api/instructions/content?path=${encodeURIComponent(filePath)}${tool && tool !== 'claude' ? `&tool=${tool}` : ''}`),
+	saveInstruction: (filePath: string, content: string, tool?: ToolId) =>
+		postJson<{ ok: true; path: string }>('/api/instructions/save', { path: filePath, content, tool }),
 	openInExplorer: (filePath: string, tool?: ToolId) =>
 		postJson<{ ok: true }>('/api/instructions/open', { path: filePath, tool }),
 	listRules: (tool?: ToolId) =>

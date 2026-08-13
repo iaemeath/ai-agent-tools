@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ArrowLeft } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import { ArrowLeft, EditPen } from '@element-plus/icons-vue';
 import { api } from '../api';
 import { useTool } from '../stores/tool';
 import { useDragOrder } from '../composables/useDragOrder';
@@ -25,6 +26,13 @@ const globalLoading = ref(false);
 const selectedProject = ref<InstructionInfo | null>(null);
 const projectRaw = ref<string>('');
 const projectLoading = ref(false);
+
+// Edit mode (view ↔ edit). MarkdownView stays for read-only; MdEditor for editing.
+const globalEditing = ref(false);
+const globalEditRaw = ref('');
+const projectEditing = ref(false);
+const projectEditRaw = ref('');
+const saving = ref(false);
 
 // Resizable splitter: left pane width in px (40% of viewport on mount).
 const leftWidth = ref(0);
@@ -84,6 +92,56 @@ async function openInExplorer(path: string) {
 		await api.openInExplorer(path, tool.value);
 	} catch (e) {
 		// silent fail — file manager open is best-effort
+	}
+}
+
+// ---- Edit mode (global + project share the same view↔edit↔save flow) ----
+const globalDirty = computed(() => globalEditRaw.value !== globalRaw.value);
+const projectDirty = computed(() => projectEditRaw.value !== projectRaw.value);
+
+function startEditGlobal() {
+	globalEditRaw.value = globalRaw.value;
+	globalEditing.value = true;
+}
+function cancelEditGlobal() {
+	globalEditing.value = false;
+}
+async function saveGlobal() {
+	const g = globalItem.value;
+	if (!g) return;
+	saving.value = true;
+	try {
+		await api.saveInstruction(g.path, globalEditRaw.value, tool.value);
+		globalRaw.value = globalEditRaw.value;
+		globalEditing.value = false;
+		ElMessage.success(t('instruction.saved'));
+	} catch (e) {
+		ElMessage.error((e as Error).message);
+	} finally {
+		saving.value = false;
+	}
+}
+
+function startEditProject() {
+	projectEditRaw.value = projectRaw.value;
+	projectEditing.value = true;
+}
+function cancelEditProject() {
+	projectEditing.value = false;
+}
+async function saveProject() {
+	const p = selectedProject.value;
+	if (!p) return;
+	saving.value = true;
+	try {
+		await api.saveInstruction(p.path, projectEditRaw.value, tool.value);
+		projectRaw.value = projectEditRaw.value;
+		projectEditing.value = false;
+		ElMessage.success(t('instruction.saved'));
+	} catch (e) {
+		ElMessage.error((e as Error).message);
+	} finally {
+		saving.value = false;
 	}
 }
 
@@ -161,7 +219,25 @@ function stopDrag() {
         </div>
         <div class="pane-body">
           <div v-if="globalLoading" class="state">{{ t('common.loading') }}</div>
-          <MarkdownView v-else :raw="globalRaw" />
+          <div v-else-if="globalEditing" class="edit-mode">
+            <div class="edit-actions">
+              <el-button size="small" type="primary" :loading="saving" @click="saveGlobal">{{ t('instruction.save') }}</el-button>
+              <el-button size="small" @click="cancelEditGlobal">{{ t('instruction.cancel') }}</el-button>
+              <span v-if="globalDirty" class="dirty-hint">{{ t('instruction.unsaved') }}</span>
+            </div>
+            <el-input
+              type="textarea"
+              v-model="globalEditRaw"
+              class="md-textarea"
+              resize="none"
+            />
+          </div>
+          <div v-else class="view-mode">
+            <div class="edit-bar">
+              <el-button size="small" :icon="EditPen" @click="startEditGlobal">{{ t('instruction.edit') }}</el-button>
+            </div>
+            <MarkdownView :raw="globalRaw" />
+          </div>
         </div>
       </div>
 
@@ -217,7 +293,25 @@ function stopDrag() {
           </div>
           <div class="pane-body">
             <div v-if="projectLoading" class="state">{{ t('common.loading') }}</div>
-            <MarkdownView v-else :raw="projectRaw" />
+            <div v-else-if="projectEditing" class="edit-mode">
+              <div class="edit-actions">
+                <el-button size="small" type="primary" :loading="saving" @click="saveProject">{{ t('instruction.save') }}</el-button>
+                <el-button size="small" @click="cancelEditProject">{{ t('instruction.cancel') }}</el-button>
+                <span v-if="projectDirty" class="dirty-hint">{{ t('instruction.unsaved') }}</span>
+              </div>
+              <el-input
+                type="textarea"
+                v-model="projectEditRaw"
+                class="md-textarea"
+                resize="none"
+              />
+            </div>
+            <div v-else class="view-mode">
+              <div class="edit-bar">
+                <el-button size="small" :icon="EditPen" @click="startEditProject">{{ t('instruction.edit') }}</el-button>
+              </div>
+              <MarkdownView :raw="projectRaw" />
+            </div>
           </div>
         </template>
       </div>
@@ -365,5 +459,38 @@ function stopDrag() {
 }
 .card-meta {
   margin-top: 10px;
+}
+
+/* ---- Edit mode ---- */
+.edit-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+.dirty-hint {
+  font-size: 12px;
+  color: var(--el-color-warning);
+}
+.edit-mode {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.md-textarea {
+  flex: 1;
+  min-height: 0;
+}
+.md-textarea :deep(.el-textarea__inner) {
+  height: 100%;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
 }
 </style>

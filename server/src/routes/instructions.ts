@@ -3,6 +3,7 @@
 import { Hono } from 'hono';
 import { profileOf } from '../profiles.js';
 import { listInstructions, readInstruction } from '../instructions-reader.js';
+import { writeText } from '../settings.js';
 import { revealInExplorer } from '../explorer.js';
 
 export const instructions = new Hono();
@@ -52,4 +53,26 @@ instructions.post('/open', async (c) => {
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not an instruction file' }, 404);
 	return revealInExplorer(c, match);
+});
+
+/**
+ * POST /api/instructions/save — body: { path, content, tool? }
+ * Write edited content back to an instruction file. The path must be a known
+ * instruction file for this tool (same whitelist check as /content and /open),
+ * and the file is backed up to .bak before overwriting (same SSOT-safe mechanism
+ * as settings.json writes).
+ */
+instructions.post('/save', async (c) => {
+	const body = await c.req.json<{ path: string; content: string; tool?: string }>();
+	const profile = profileOf(body.tool ?? 'claude');
+	const decoded = decodeURIComponent(body.path ?? '');
+	const known = listInstructions(profile).map((i) => i.path);
+	const match = known.find((p) => normPath(p) === normPath(decoded));
+	if (!match) return c.json({ error: 'file not found or not an instruction file' }, 404);
+	try {
+		writeText(match, body.content ?? '');
+	} catch (e) {
+		return c.json({ error: (e as Error).message }, 500);
+	}
+	return c.json({ ok: true, path: match });
 });
