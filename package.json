@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Manage Claude Code skills and plugins (Config-as-SSOT). Node + Hono + Vue 3 + Element Plus.",
+  "description": "Manage AI coding-agent config across tools (Claude Code, ZCode) — skills, plugins, projects, instructions, rules, commands, agents, hooks, MCP, settings (Config-as-SSOT). Node + Hono + Vue 3 + Element Plus.",
   "workspaces": [
     "server",
     "web"
@@ -14,7 +14,7 @@
     "dev": "concurrently -k -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
     "build": "npm -w web run build",
     "start": "tsx server/src/index.ts",
-    "typecheck": "npm -w server exec tsc --noEmit && npm -w web exec vue-tsc --noEmit"
+    "typecheck": "npm -w server exec tsc && npm -w web exec vue-tsc"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

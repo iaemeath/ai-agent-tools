@@ -52,8 +52,8 @@ function stop(e: Event) {
         class="toggle-switch"
         :width="60"
         inline-prompt
-        active-text="启用"
-        inactive-text="停用"
+        :active-text="t('common.enabled')"
+        :inactive-text="t('common.disabled')"
         @change="onSwitch"
         @click="stop"
       />

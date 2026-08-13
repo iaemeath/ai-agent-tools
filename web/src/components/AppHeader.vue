@@ -19,11 +19,13 @@ const titleKey = computed(() => {
 		skills: 'page.skills.title',
 		projects: 'page.projects.title',
 		plugins: 'page.plugins.title',
-		rules: 'nav.rules',
+		instructions: 'page.instructions.title',
+		rules: 'page.rules.title',
 		commands: 'page.commands.title',
 		agents: 'page.agents.title',
 		hooks: 'page.hooks.title',
-		settings: 'nav.settings',
+		mcps: 'page.mcps.title',
+		settings: 'page.settings.title',
 	};
 	const seg = route.path.split('/')[1];
 	return map[seg] ?? 'page.placeholder.title';
@@ -33,9 +35,13 @@ const subtitleKey = computed(() => {
 		skills: 'page.skills.subtitle',
 		projects: 'page.projects.subtitle',
 		plugins: 'page.plugins.subtitle',
+		instructions: 'page.instructions.subtitle',
+		rules: 'page.rules.subtitle',
 		commands: 'page.commands.subtitle',
 		agents: 'page.agents.subtitle',
 		hooks: 'page.hooks.subtitle',
+		mcps: 'page.mcps.subtitle',
+		settings: 'page.settings.subtitle',
 	};
 	const seg = route.path.split('/')[1];
 	return map[seg] ?? '';

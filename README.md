@@ -1,9 +1,9 @@
 # ccc-ui
 
 A web UI to manage AI coding-agent config — across scopes (user / project), across tools
-(Claude Code, ZCode, …). Toggle **skills** and **plugins** on/off, browse **projects** (session
-history), view **instructions** (CLAUDE.md / AGENTS.md), inspect **MCP** servers, and explore plugin
-files — all from one place.
+(Claude Code, ZCode, …). Toggle **skills** and **plugins** on/off; browse **projects** (session
+history), **instructions** (CLAUDE.md / AGENTS.md), **rules**, **commands**, **agents**, and
+**hooks**; inspect **MCP** servers and review **settings** — all from one place.
 
 **Skills and plugins are toggle-able (live, no restart). Everything else is read-only browsing.**
 Source of truth is each tool's own native config; this app is a read/project/edit-back layer over it,

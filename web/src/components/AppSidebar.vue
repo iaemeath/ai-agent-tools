@@ -32,7 +32,7 @@ const activeIndex = computed(() => '/' + (route.path.split('/')[1] ?? ''));
       <div class="brand-logo"><el-icon :size="20"><Plug /></el-icon></div>
       <div class="brand-text">
         <div class="brand-name">{{ t('app.name') }}</div>
-        <div class="brand-tagline">{{ t('app.tagline') }}</div>
+        <div v-if="t('app.tagline')" class="brand-tagline">{{ t('app.tagline') }}</div>
       </div>
     </div>
 
