@@ -3,11 +3,11 @@
 // this module adds a plugin-specific detail that returns typed fields.
 
 import { Hono } from 'hono';
-import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { registry } from '../adapters/types.js';
 import { profileOf } from '../profiles.js';
+import { revealInExplorer } from '../explorer.js';
 import type { PluginDetail } from '../model.js';
 
 export const plugins = new Hono();
@@ -71,22 +71,8 @@ plugins.post('/:name/open', async (c) => {
 	const profile = profileOf(body.tool ?? 'claude');
 	const installPath = resolveInstallPath(name, project, profile);
 	if (!installPath) return c.json({ error: 'plugin not found or has no install path' }, 404);
-
-	return new Promise((resolve) => {
-		// Open the directory directly (no /select, since installPath is a folder).
-		// explorer.exe often exits non-zero even on success; treat spawn failure + stderr
-		// as real errors, everything else as success.
-		const child = execFile('explorer.exe', [installPath], (err, _stdout, stderr) => {
-			if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
-				resolve(c.json({ error: 'explorer.exe not found' }, 500));
-			} else if (stderr) {
-				resolve(c.json({ error: stderr }, 500));
-			} else {
-				resolve(c.json({ ok: true }));
-			}
-		});
-		child.on('error', () => resolve(c.json({ error: 'failed to spawn explorer' }, 500)));
-	});
+	// Open the install directory itself (no /select, since installPath is a folder).
+	return revealInExplorer(c, installPath, false);
 });
 
 /**
@@ -101,8 +87,13 @@ function resolveSafePath(
 	project: string | null,
 	profile: ReturnType<typeof profileOf>,
 ): { absPath: string; installPath: string } | null {
-	const installPath = resolveInstallPath(name, project, profile);
-	if (!installPath) return null;
+	const raw = resolveInstallPath(name, project, profile);
+	if (!raw) return null;
+	// Normalize separators so the containment check is reliable regardless of whether
+	// the registry stored the install path with forward slashes (some installs do) or
+	// backslashes. path.resolve() below always yields OS-native separators, so the
+	// install path must match that form or startsWith() fails → spurious 403.
+	const installPath = path.normalize(raw);
 	const rel = (subpath ?? '').replace(/\\/g, '/').replace(/^\/+/, ''); // normalize, strip leading /
 	if (!rel) return { absPath: installPath, installPath };
 	// Reject absolute paths (Windows drive or POSIX root).

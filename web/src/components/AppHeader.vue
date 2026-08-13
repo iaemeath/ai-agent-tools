@@ -20,6 +20,9 @@ const titleKey = computed(() => {
 		projects: 'page.projects.title',
 		plugins: 'page.plugins.title',
 		rules: 'nav.rules',
+		commands: 'page.commands.title',
+		agents: 'page.agents.title',
+		hooks: 'page.hooks.title',
 		settings: 'nav.settings',
 	};
 	const seg = route.path.split('/')[1];
@@ -30,6 +33,9 @@ const subtitleKey = computed(() => {
 		skills: 'page.skills.subtitle',
 		projects: 'page.projects.subtitle',
 		plugins: 'page.plugins.subtitle',
+		commands: 'page.commands.subtitle',
+		agents: 'page.agents.subtitle',
+		hooks: 'page.hooks.subtitle',
 	};
 	const seg = route.path.split('/')[1];
 	return map[seg] ?? '';

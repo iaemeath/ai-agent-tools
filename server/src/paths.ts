@@ -52,6 +52,32 @@ export function projectRulesDir(project: string, p: ToolProfile = DEFAULT_PROFIL
 }
 
 /**
+ * Global commands dir (e.g. ~/.claude/commands/). Returns null when the tool has
+ * no commands support (profile.commands undefined).
+ */
+export function globalCommandsDir(p: ToolProfile = DEFAULT_PROFILE): string | null {
+	return p.commands ? path.join(configRoot(p), p.commands.dirName) : null;
+}
+
+/** Project commands dir; null when the tool has no commands support. */
+export function projectCommandsDir(project: string, p: ToolProfile = DEFAULT_PROFILE): string | null {
+	return p.commands ? path.join(project, p.projectPrefix, p.commands.dirName) : null;
+}
+
+/**
+ * Global agents dir (e.g. ~/.claude/agents/, ~/.zcode/agents/). Returns null when
+ * the tool has no standalone-agents support (profile.agents undefined).
+ */
+export function globalAgentsDir(p: ToolProfile = DEFAULT_PROFILE): string | null {
+	return p.agents ? path.join(configRoot(p), p.agents.dirName) : null;
+}
+
+/** Project agents dir; null when the tool has no standalone-agents support. */
+export function projectAgentsDir(project: string, p: ToolProfile = DEFAULT_PROFILE): string | null {
+	return p.agents ? path.join(project, p.projectPrefix, p.agents.dirName) : null;
+}
+
+/**
  * Session-history dir for fs-based tools (e.g. ~/.claude/projects/), or null for
  * sqlite-based tools (ZCode) that have no such folder. Skill scanning uses this to
  * discover project-scoped skills across all known projects.

@@ -12,6 +12,7 @@ import {
 	type ToolContent, type ToolInstance,
 } from '../model.js';
 import { readRegistry, readFlag, writeFlag, type InstallRecord } from '../locator.js';
+import { parseFrontmatterField } from '../markdown-resource.js';
 import type { ToolAdapter } from './types.js';
 
 type Json = Record<string, unknown>;
@@ -92,51 +93,133 @@ function parseSkillDescription(skillMd: string): string | undefined {
 	return undefined;
 }
 
-/** Build a structured component inventory from the manifest fields + skills/ directory. */
-function buildComponents(installPath: string, manifest: Record<string, unknown> | null, supported: readonly PluginComponent['kind'][]): PluginComponent[] {
-	const out: PluginComponent[] = [];
-	const skillNames = new Set<string>();
-	if (manifest) {
-		const sv = manifest['skills'];
-		if (Array.isArray(sv)) for (const s of sv) {
-			if (typeof s === 'string') skillNames.add(s.replace(/^\.?\//, ''));
-		}
+/** List *.md filenames (without extension) directly under dir/. [] if dir missing. */
+function listMdFiles(dir: string): string[] {
+	try {
+		return fs.readdirSync(dir, { withFileTypes: true })
+			.filter((e) => e.isFile() && e.name.toLowerCase().endsWith('.md'))
+			.map((e) => e.name.replace(/\.md$/i, ''));
+	} catch {
+		return [];
 	}
-	for (const dir of listSkillDirs(installPath)) skillNames.add(dir);
-	for (const name of [...skillNames].sort()) {
-		const md = path.join(installPath, 'skills', name, 'SKILL.md');
-		out.push({ kind: 'skill', name, detail: parseSkillDescription(md) });
-	}
+}
 
-	const fields: { key: string; kind: PluginComponent['kind'] }[] = [
-		{ key: 'commands', kind: 'command' },
-		{ key: 'agents', kind: 'agent' },
-		{ key: 'hooks', kind: 'hook' },
-		{ key: 'mcpServers', kind: 'mcp' },
-		{ key: 'lspServers', kind: 'lsp' },
-	];
-	if (manifest) {
-		for (const { key, kind } of fields) {
-			const v = manifest[key];
-			if (!v) continue;
-			if (Array.isArray(v)) {
-				for (const item of v) {
-					if (typeof item === 'string') out.push({ kind, name: item.replace(/^\.?\//, '') });
-					else if (item && typeof item === 'object') {
-						const name = (item as Record<string, unknown>)['name'] as string ?? key;
-						out.push({ kind, name: String(name) });
-					}
-				}
-			} else if (v && typeof v === 'object') {
-				for (const name of Object.keys(v as Record<string, unknown>)) out.push({ kind, name });
-			} else if (typeof v === 'string') {
-				out.push({ kind, name: v.replace(/^\.?\//, '') });
+/** List subdirectory names directly under dir/. [] if dir missing. */
+function listSubdirs(dir: string): string[] {
+	try {
+		return fs.readdirSync(dir, { withFileTypes: true })
+			.filter((e) => e.isDirectory())
+			.map((e) => e.name);
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Read <installPath>/hooks/hooks.json and return the event names present in it.
+ * Real plugins keep hook bindings in this single config file, not as per-hook
+ * manifest fields. [] if the file is missing/unparseable.
+ */
+function listHookEvents(installPath: string): string[] {
+	const f = path.join(installPath, 'hooks', 'hooks.json');
+	try {
+		const j = JSON.parse(fs.readFileSync(f, 'utf8')) as unknown;
+		const h = (j && typeof j === 'object' && !Array.isArray(j) && 'hooks' in (j as Record<string, unknown>))
+			? (j as Record<string, unknown>)['hooks']
+			: j;
+		if (h && typeof h === 'object' && !Array.isArray(h)) {
+			return Object.keys(h as Record<string, unknown>);
+		}
+	} catch { /* missing or unparseable */ }
+	return [];
+}
+
+/** Extract names from one manifest field (array of strings/{name}, object keys, or string). */
+function collectManifestNames(manifest: Record<string, unknown> | null, key: string, into: Set<string>): void {
+	if (!manifest) return;
+	const v = manifest[key];
+	if (!v) return;
+	if (Array.isArray(v)) {
+		for (const item of v) {
+			if (typeof item === 'string') into.add(item.replace(/^\.?\//, ''));
+			else if (item && typeof item === 'object') {
+				const n = (item as Record<string, unknown>)['name'];
+				if (typeof n === 'string') into.add(n);
 			}
 		}
+	} else if (v && typeof v === 'object') {
+		for (const name of Object.keys(v as Record<string, unknown>)) into.add(name);
+	} else if (typeof v === 'string') {
+		into.add(v.replace(/^\.?\//, ''));
 	}
-	// Filter out component kinds the current tool runtime does not load (capability
-	// gap, e.g. ZCode ignores plugin-level agents). See PluginLocator.supportedComponents.
-	return out.filter((c) => supported.includes(c.kind));
+}
+
+/**
+ * Build a structured component inventory. Components are discovered BOTH from the
+ * manifest (.claude-plugin/plugin.json fields) AND from the standard directory
+ * layout most plugins actually use on disk:
+ *   - skills/<name>/        (subdir with SKILL.md)
+ *   - commands/<name>.md    (one slash command per .md file)
+ *   - agents/<name>.md      (one subagent per .md file)
+ *   - mcp/<name>/           (one MCP server per subdir)
+ *   - hooks/hooks.json      (one component per event present)
+ * Results are filtered by `supported` (capability gap: e.g. ZCode ignores plugin agents).
+ */
+function buildComponents(installPath: string, manifest: Record<string, unknown> | null, supported: readonly PluginComponent['kind'][]): PluginComponent[] {
+	const out: PluginComponent[] = [];
+	const sup = new Set(supported);
+
+	if (sup.has('skill')) {
+		const names = new Set<string>();
+		collectManifestNames(manifest, 'skills', names);
+		for (const dir of listSkillDirs(installPath)) names.add(dir);
+		for (const name of [...names].sort()) {
+			out.push({ kind: 'skill', name, detail: parseSkillDescription(path.join(installPath, 'skills', name, 'SKILL.md')) });
+		}
+	}
+	if (sup.has('command')) {
+		const names = new Set<string>();
+		collectManifestNames(manifest, 'commands', names);
+		for (const f of listMdFiles(path.join(installPath, 'commands'))) names.add(f);
+		for (const name of [...names].sort()) {
+			out.push({ kind: 'command', name, detail: parseFrontmatterField(path.join(installPath, 'commands', name + '.md'), 'description') });
+		}
+	}
+	if (sup.has('agent')) {
+		const names = new Set<string>();
+		collectManifestNames(manifest, 'agents', names);
+		for (const f of listMdFiles(path.join(installPath, 'agents'))) names.add(f);
+		for (const name of [...names].sort()) {
+			out.push({ kind: 'agent', name, detail: parseFrontmatterField(path.join(installPath, 'agents', name + '.md'), 'description') });
+		}
+	}
+	if (sup.has('mcp')) {
+		const names = new Set<string>();
+		collectManifestNames(manifest, 'mcpServers', names);
+		for (const d of listSubdirs(path.join(installPath, 'mcp'))) names.add(d);
+		for (const name of [...names].sort()) {
+			out.push({ kind: 'mcp', name });
+		}
+	}
+	if (sup.has('hook')) {
+		const events = new Set<string>();
+		if (manifest && manifest['hooks'] && typeof manifest['hooks'] === 'object' && !Array.isArray(manifest['hooks'])) {
+			for (const ev of Object.keys(manifest['hooks'] as Record<string, unknown>)) events.add(ev);
+		}
+		for (const ev of listHookEvents(installPath)) events.add(ev);
+		for (const name of [...events].sort()) {
+			out.push({ kind: 'hook', name });
+		}
+	}
+	if (sup.has('lsp')) {
+		const names = new Set<string>();
+		collectManifestNames(manifest, 'lspServers', names);
+		for (const name of [...names].sort()) {
+			out.push({ kind: 'lsp', name });
+		}
+	}
+
+	return out;
 }
 
 export class PluginAdapter implements ToolAdapter {

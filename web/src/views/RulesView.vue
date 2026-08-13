@@ -343,6 +343,7 @@ function stopDrag() {
   padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
+  background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-lighter);
   transition: background 0.15s, border-color 0.15s, opacity 0.15s;
 }

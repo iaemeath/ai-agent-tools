@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { configRoot } from './paths.js';
-import { projectSettings } from './paths.js';
+import { projectSettings, homeDir } from './paths.js';
 import { decodeProjectFolder } from './decode.js';
 import type { ProjectsLocator, ToolProfile } from './profiles.js';
 import type { ProjectInfo } from './model.js';
@@ -33,10 +33,22 @@ function readJson(p: string): Json {
  * List projects for a tool. Returns ProjectInfo[] sorted by lastActivity desc.
  * Each entry: { path, encoded, sessionCount, lastActivity, hasSettings }.
  */
+/**
+ * List projects for a tool. Returns ProjectInfo[] sorted by lastActivity desc.
+ * Each entry: { path, encoded, sessionCount, lastActivity, hasSettings }.
+ *
+ * The HOME directory itself is always excluded: when a tool runs with cwd=home,
+ * session history records an entry whose path IS the home dir, and <home>/.<tool>/
+ * is the GLOBAL config root — so treating home as a "project" double-counts every
+ * global resource (skills/agents/commands/rules/hooks/instructions/mcps/settings)
+ * as project-level and clutters the Projects page. Filtering once here keeps every
+ * caller (Projects page + all resource readers + skills adapter) consistent.
+ */
 export function listProjects(profile: ToolProfile): ProjectInfo[] {
 	const loc = profile.projects;
-	if (loc.source === 'fs') return listFromFs(profile, loc);
-	return listFromSqlite(profile, loc);
+	const raw = loc.source === 'fs' ? listFromFs(profile, loc) : listFromSqlite(profile, loc);
+	const home = path.resolve(homeDir()).toLowerCase();
+	return raw.filter((p) => path.resolve(p.path).toLowerCase() !== home);
 }
 
 /** fs source: scan dash-encoded folders under configRoot/<dirRelative>. */

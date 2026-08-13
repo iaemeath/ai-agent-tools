@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readProject, readUser, writeProject, writeUser } from '../settings.js';
 import { globalSkillsDir, projectSkillsDir } from '../paths.js';
-import { allProjectPaths } from '../decode.js';
+import { listProjects } from '../projects-reader.js';
 import { DEFAULT_PROFILE, type ToolProfile } from '../profiles.js';
 import {
 	type Mechanism, type Origin, resolveEffective, type ScanCtx, type Scope, type ScopeCtx,
@@ -91,7 +91,9 @@ export class SkillAdapter implements ToolAdapter {
 		}
 
 		// 2. Project skills. Specific project → just that one; null → all known projects.
-		const projectPaths = ctx.project ? [ctx.project] : allProjectPaths(p);
+		// Uses listProjects (supports fs Claude + sqlite ZCode), NOT the legacy
+		// allProjectPaths which was Claude-fs-only and hid project skills under ZCode.
+		const projectPaths = ctx.project ? [ctx.project] : listProjects(p).map((pr) => pr.path);
 		for (const proj of projectPaths) {
 			const projDir = projectSkillsDir(proj, p);
 			if (!fs.existsSync(projDir)) continue;

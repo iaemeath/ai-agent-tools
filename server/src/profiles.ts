@@ -126,6 +126,31 @@ export interface ToolProfile {
 	 * Undefined = the tool does not support rules; reader returns empty.
 	 */
 	rules?: { dirName: string };
+	/**
+	 * Commands locator (optional). Both tools support custom slash commands as *.md
+	 * files in a directory, so both populate this. Undefined = no commands support.
+	 */
+	commands?: { dirName: string };
+	/**
+	 * Agents locator (optional). Both tools support standalone subagents as *.md files.
+	 * (Plugin-level agents are governed separately by plugins.supportedComponents.)
+	 */
+	agents?: { dirName: string };
+	/**
+	 * Hooks locator (optional). Hooks are NOT files — they are a nested JSON config
+	 * inside the settings file(s). Both tools populate this; schema differences are
+	 * expressed by the fields below and normalized by the hooks reader:
+	 *   - eventsKeyPath:  path to the {<Event>: MatcherGroup[]} map.
+	 *                      Claude ['hooks'] | ZCode ['hooks','events'].
+	 *   - enabledKeyPath: optional boolean kill-switch (ZCode ['hooks','enabled']).
+	 *   - localSettingsFile: optional sibling settings file with more hooks
+	 *                      (Claude 'settings.local.json').
+	 */
+	hooks?: {
+		eventsKeyPath: string[];
+		enabledKeyPath?: string[];
+		localSettingsFile?: string;
+	};
 	/** MCP server locator (read-only: list + detail). */
 	mcps: McpLocator;
 }
@@ -167,6 +192,12 @@ export const PROFILES: Record<ToolId, ToolProfile> = {
 		// Rules: Claude Code loads ~/.claude/rules/*.md + <proj>/.claude/rules/*.md
 		// at startup. ZCode has no rules mechanism → field omitted (undefined).
 		rules: { dirName: 'rules' },
+		// Commands: ~/.claude/commands/*.md + <proj>/.claude/commands/*.md — slash commands.
+		// Agents:   ~/.claude/agents/*.md   + <proj>/.claude/agents/*.md   — subagents.
+		commands: { dirName: 'commands' },
+		agents: { dirName: 'agents' },
+		// Hooks: settings.json + settings.local.json, hooks.<Event> directly.
+		hooks: { eventsKeyPath: ['hooks'], localSettingsFile: 'settings.local.json' },
 		// MCP: user-level map lives in ~/.claude.json (home file, not under .claude/),
 		// project-level in <proj>/.mcp.json. Both keyed by top-level `mcpServers`.
 		mcps: {
@@ -208,6 +239,14 @@ export const PROFILES: Record<ToolId, ToolProfile> = {
 			supportedComponents: ['skill', 'command', 'hook', 'mcp', 'lsp'],
 		},
 		instructions: { fileName: 'AGENTS.md' },
+		// Commands: ~/.zcode/commands/*.md + <proj>/.zcode/commands/*.md — slash commands.
+		// Agents:   ~/.zcode/agents/*.md   + <proj>/.zcode/agents/*.md   — subagents.
+		// (Distinct from ~/.zcode/cli/agents/ which holds runtime session state, NOT
+		// agent definitions — the reader must use ~/.zcode/agents/ only.)
+		commands: { dirName: 'commands' },
+		agents: { dirName: 'agents' },
+		// Hooks: cli/config.json under hooks.events.<Event> + a hooks.enabled kill-switch.
+		hooks: { eventsKeyPath: ['hooks', 'events'], enabledKeyPath: ['hooks', 'enabled'] },
 		// MCP: user-level map in ~/.zcode/cli/config.json at nested `mcp.servers`,
 		// project-level in <proj>/.zcode/config.json at the same nested key.
 		mcps: {

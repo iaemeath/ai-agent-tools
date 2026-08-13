@@ -24,6 +24,11 @@ const selectedServer = ref<McpServer | null>(null);
 const detailData = ref<McpServer | null>(null);
 const detailLoading = ref(false);
 
+// Live-probed tool list (separate from the static config, loaded after the detail).
+const tools = ref<{ name: string; description?: string }[]>([]);
+const toolsLoading = ref(false);
+const toolsError = ref<string | null>(null);
+
 async function reload() {
 	errorMsg.value = null;
 	loading.value = true;
@@ -128,6 +133,9 @@ async function openDetail(s: McpServer) {
 	selectedServer.value = s;
 	detailData.value = null;
 	detailLoading.value = true;
+	tools.value = [];
+	toolsError.value = null;
+	toolsLoading.value = false;
 	try {
 		detailData.value = await api.getMcpDetail(s.name, s.scope, s.project ?? null, tool.value);
 	} catch {
@@ -135,11 +143,32 @@ async function openDetail(s: McpServer) {
 	} finally {
 		detailLoading.value = false;
 	}
+	// Lazy-load the live tool list after the detail panel renders.
+	void loadTools(s);
+}
+
+/** Probe the server for its exposed tools (best-effort; failures show inline). */
+async function loadTools(s: McpServer) {
+	tools.value = [];
+	toolsError.value = null;
+	toolsLoading.value = true;
+	try {
+		const res = await api.getMcpTools(s.name, s.scope, s.project ?? null, tool.value);
+		tools.value = res.tools;
+		toolsError.value = res.error ?? null;
+	} catch (e) {
+		toolsError.value = (e as Error).message;
+	} finally {
+		toolsLoading.value = false;
+	}
 }
 
 function closeDetail() {
 	selectedServer.value = null;
 	detailData.value = null;
+	tools.value = [];
+	toolsError.value = null;
+	toolsLoading.value = false;
 }
 
 async function openInExplorer(filePath: string) {
@@ -317,6 +346,24 @@ function headerEntries(s: McpServer | null): [string, string][] {
           <span class="detail-label">{{ t('mcp.sourceFile') }}</span>
           <span class="source-path clickable" :title="detailData.sourceFile" @click="openInExplorer(detailData.sourceFile)">{{ detailData.sourceFile }}</span>
         </div>
+
+        <!-- Exposed tools (live-probed by connecting to the server) -->
+        <div class="detail-tools">
+          <div class="detail-tools-head">
+            <span class="detail-label">{{ t('mcp.tools') }}</span>
+            <span v-if="!toolsLoading && !toolsError" class="tools-count">{{ tools.length }}</span>
+            <el-button v-if="toolsError" text size="small" @click="selectedServer && loadTools(selectedServer)">{{ t('mcp.toolsRetry') }}</el-button>
+          </div>
+          <div v-if="toolsLoading" class="tools-state">{{ t('mcp.toolsLoading') }}</div>
+          <el-alert v-else-if="toolsError" type="warning" :closable="false" :title="toolsError" class="tools-state" />
+          <div v-else-if="tools.length === 0" class="tools-state">{{ t('mcp.noTools') }}</div>
+          <ul v-else class="tools-list">
+            <li v-for="tool in tools" :key="tool.name" class="tool-item">
+              <code class="tool-name">{{ tool.name }}</code>
+              <span v-if="tool.description" class="tool-desc">{{ tool.description }}</span>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
@@ -462,6 +509,54 @@ function headerEntries(s: McpServer | null): [string, string][] {
   gap: 12px;
   padding-top: 8px;
   border-top: 1px solid var(--el-border-color-lighter);
+}
+
+/* Exposed tools section */
+.detail-tools {
+  padding-top: 8px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.detail-tools-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.tools-count {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.tools-state {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  padding: 4px 0;
+}
+.tools-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tool-item {
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.tool-name {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+.tool-desc {
+  display: block;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .source-path {
   font-size: 12px;

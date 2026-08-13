@@ -2,7 +2,7 @@
 // Mirrors the server's route table 1:1. Every method takes an optional `tool` so the
 // same UI can target multiple AI tools (claude / zcode).
 
-import type { InstructionInfo, McpServer, PluginDetail, ProjectInfo, RuleInfo, Scope, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
+import type { AgentInfo, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, ProjectInfo, RuleInfo, Scope, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
 
 async function getJson<T>(url: string): Promise<T> {
 	const res = await fetch(url);
@@ -74,10 +74,28 @@ export const api = {
 		getJson<{ path: string; raw: string }>(`/api/rules/content?path=${encodeURIComponent(filePath)}${tool && tool !== 'claude' ? `&tool=${tool}` : ''}`),
 	openRuleInExplorer: (filePath: string, tool?: ToolId) =>
 		postJson<{ ok: true }>('/api/rules/open', { path: filePath, tool }),
+	listCommands: (tool?: ToolId) =>
+		getJson<CommandInfo[]>(`/api/commands${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
+	readCommand: (filePath: string, tool?: ToolId) =>
+		getJson<{ path: string; raw: string }>(`/api/commands/content?path=${encodeURIComponent(filePath)}${tool && tool !== 'claude' ? `&tool=${tool}` : ''}`),
+	openCommandInExplorer: (filePath: string, tool?: ToolId) =>
+		postJson<{ ok: true }>('/api/commands/open', { path: filePath, tool }),
+	listAgents: (tool?: ToolId) =>
+		getJson<AgentInfo[]>(`/api/agents${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
+	readAgent: (filePath: string, tool?: ToolId) =>
+		getJson<{ path: string; raw: string }>(`/api/agents/content?path=${encodeURIComponent(filePath)}${tool && tool !== 'claude' ? `&tool=${tool}` : ''}`),
+	openAgentInExplorer: (filePath: string, tool?: ToolId) =>
+		postJson<{ ok: true }>('/api/agents/open', { path: filePath, tool }),
+	listHooks: (tool?: ToolId) =>
+		getJson<HookInfo[]>(`/api/hooks${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
+	openHookSourceInExplorer: (sourceFile: string, tool?: ToolId) =>
+		postJson<{ ok: true }>('/api/hooks/open', { sourceFile, tool }),
 	listMcps: (tool?: ToolId) =>
 		getJson<McpServer[]>(`/api/mcps${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	getMcpDetail: (name: string, scope: 'user' | 'project', project: string | null, tool?: ToolId) =>
 		getJson<McpServer>(`/api/mcps/detail?name=${encodeURIComponent(name)}&scope=${scope}${project ? `&project=${encodeURIComponent(project)}` : ''}${toolQ(tool)}`),
+	getMcpTools: (name: string, scope: 'user' | 'project', project: string | null, tool?: ToolId) =>
+		getJson<{ tools: { name: string; description?: string }[]; error?: string }>(`/api/mcps/tools?name=${encodeURIComponent(name)}&scope=${scope}${project ? `&project=${encodeURIComponent(project)}` : ''}${toolQ(tool)}`),
 	openMcpInExplorer: (sourceFile: string, tool?: ToolId) =>
 		postJson<{ ok: true }>('/api/mcps/open', { sourceFile, tool }),
 	listPluginFiles: (name: string, subpath: string, project: string | null, tool?: ToolId) =>

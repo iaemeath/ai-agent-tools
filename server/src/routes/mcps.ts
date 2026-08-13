@@ -1,9 +1,10 @@
-// MCP routes — read-only list + detail + open-in-explorer.
+// MCP routes — read-only list + detail + live tool probe + open-in-explorer.
 
 import { Hono } from 'hono';
-import { execFile } from 'node:child_process';
 import { profileOf } from '../profiles.js';
 import { listMcps } from '../mcp-reader.js';
+import { listMcpTools } from '../mcp-tools.js';
+import { revealInExplorer } from '../explorer.js';
 import type { McpServer } from '../model.js';
 
 export const mcps = new Hono();
@@ -37,9 +38,32 @@ mcps.get('/detail', (c) => {
 });
 
 /**
+ * GET /api/mcps/tools?tool=&name=&scope=&project=
+ * Live-probe one server: connect (stdio/http/sse), run the MCP handshake, and return
+ * the tools it exposes (`{name, description}`). Always responds 200 — a connection
+ * failure comes back as `{ tools: [], error: "…" }` so the UI can show it inline
+ * rather than treating it as a transport-level error.
+ */
+mcps.get('/tools', async (c) => {
+	const profile = profileOf(c.req.query('tool') ?? 'claude');
+	const name = c.req.query('name') ?? '';
+	const scope = c.req.query('scope') ?? 'user';
+	const project = c.req.query('project') ? decodeURIComponent(c.req.query('project')!) : null;
+	if (!name) return c.json({ error: 'name is required' }, 400);
+	const match = findServer(listMcps(profile), name, scope, project);
+	if (!match) return c.json({ error: 'mcp server not found' }, 404);
+	try {
+		const tools = await listMcpTools(match);
+		return c.json({ tools });
+	} catch (e) {
+		return c.json({ tools: [], error: (e as Error).message });
+	}
+});
+
+/**
  * POST /api/mcps/open — body: { sourceFile, tool }
- * Open the config file in the OS file manager, selected. Uses execFile (no shell) to
- * prevent command injection. The path must match a known MCP source file.
+ * Open the config file in the OS file manager, selected. The path must match a known
+ * MCP source file. explorer.exe is spawned via execFile (no shell) — no injection.
  */
 mcps.post('/open', async (c) => {
 	const body = await c.req.json<{ sourceFile: string; tool?: string }>();
@@ -50,19 +74,5 @@ mcps.post('/open', async (c) => {
 	if (!known.has(requested)) {
 		return c.json({ error: 'not a known MCP config file' }, 404);
 	}
-
-	return new Promise((resolve) => {
-		// explorer.exe often exits non-zero even on success; treat spawn failure (ENOENT)
-		// and stderr as real errors, everything else as success.
-		const child = execFile('explorer.exe', [`/select,${requested}`], (err, _stdout, stderr) => {
-			if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
-				resolve(c.json({ error: 'explorer.exe not found' }, 500));
-			} else if (stderr) {
-				resolve(c.json({ error: stderr }, 500));
-			} else {
-				resolve(c.json({ ok: true }));
-			}
-		});
-		child.on('error', () => resolve(c.json({ error: 'failed to spawn explorer' }, 500)));
-	});
+	return revealInExplorer(c, requested);
 });

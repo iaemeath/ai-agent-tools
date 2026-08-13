@@ -256,7 +256,8 @@ function switchTab(tab: TabKind) {
 }
 
 // ---- Draggable splitter for component-view left/right panes ----
-const compListWidth = ref(260);
+// Initial width matches the other split views: 30% of viewport, clamped [260, 40%].
+const compListWidth = ref(Math.min(window.innerWidth * 0.4, Math.max(260, window.innerWidth * 0.3)));
 const compDragging = ref(false);
 
 // Track drag origin so width changes by mouse delta, not absolute clientX
@@ -511,6 +512,9 @@ async function openInExplorer(p: ToolInstance) {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  /* Fill edge-to-edge: cancel .plugins-view's 24px side padding so the inner split
+     lines up with the other split views. Vertical position unchanged. */
+  margin: 0 -24px;
 }
 .detail-toolbar {
   display: flex;
@@ -518,6 +522,8 @@ async function openInExplorer(p: ToolInstance) {
   gap: 12px;
   margin-bottom: 12px;
   flex-shrink: 0;
+  /* Inset toolbar content since .detail-panel now spans full width. */
+  padding: 0 24px;
 }
 .detail-plugin-info {
   display: flex;
@@ -547,9 +553,10 @@ async function openInExplorer(p: ToolInstance) {
   min-height: 0;
 }
 .comp-list-pane {
-  background: var(--el-bg-color);
   overflow-y: auto;
-  padding: 6px;
+  /* 16px horizontal padding matches the card-to-sidebar distance of the other split
+     views. The pane is edge-to-edge (detail-panel cancels .plugins-view padding). */
+  padding: 8px 16px;
   display: grid;
   gap: 6px;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -584,7 +591,13 @@ async function openInExplorer(p: ToolInstance) {
   padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
+  background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-lighter);
+  /* Uniform height: cards with and without a description render the same size. */
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   transition: background 0.15s, border-color 0.15s, opacity 0.15s;
 }
 .comp-card.dragging {

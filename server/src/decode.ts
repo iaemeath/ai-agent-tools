@@ -2,8 +2,7 @@
 // then profile-aware: Claude Code encodes the absolute cwd by replacing `/` with `-`,
 // so `/home/user/my-project` → `-home-user-my-project`. On Windows the drive letter is
 // preserved as a leading single-letter token, e.g. `D:\code` → `D--code`,
-// `C:\Users\Admin` → `C--Users-Administrator`. ZCode has no such folder, so
-// allProjectPaths returns [] for it (sessions live in SQLite).
+// `C:\Users\Admin` → `C--Users-Administrator`.
 //
 // Because `-` is ambiguous (separator OR part of a real dir name), we greedily reconstruct
 // by walking the real filesystem, matching the longest possible directory-name prefix at
@@ -11,8 +10,6 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { projectsDir } from './paths.js';
-import { DEFAULT_PROFILE, type ToolProfile } from './profiles.js';
 
 export function decodeProjectFolder(name: string): string {
 	if (name === '') return name;
@@ -71,32 +68,4 @@ export function decodeProjectFolder(name: string): string {
 		}
 	}
 	return resolved;
-}
-
-/**
- * All known project filesystem paths (decoded from the tool's session-history folder names).
- * Only paths that successfully decode to a real path (path !== encoded) are returned.
- * Used by the skill scanner to discover project-scoped skills across all projects.
- *
- * Returns [] when the tool has no session-history dir (ZCode) — project discovery for
- * such tools needs a different mechanism (TODO).
- */
-export function allProjectPaths(p: ToolProfile = DEFAULT_PROFILE): string[] {
-	// Only the fs + dash-encoding source is walkable here. SQLite tools (ZCode) discover
-	// projects through their DB; project-scoped skill scanning is Claude-only for now.
-	const loc = p.projects;
-	if (loc.source !== 'fs' || loc.encoding !== 'dash') return [];
-
-	const dir = projectsDir(p);
-	if (!dir || !fs.existsSync(dir)) return [];
-	const out: string[] = [];
-	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-		if (!entry.isDirectory()) continue;
-		const encoded = entry.name;
-		const decoded = decodeProjectFolder(encoded);
-		if (decoded !== '' && decoded !== encoded) {
-			out.push(decoded);
-		}
-	}
-	return out;
 }

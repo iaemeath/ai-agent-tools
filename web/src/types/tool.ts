@@ -79,6 +79,39 @@ export interface RuleInfo {
 	project?: string | null;
 }
 
+export interface CommandInfo {
+	scope: 'global' | 'project';
+	path: string;
+	name: string;
+	description?: string;
+	lineCount: number;
+	project?: string | null;
+}
+
+export interface AgentInfo {
+	scope: 'global' | 'project';
+	path: string;
+	name: string;
+	description?: string;
+	lineCount: number;
+	project?: string | null;
+}
+
+/** One hook entry, flattened from the nested hooks config tree (mirrors server HookInfo). */
+export interface HookInfo {
+	id: string;
+	scope: 'global' | 'project';
+	sourceFile: string;
+	event: string;
+	matcher: string;
+	command: string;
+	type: string;
+	timeout?: number;
+	statusMessage?: string;
+	enabled: boolean;
+	project?: string | null;
+}
+
 /** One MCP server entry (read-only view model, mirrors server McpServer). */
 export interface McpServer {
 	name: string;

@@ -1,15 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 
-// Placeholder routes share one view, distinguished by the `kind` param for display.
-const PLACEHOLDER: RouteRecordRaw[] = [
-	'/agents', '/commands', '/hooks',
-].map((p) => ({
-	path: p,
-	name: p.slice(1),
-	component: () => import('../views/PlaceholderView.vue'),
-	props: { kind: p.slice(1) },
-}));
-
 const routes: RouteRecordRaw[] = [
 	{ path: '/', redirect: '/plugins' },
 	{ path: '/plugins', name: 'plugins', component: () => import('../views/PluginsView.vue') },
@@ -17,9 +7,11 @@ const routes: RouteRecordRaw[] = [
 	{ path: '/instructions', name: 'instructions', component: () => import('../views/InstructionsView.vue') },
 	{ path: '/rules', name: 'rules', component: () => import('../views/RulesView.vue') },
 	{ path: '/projects', name: 'projects', component: () => import('../views/ProjectsView.vue') },
+	{ path: '/commands', name: 'commands', component: () => import('../views/CommandsView.vue') },
+	{ path: '/agents', name: 'agents', component: () => import('../views/AgentsView.vue') },
+	{ path: '/hooks', name: 'hooks', component: () => import('../views/HooksView.vue') },
 	{ path: '/mcps', name: 'mcps', component: () => import('../views/MCPsView.vue') },
 	{ path: '/settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
-	...PLACEHOLDER,
 ];
 
 export const router = createRouter({

@@ -106,6 +106,47 @@ export interface RuleInfo {
 	project?: string | null;
 }
 
+/** One command file entry (global or project-level). Same shape as RuleInfo. */
+export interface CommandInfo {
+	scope: 'global' | 'project';
+	path: string;
+	name: string;
+	description?: string;
+	lineCount: number;
+	project?: string | null;
+}
+
+/** One agent (subagent) file entry (global or project-level). Same shape as RuleInfo. */
+export interface AgentInfo {
+	scope: 'global' | 'project';
+	path: string;
+	name: string;
+	description?: string;
+	lineCount: number;
+	project?: string | null;
+}
+
+/**
+ * One hook entry, flattened from the nested hooks config tree. Hooks are NOT files —
+ * they live as nested JSON inside settings; identity is positional. `id` is a stable
+ * composite for drag (UI preference only). Schema differences between tools (Claude
+ * hooks.<Event> + settings.local.json; ZCode hooks.events.<Event> + hooks.enabled)
+ * are normalized away by the reader.
+ */
+export interface HookInfo {
+	id: string;
+	scope: 'global' | 'project';
+	sourceFile: string;
+	event: string;
+	matcher: string;
+	command: string;
+	type: string;
+	timeout?: number;
+	statusMessage?: string;
+	enabled: boolean;
+	project?: string | null;
+}
+
 /**
  * One MCP server entry, normalized across Claude Code / ZCode (read-only view model).
  * User-level servers come from the tool's user config file; project-level from a

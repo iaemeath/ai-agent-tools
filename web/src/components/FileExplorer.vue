@@ -122,21 +122,28 @@ watch(
 const isMarkdown = computed(() => fileExt.value === '.md');
 
 // ---- Draggable splitter ----
-const leftWidth = ref(280);
+// Initial width matches the other split views: 30% of viewport, clamped [260, 40%].
+// Delta mode: resize by mouse DELTA, not absolute clientX (which includes the sidebar
+// width and causes a rightward jump on grab).
+const leftWidth = ref(Math.min(window.innerWidth * 0.4, Math.max(260, window.innerWidth * 0.3)));
 const dragging = ref(false);
 
+let dragStartX = 0;
+let dragStartWidth = 0;
 function startDrag(e: MouseEvent) {
-	e.preventDefault();
-	dragging.value = true;
+  e.preventDefault();
+  dragging.value = true;
+  dragStartX = e.clientX;
+  dragStartWidth = leftWidth.value;
 }
 function onDrag(e: MouseEvent) {
-	if (!dragging.value) return;
-	const min = 180;
-	const max = window.innerWidth * 0.6;
-	leftWidth.value = Math.min(max, Math.max(min, e.clientX));
+  if (!dragging.value) return;
+  const min = 180;
+  const max = window.innerWidth * 0.6;
+  leftWidth.value = Math.min(max, Math.max(min, dragStartWidth + (e.clientX - dragStartX)));
 }
 function stopDrag() {
-	dragging.value = false;
+  dragging.value = false;
 }
 
 onMounted(() => {
@@ -211,7 +218,6 @@ onUnmounted(() => {
   border: 1px solid var(--el-border-color-lighter);
 }
 .fe-left {
-  background: var(--el-bg-color);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -240,7 +246,6 @@ onUnmounted(() => {
 }
 .fe-right {
   flex: 1;
-  background: var(--el-bg-color);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -327,7 +332,6 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 500;
   font-family: 'Consolas', 'Monaco', monospace;
-  background: var(--el-fill-color-blank);
 }
 .fe-content-body {
   flex: 1;
