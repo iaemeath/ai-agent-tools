@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import { profileOf } from '../profiles.js';
 import { listCommands, readCommand } from '../commands-reader.js';
+import { writeText } from '../settings.js';
 import { revealInExplorer } from '../explorer.js';
 
 export const commands = new Hono();
@@ -42,4 +43,20 @@ commands.post('/open', async (c) => {
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a command file' }, 404);
 	return revealInExplorer(c, match);
+});
+
+/** POST /api/commands/save — body: { path, content, tool? }. Whitelist + .bak backup (same as instructions). */
+commands.post('/save', async (c) => {
+	const body = await c.req.json<{ path: string; content: string; tool?: string }>();
+	const profile = profileOf(body.tool ?? 'claude');
+	const decoded = decodeURIComponent(body.path ?? '');
+	const known = listCommands(profile).map((r) => r.path);
+	const match = known.find((p) => normPath(p) === normPath(decoded));
+	if (!match) return c.json({ error: 'file not found or not a command file' }, 404);
+	try {
+		writeText(match, body.content ?? '');
+	} catch (e) {
+		return c.json({ error: (e as Error).message }, 500);
+	}
+	return c.json({ ok: true, path: match });
 });

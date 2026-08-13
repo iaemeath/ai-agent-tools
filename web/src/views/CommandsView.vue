@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { FolderOpened } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import { FolderOpened, EditPen } from '@element-plus/icons-vue';
 import { api } from '../api';
 import { useTool } from '../stores/tool';
 import { useDragOrder } from '../composables/useDragOrder';
@@ -18,6 +19,11 @@ const loading = ref(true);
 const selected = ref<CommandInfo | null>(null);
 const raw = ref('');
 const contentLoading = ref(false);
+
+// Edit mode (view ↔ edit).
+const editing = ref(false);
+const editRaw = ref('');
+const saving = ref(false);
 
 // Resizable splitter: left pane width in px.
 const leftWidth = ref(0);
@@ -46,6 +52,7 @@ async function reload() {
 }
 
 async function selectCommand(r: CommandInfo) {
+	editing.value = false;
 	selected.value = r;
 	raw.value = '';
 	contentLoading.value = true;
@@ -64,6 +71,31 @@ async function openInExplorer(path: string) {
 		await api.openCommandInExplorer(path, tool.value);
 	} catch {
 		// best-effort — file manager open is non-critical
+	}
+}
+
+// ---- Edit mode ----
+const dirty = computed(() => editRaw.value !== raw.value);
+function startEdit() {
+	editRaw.value = raw.value;
+	editing.value = true;
+}
+function cancelEdit() {
+	editing.value = false;
+}
+async function save() {
+	const r = selected.value;
+	if (!r) return;
+	saving.value = true;
+	try {
+		await api.saveCommand(r.path, editRaw.value, tool.value);
+		raw.value = editRaw.value;
+		editing.value = false;
+		ElMessage.success(t('command.saved'));
+	} catch (e) {
+		ElMessage.error((e as Error).message);
+	} finally {
+		saving.value = false;
 	}
 }
 
@@ -211,14 +243,25 @@ function stopDrag() {
             <div class="pane-header-row">
               <span class="pane-title">{{ selected.name }}</span>
               <span class="pane-meta">{{ selected.lineCount }} {{ t('command.lines') }}</span>
-              <el-button text :icon="FolderOpened" size="small" class="open-btn" @click="openInExplorer(selected.path)">
-                {{ t('command.openInExplorer') }}
-              </el-button>
+              <div class="header-actions">
+                <template v-if="editing">
+                  <span v-if="dirty" class="dirty-hint">{{ t('command.unsaved') }}</span>
+                  <el-button size="small" @click="cancelEdit">{{ t('command.cancel') }}</el-button>
+                  <el-button size="small" type="primary" :loading="saving" @click="save">{{ t('command.save') }}</el-button>
+                </template>
+                <el-button v-else size="small" :icon="EditPen" @click="startEdit">{{ t('command.edit') }}</el-button>
+                <el-button text :icon="FolderOpened" size="small" @click="openInExplorer(selected.path)">
+                  {{ t('command.openInExplorer') }}
+                </el-button>
+              </div>
             </div>
             <div class="pane-path clickable" :title="selected.path" @click="openInExplorer(selected.path)">{{ selected.path }}</div>
           </div>
           <div class="pane-body">
             <div v-if="contentLoading" class="state">{{ t('common.loading') }}</div>
+            <div v-else-if="editing" class="edit-mode">
+              <el-input type="textarea" v-model="editRaw" class="md-textarea" resize="none" />
+            </div>
             <MarkdownView v-else :raw="raw" />
           </div>
         </template>
@@ -405,6 +448,34 @@ function stopDrag() {
 }
 .splitter:hover .splitter-handle,
 .splitter.active .splitter-handle {
-  background: var(--el-color-primary);
+	background: var(--el-color-primary);
+}
+
+/* ---- Edit mode ---- */
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.edit-mode {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.dirty-hint {
+  font-size: 12px;
+  color: var(--el-color-warning);
+}
+.md-textarea {
+  flex: 1;
+  min-height: 0;
+}
+.md-textarea :deep(.el-textarea__inner) {
+  height: 100%;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
 }
 </style>

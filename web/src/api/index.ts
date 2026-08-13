@@ -74,18 +74,24 @@ export const api = {
 		getJson<RuleInfo[]>(`/api/rules${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	readRule: (filePath: string, tool?: ToolId) =>
 		getJson<{ path: string; raw: string }>(`/api/rules/content?path=${encodeURIComponent(filePath)}${tool && tool !== 'claude' ? `&tool=${tool}` : ''}`),
+	saveRule: (filePath: string, content: string, tool?: ToolId) =>
+		postJson<{ ok: true; path: string }>('/api/rules/save', { path: filePath, content, tool }),
 	openRuleInExplorer: (filePath: string, tool?: ToolId) =>
 		postJson<{ ok: true }>('/api/rules/open', { path: filePath, tool }),
 	listCommands: (tool?: ToolId) =>
 		getJson<CommandInfo[]>(`/api/commands${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	readCommand: (filePath: string, tool?: ToolId) =>
 		getJson<{ path: string; raw: string }>(`/api/commands/content?path=${encodeURIComponent(filePath)}${tool && tool !== 'claude' ? `&tool=${tool}` : ''}`),
+	saveCommand: (filePath: string, content: string, tool?: ToolId) =>
+		postJson<{ ok: true; path: string }>('/api/commands/save', { path: filePath, content, tool }),
 	openCommandInExplorer: (filePath: string, tool?: ToolId) =>
 		postJson<{ ok: true }>('/api/commands/open', { path: filePath, tool }),
 	listAgents: (tool?: ToolId) =>
 		getJson<AgentInfo[]>(`/api/agents${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	readAgent: (filePath: string, tool?: ToolId) =>
 		getJson<{ path: string; raw: string }>(`/api/agents/content?path=${encodeURIComponent(filePath)}${tool && tool !== 'claude' ? `&tool=${tool}` : ''}`),
+	saveAgent: (filePath: string, content: string, tool?: ToolId) =>
+		postJson<{ ok: true; path: string }>('/api/agents/save', { path: filePath, content, tool }),
 	openAgentInExplorer: (filePath: string, tool?: ToolId) =>
 		postJson<{ ok: true }>('/api/agents/open', { path: filePath, tool }),
 	listHooks: (tool?: ToolId) =>

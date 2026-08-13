@@ -214,17 +214,20 @@ function stopDrag() {
           <div class="pane-header-row">
             <span class="pane-title">🌐 {{ globalItem ? basename(globalItem.path) : t('instruction.groupGlobal') }}</span>
             <span v-if="globalItem" class="pane-meta">{{ globalItem.lineCount }} {{ t('instruction.lines') }}</span>
+            <div v-if="globalItem && !globalLoading" class="header-actions">
+              <template v-if="globalEditing">
+                <span v-if="globalDirty" class="dirty-hint">{{ t('instruction.unsaved') }}</span>
+                <el-button size="small" @click="cancelEditGlobal">{{ t('instruction.cancel') }}</el-button>
+                <el-button size="small" type="primary" :loading="saving" @click="saveGlobal">{{ t('instruction.save') }}</el-button>
+              </template>
+              <el-button v-else size="small" :icon="EditPen" @click="startEditGlobal">{{ t('instruction.edit') }}</el-button>
+            </div>
           </div>
           <div v-if="globalItem" class="pane-path clickable" :title="globalItem.path" @click="openInExplorer(globalItem.path)">{{ globalItem.path }}</div>
         </div>
         <div class="pane-body">
           <div v-if="globalLoading" class="state">{{ t('common.loading') }}</div>
           <div v-else-if="globalEditing" class="edit-mode">
-            <div class="edit-actions">
-              <el-button size="small" type="primary" :loading="saving" @click="saveGlobal">{{ t('instruction.save') }}</el-button>
-              <el-button size="small" @click="cancelEditGlobal">{{ t('instruction.cancel') }}</el-button>
-              <span v-if="globalDirty" class="dirty-hint">{{ t('instruction.unsaved') }}</span>
-            </div>
             <el-input
               type="textarea"
               v-model="globalEditRaw"
@@ -232,12 +235,7 @@ function stopDrag() {
               resize="none"
             />
           </div>
-          <div v-else class="view-mode">
-            <div class="edit-bar">
-              <el-button size="small" :icon="EditPen" @click="startEditGlobal">{{ t('instruction.edit') }}</el-button>
-            </div>
-            <MarkdownView :raw="globalRaw" />
-          </div>
+          <MarkdownView v-else :raw="globalRaw" />
         </div>
       </div>
 
@@ -288,17 +286,20 @@ function stopDrag() {
               <el-button text :icon="ArrowLeft" @click="closeProject">{{ t('instruction.backToList') }}</el-button>
               <span class="pane-title">📁 {{ projectBasename(selectedProject) }}</span>
               <span class="pane-meta">{{ selectedProject.lineCount }} {{ t('instruction.lines') }}</span>
+              <div v-if="!projectLoading" class="header-actions">
+                <template v-if="projectEditing">
+                  <span v-if="projectDirty" class="dirty-hint">{{ t('instruction.unsaved') }}</span>
+                  <el-button size="small" @click="cancelEditProject">{{ t('instruction.cancel') }}</el-button>
+                  <el-button size="small" type="primary" :loading="saving" @click="saveProject">{{ t('instruction.save') }}</el-button>
+                </template>
+                <el-button v-else size="small" :icon="EditPen" @click="startEditProject">{{ t('instruction.edit') }}</el-button>
+              </div>
             </div>
             <div class="pane-path clickable" :title="selectedProject.path" @click="openInExplorer(selectedProject.path)">{{ selectedProject.path }}</div>
           </div>
           <div class="pane-body">
             <div v-if="projectLoading" class="state">{{ t('common.loading') }}</div>
             <div v-else-if="projectEditing" class="edit-mode">
-              <div class="edit-actions">
-                <el-button size="small" type="primary" :loading="saving" @click="saveProject">{{ t('instruction.save') }}</el-button>
-                <el-button size="small" @click="cancelEditProject">{{ t('instruction.cancel') }}</el-button>
-                <span v-if="projectDirty" class="dirty-hint">{{ t('instruction.unsaved') }}</span>
-              </div>
               <el-input
                 type="textarea"
                 v-model="projectEditRaw"
@@ -306,12 +307,7 @@ function stopDrag() {
                 resize="none"
               />
             </div>
-            <div v-else class="view-mode">
-              <div class="edit-bar">
-                <el-button size="small" :icon="EditPen" @click="startEditProject">{{ t('instruction.edit') }}</el-button>
-              </div>
-              <MarkdownView :raw="projectRaw" />
-            </div>
+            <MarkdownView v-else :raw="projectRaw" />
           </div>
         </template>
       </div>
@@ -462,16 +458,11 @@ function stopDrag() {
 }
 
 /* ---- Edit mode ---- */
-.edit-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-.edit-actions {
+.header-actions {
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-bottom: 8px;
 }
 .dirty-hint {
   font-size: 12px;
