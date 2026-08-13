@@ -4,9 +4,9 @@
 // so an attacker-supplied path can never read/open a file outside the rules dirs.
 
 import { Hono } from 'hono';
-import { execFile } from 'node:child_process';
 import { profileOf } from '../profiles.js';
 import { listRules, readRule } from '../rules-reader.js';
+import { revealInExplorer } from '../explorer.js';
 
 export const rules = new Hono();
 
@@ -41,17 +41,5 @@ rules.post('/open', async (c) => {
 	const known = listRules(profile).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a rule file' }, 404);
-
-	return new Promise((resolve) => {
-		const child = execFile('explorer.exe', [`/select,${match}`], (err, _stdout, stderr) => {
-			if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
-				resolve(c.json({ error: 'explorer.exe not found' }, 500));
-			} else if (stderr) {
-				resolve(c.json({ error: stderr }, 500));
-			} else {
-				resolve(c.json({ ok: true }));
-			}
-		});
-		child.on('error', () => resolve(c.json({ error: 'failed to spawn explorer' }, 500)));
-	});
+	return revealInExplorer(c, match);
 });

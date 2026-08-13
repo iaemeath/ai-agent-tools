@@ -1,9 +1,9 @@
 // Instruction routes — read-only list + content + open-in-explorer.
 
 import { Hono } from 'hono';
-import { execFile } from 'node:child_process';
 import { profileOf } from '../profiles.js';
 import { listInstructions, readInstruction } from '../instructions-reader.js';
+import { revealInExplorer } from '../explorer.js';
 
 export const instructions = new Hono();
 
@@ -51,22 +51,5 @@ instructions.post('/open', async (c) => {
 	const known = listInstructions(profile).map((i) => i.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not an instruction file' }, 404);
-
-	return new Promise((resolve) => {
-		// explorer.exe often exits with code 1 even on success, so we treat the absence
-		// of a spawn error (ENOENT etc.) as success. execFile bypasses the shell — the path
-		// is passed as an arg, not interpolated into a command string (no injection).
-		const child = execFile('explorer.exe', [`/select,${match}`], (err, _stdout, stderr) => {
-			// Only real spawn failures (e.g. explorer.exe missing) surface as err with code ENOENT.
-			if (err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
-				resolve(c.json({ error: 'explorer.exe not found' }, 500));
-			} else if (stderr) {
-				resolve(c.json({ error: stderr }, 500));
-			} else {
-				resolve(c.json({ ok: true }));
-			}
-		});
-		// Guard: if child failed to spawn at all, resolve immediately.
-		child.on('error', () => resolve(c.json({ error: 'failed to spawn explorer' }, 500)));
-	});
+	return revealInExplorer(c, match);
 });
