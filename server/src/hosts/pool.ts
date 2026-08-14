@@ -63,10 +63,31 @@ async function buildAuth(rec: HostRecord): Promise<{ password?: string; privateK
 	return auth;
 }
 
+/**
+ * Drop+close any pooled session whose client is this one. ssh2 emits 'error' asynchronously
+ * at any time (keepalive failure, remote reset); this keeps the pool from handing out a dead
+ * session, so the next request reconnects instead of failing on a half-closed socket.
+ */
+function evictByClient(client: Client): void {
+	for (const entry of pool.values()) {
+		if (entry.session?.client === client) {
+			entry.session.close();
+			entry.session = null;
+		}
+	}
+}
+
 /** Open a brand-new SSH+SFTP session and resolve the remote $HOME. Throws on failure. */
 async function openSession(rec: HostRecord): Promise<SshSession> {
 	const auth = await buildAuth(rec);
 	const client = new Client();
+	// ssh2 emits 'error' throughout a Client's life — during connect, on keepalive failure,
+	// or when the remote drops the socket (ECONNRESET). A one-shot listener only catches the
+	// first event; any later 'error' has no listener and Node treats an unhandled 'error'
+	// event as fatal → it crashes the whole server. Attach a PERMANENT sink that evicts the
+	// dead session on post-connect failures (connect-phase rejection is still handled by the
+	// transient once('error') below). This must stay attached for the client's whole lifetime.
+	client.on('error', () => evictByClient(client));
 	await new Promise<void>((resolve, reject) => {
 		client.once('ready', () => resolve());
 		client.once('error', (err: Error) => reject(err));
