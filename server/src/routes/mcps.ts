@@ -5,6 +5,8 @@ import { profileOf } from '../profiles.js';
 import { listMcps } from '../mcp-reader.js';
 import { listMcpTools } from '../mcp-tools.js';
 import { revealInExplorer } from '../explorer.js';
+import { getHostCtx } from '../hosts/context.js';
+import { sendRemote } from '../remote/runner.js';
 import type { McpServer } from '../model.js';
 
 export const mcps = new Hono();
@@ -18,8 +20,11 @@ function findServer(all: McpServer[], name: string, scope: string, project: stri
 
 /** GET /api/mcps?tool= — list all MCP servers (user-level + project-level). */
 mcps.get('/', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(await listMcps(profile));
+	const tool = c.req.query('tool') ?? 'claude';
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'mcps.list', { tool });
+	}
+	return c.json(await listMcps(profileOf(tool)));
 });
 
 /**
@@ -27,12 +32,15 @@ mcps.get('/', async (c) => {
  * Return the full config of one server. `project` is required for project-scoped servers.
  */
 mcps.get('/detail', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
+	const tool = c.req.query('tool') ?? 'claude';
 	const name = c.req.query('name') ?? '';
 	const scope = c.req.query('scope') ?? 'user';
 	const project = c.req.query('project') ? decodeURIComponent(c.req.query('project')!) : null;
 	if (!name) return c.json({ error: 'name is required' }, 400);
-	const match = findServer(await listMcps(profile), name, scope, project);
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'mcps.detail', { name, scope, project, tool });
+	}
+	const match = findServer(await listMcps(profileOf(tool)), name, scope, project);
 	if (!match) return c.json({ error: 'mcp server not found' }, 404);
 	return c.json(match);
 });
@@ -42,15 +50,19 @@ mcps.get('/detail', async (c) => {
  * Live-probe one server: connect (stdio/http/sse), run the MCP handshake, and return
  * the tools it exposes (`{name, description}`). Always responds 200 — a connection
  * failure comes back as `{ tools: [], error: "…" }` so the UI can show it inline
- * rather than treating it as a transport-level error.
+ * rather than treating it as a transport-level error. On a remote host the probe runs
+ * THERE (spawn/fetch originate from the remote — semantically what the remote tool sees).
  */
 mcps.get('/tools', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
+	const tool = c.req.query('tool') ?? 'claude';
 	const name = c.req.query('name') ?? '';
 	const scope = c.req.query('scope') ?? 'user';
 	const project = c.req.query('project') ? decodeURIComponent(c.req.query('project')!) : null;
 	if (!name) return c.json({ error: 'name is required' }, 400);
-	const match = findServer(await listMcps(profile), name, scope, project);
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'mcps.tools', { name, scope, project, tool });
+	}
+	const match = findServer(await listMcps(profileOf(tool)), name, scope, project);
 	if (!match) return c.json({ error: 'mcp server not found' }, 404);
 	try {
 		const tools = await listMcpTools(match);

@@ -7,7 +7,8 @@ import path from 'node:path';
 import { registry } from '../adapters/types.js';
 import { profileOf } from '../profiles.js';
 import { revealInExplorer } from '../explorer.js';
-import { getFs } from '../hosts/context.js';
+import { getFs, getHostCtx } from '../hosts/context.js';
+import { sendRemote } from '../remote/runner.js';
 import type { StatResult } from '../fs-backend/types.js';
 import type { PluginDetail } from '../model.js';
 
@@ -46,7 +47,11 @@ plugins.get('/:name/detail', async (c) => {
 	const name = decodeURIComponent(c.req.param('name'));
 	const projectRaw = c.req.query('project');
 	const project = !projectRaw || projectRaw === 'null' ? null : projectRaw;
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
+	const tool = c.req.query('tool') ?? 'claude';
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'plugins.detail', { name, project, tool });
+	}
+	const profile = profileOf(tool);
 	const adapter = registry(profile).find((a) => a.kind === 'plugin');
 	if (!adapter) return c.json({ error: 'plugin adapter not registered' }, 500);
 	// The adapter is typed as ToolAdapter; cast to access detail().
@@ -114,7 +119,11 @@ plugins.get('/:name/files', async (c) => {
 	const name = decodeURIComponent(c.req.param('name'));
 	const projectRaw = c.req.query('project');
 	const project = !projectRaw || projectRaw === 'null' ? null : projectRaw;
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
+	const tool = c.req.query('tool') ?? 'claude';
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'plugins.files', { name, subpath: c.req.query('subpath'), project, tool });
+	}
+	const profile = profileOf(tool);
 	const resolved = await resolveSafePath(name, c.req.query('subpath'), project, profile);
 	if (!resolved) return c.json({ error: 'plugin not found or path outside install dir' }, 403);
 
@@ -153,7 +162,11 @@ plugins.get('/:name/file-content', async (c) => {
 	const name = decodeURIComponent(c.req.param('name'));
 	const projectRaw = c.req.query('project');
 	const project = !projectRaw || projectRaw === 'null' ? null : projectRaw;
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
+	const tool = c.req.query('tool') ?? 'claude';
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'plugins.fileContent', { name, subpath: c.req.query('subpath'), project, tool });
+	}
+	const profile = profileOf(tool);
 	const resolved = await resolveSafePath(name, c.req.query('subpath'), project, profile);
 	if (!resolved) return c.json({ error: 'plugin not found or path outside install dir' }, 403);
 

@@ -8,6 +8,8 @@ import { profileOf } from '../profiles.js';
 import { listRules, readRule } from '../rules-reader.js';
 import { writeText } from '../settings.js';
 import { revealInExplorer } from '../explorer.js';
+import { getHostCtx } from '../hosts/context.js';
+import { sendRemote } from '../remote/runner.js';
 
 export const rules = new Hono();
 
@@ -17,15 +19,21 @@ function normPath(p: string): string {
 
 /** GET /api/rules?tool= — list global + project rule files. */
 rules.get('/', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(await listRules(profile));
+	const tool = c.req.query('tool') ?? 'claude';
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.list', { resource: 'rules', tool });
+	}
+	return c.json(await listRules(profileOf(tool)));
 });
 
 /** GET /api/rules/content?path=<encoded>&tool= */
 rules.get('/content', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	const requested = c.req.query('path') ?? '';
-	const decoded = decodeURIComponent(requested);
+	const tool = c.req.query('tool') ?? 'claude';
+	const decoded = decodeURIComponent(c.req.query('path') ?? '');
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.content', { resource: 'rules', path: decoded, tool });
+	}
+	const profile = profileOf(tool);
 	const known = (await listRules(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a rule file' }, 404);
@@ -48,8 +56,12 @@ rules.post('/open', async (c) => {
 /** POST /api/rules/save — body: { path, content, tool? }. Whitelist + .bak backup (same as instructions). */
 rules.post('/save', async (c) => {
 	const body = await c.req.json<{ path: string; content: string; tool?: string }>();
-	const profile = profileOf(body.tool ?? 'claude');
+	const tool = body.tool ?? 'claude';
 	const decoded = decodeURIComponent(body.path ?? '');
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.save', { resource: 'rules', path: decoded, content: body.content ?? '', tool });
+	}
+	const profile = profileOf(tool);
 	const known = (await listRules(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a rule file' }, 404);

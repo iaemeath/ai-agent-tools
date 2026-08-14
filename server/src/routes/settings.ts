@@ -7,6 +7,8 @@
 import { Hono } from 'hono';
 import { readUser } from '../settings.js';
 import { profileOf } from '../profiles.js';
+import { getHostCtx } from '../hosts/context.js';
+import { execRemote } from '../remote/runner.js';
 
 export const settings = new Hono();
 
@@ -44,8 +46,20 @@ function maskSecrets(obj: unknown): unknown {
  * mcp/mcpServers shown in MCPsView). Returns {} if the file doesn't exist.
  */
 settings.get('/', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	const raw = (await readUser(profile)) as Record<string, unknown>;
+	const tool = c.req.query('tool') ?? 'claude';
+	// Remote: fetch the RAW user settings from the remote host (one exec), then apply the
+	// exact same filter+mask locally — secrets are masked before anything reaches the browser.
+	let raw: Record<string, unknown>;
+	if (getHostCtx().isRemote) {
+		try {
+			const r = await execRemote(getHostCtx().hostId, 'settings.user', { tool });
+			raw = (r.status === 200 ? r.body : {}) as Record<string, unknown>;
+		} catch {
+			return c.json({ error: 'remote settings read failed' }, 502);
+		}
+	} else {
+		raw = (await readUser(profileOf(tool))) as Record<string, unknown>;
+	}
 	if (!raw || typeof raw !== 'object') return c.json({});
 
 	// Keys already managed by dedicated pages — don't duplicate them here.

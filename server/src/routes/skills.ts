@@ -5,7 +5,8 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { globalSkillsDir, projectSkillsDir } from '../paths.js';
 import { profileOf } from '../profiles.js';
-import { getFs } from '../hosts/context.js';
+import { getFs, getHostCtx } from '../hosts/context.js';
+import { sendRemote } from '../remote/runner.js';
 import type { StatResult } from '../fs-backend/types.js';
 
 export const skills = new Hono();
@@ -28,8 +29,11 @@ async function tryStat(p: string): Promise<StatResult | null> {
 /** POST /api/skills/promote — body: { name, project, tool? }. */
 skills.post('/promote', async (c) => {
 	const { name, project, tool } = await c.req.json<{ name: string; project: string; tool?: string }>();
-	const profile = profileOf(tool ?? 'claude');
 	if (!isValidName(name)) return c.json({ error: 'invalid skill name' }, 400);
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'skills.promote', { name, project, tool });
+	}
+	const profile = profileOf(tool ?? 'claude');
 
 	const src = path.join(projectSkillsDir(project, profile), name);
 	const dst = path.join(globalSkillsDir(profile), name);
@@ -73,8 +77,11 @@ skills.post('/promote', async (c) => {
 skills.post('/delete', async (c) => {
 	const body = await c.req.json<{ name: string; scope: 'user' | 'project'; project?: string; tool?: string }>();
 	const { name, scope, project } = body;
-	const profile = profileOf(body.tool ?? 'claude');
 	if (!isValidName(name)) return c.json({ error: 'invalid skill name' }, 400);
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'skills.delete', body);
+	}
+	const profile = profileOf(body.tool ?? 'claude');
 
 	const isProject = scope === 'project';
 	if (isProject && !project) return c.json({ error: 'project required for project scope' }, 400);
@@ -146,7 +153,11 @@ skills.get('/:name/files', async (c) => {
 	const name = decodeURIComponent(c.req.param('name'));
 	const scope = (c.req.query('scope') ?? 'user') as 'user' | 'project';
 	const project = c.req.query('project') ? decodeURIComponent(c.req.query('project')!) : null;
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
+	const tool = c.req.query('tool') ?? 'claude';
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'skills.files', { name, scope, project, subpath: c.req.query('subpath'), tool });
+	}
+	const profile = profileOf(tool);
 	const skillDir = await resolveSkillDir(name, scope, project, profile);
 	if (!skillDir) return c.json({ error: 'skill not found' }, 404);
 	const abs = resolveSkillPath(skillDir, c.req.query('subpath'));
@@ -179,7 +190,11 @@ skills.get('/:name/file-content', async (c) => {
 	const name = decodeURIComponent(c.req.param('name'));
 	const scope = (c.req.query('scope') ?? 'user') as 'user' | 'project';
 	const project = c.req.query('project') ? decodeURIComponent(c.req.query('project')!) : null;
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
+	const tool = c.req.query('tool') ?? 'claude';
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'skills.fileContent', { name, scope, project, subpath: c.req.query('subpath'), tool });
+	}
+	const profile = profileOf(tool);
 	const skillDir = await resolveSkillDir(name, scope, project, profile);
 	if (!skillDir) return c.json({ error: 'skill not found' }, 404);
 	const abs = resolveSkillPath(skillDir, c.req.query('subpath'));

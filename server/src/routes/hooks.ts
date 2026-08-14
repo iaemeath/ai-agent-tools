@@ -11,6 +11,8 @@ import { Hono } from 'hono';
 import { profileOf } from '../profiles.js';
 import { listHooks } from '../hooks-reader.js';
 import { revealInExplorer } from '../explorer.js';
+import { getHostCtx } from '../hosts/context.js';
+import { sendRemote } from '../remote/runner.js';
 
 export const hooks = new Hono();
 
@@ -20,8 +22,11 @@ function normPath(p: string): string {
 
 /** GET /api/hooks?tool= — list all hooks (global + project), flattened. */
 hooks.get('/', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(await listHooks(profile));
+	const tool = c.req.query('tool') ?? 'claude';
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'hooks.list', { tool });
+	}
+	return c.json(await listHooks(profileOf(tool)));
 });
 
 /** POST /api/hooks/open — body: { sourceFile, tool } — reveal the settings file. */

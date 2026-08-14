@@ -5,6 +5,8 @@ import { profileOf } from '../profiles.js';
 import { listInstructions, readInstruction } from '../instructions-reader.js';
 import { writeText } from '../settings.js';
 import { revealInExplorer } from '../explorer.js';
+import { getHostCtx } from '../hosts/context.js';
+import { sendRemote } from '../remote/runner.js';
 
 export const instructions = new Hono();
 
@@ -15,8 +17,11 @@ function normPath(p: string): string {
 
 /** GET /api/instructions?tool= — list global + project instruction files. */
 instructions.get('/', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(await listInstructions(profile));
+	const tool = c.req.query('tool') ?? 'claude';
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.list', { resource: 'instructions', tool });
+	}
+	return c.json(await listInstructions(profileOf(tool)));
 });
 
 /**
@@ -25,10 +30,12 @@ instructions.get('/', async (c) => {
  * by listInstructions for this tool (defense against arbitrary file reads).
  */
 instructions.get('/content', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	const requested = c.req.query('path') ?? '';
-	// Allow the path to be encoded (encodeURIComponent on the client side).
-	const decoded = decodeURIComponent(requested);
+	const tool = c.req.query('tool') ?? 'claude';
+	const decoded = decodeURIComponent(c.req.query('path') ?? '');
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.content', { resource: 'instructions', path: decoded, tool });
+	}
+	const profile = profileOf(tool);
 	// Validate: the requested path must be one of the known instruction files.
 	// Compare with normalized separators (front-slash vs back-slash on Windows).
 	const known = (await listInstructions(profile)).map((i) => i.path);
@@ -64,8 +71,12 @@ instructions.post('/open', async (c) => {
  */
 instructions.post('/save', async (c) => {
 	const body = await c.req.json<{ path: string; content: string; tool?: string }>();
-	const profile = profileOf(body.tool ?? 'claude');
+	const tool = body.tool ?? 'claude';
 	const decoded = decodeURIComponent(body.path ?? '');
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.save', { resource: 'instructions', path: decoded, content: body.content ?? '', tool });
+	}
+	const profile = profileOf(tool);
 	const known = (await listInstructions(profile)).map((i) => i.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not an instruction file' }, 404);

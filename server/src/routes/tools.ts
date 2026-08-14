@@ -5,8 +5,8 @@ import { adapterFor } from '../adapters/types.js';
 import { overview } from '../scan.js';
 import { profileOf } from '../profiles.js';
 import { getHostCtx } from '../hosts/context.js';
-import { execRemote } from '../remote/runner.js';
-import type { Scope, Status, ToolKind, ToolOverview } from '../model.js';
+import { sendRemote } from '../remote/runner.js';
+import type { Scope, Status, ToolKind } from '../model.js';
 
 export const tools = new Hono();
 
@@ -26,14 +26,8 @@ tools.get('/overview', async (c) => {
 	// "null" string or missing → overview mode (scan all projects).
 	const project = !raw || raw === 'null' ? null : raw;
 	const tool = c.req.query('tool');
-	const ctx = getHostCtx();
-	// Remote host: run the scan on the remote itself (one exec) instead of N SFTP round-trips.
-	if (ctx.isRemote) {
-		try {
-			return c.json(await execRemote<ToolOverview>(ctx.hostId, 'overview', { project, tool }));
-		} catch (e) {
-			return c.json({ error: `remote overview failed: ${(e as Error).message}` }, 502);
-		}
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'overview', { project, tool });
 	}
 	const profile = profileParam(tool);
 	return c.json(await overview(project, profile));
@@ -44,11 +38,14 @@ tools.get('/:kind/:name/detail', async (c) => {
 	const kind = c.req.param('kind');
 	const name = c.req.param('name');
 	const project = c.req.query('project') ?? null;
-	const profile = profileParam(c.req.query('tool'));
+	const tool = c.req.query('tool');
 	if (!isKind(kind)) return c.json({ error: 'unsupported kind' }, 400);
-	const a = adapterFor(kind, profile);
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'tools.detail', { kind, name, project, tool });
+	}
+	const a = adapterFor(kind, profileParam(tool));
 	if (!a) return c.json({ error: 'unsupported kind' }, 400);
-	const items = await a.scan({ project, profile });
+	const items = await a.scan({ project, profile: profileParam(tool) });
 	const it = items.find((i) => i.name === name);
 	if (!it) return c.json({ error: 'not found' }, 404);
 	return c.json(it.perScope);
@@ -57,12 +54,14 @@ tools.get('/:kind/:name/detail', async (c) => {
 /** POST /api/tools/status — body: { kind, name, scope, status, project, tool }. */
 tools.post('/status', async (c) => {
 	const body = await c.req.json<{ kind: string; name: string; scope: Scope; status: Status; project: string | null; tool?: string }>();
-	const profile = profileParam(body.tool);
 	if (!isKind(body.kind)) return c.json({ error: 'unsupported kind' }, 400);
-	const a = adapterFor(body.kind, profile);
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'tools.setStatus', body);
+	}
+	const a = adapterFor(body.kind, profileParam(body.tool));
 	if (!a) return c.json({ error: 'unsupported kind' }, 400);
 	try {
-		await a.setStatus(body.name, body.scope, body.status, { project: body.project ?? null, profile });
+		await a.setStatus(body.name, body.scope, body.status, { project: body.project ?? null, profile: profileParam(body.tool) });
 	} catch (e) {
 		return c.json({ error: (e as Error).message }, 500);
 	}
@@ -73,9 +72,12 @@ tools.post('/status', async (c) => {
 tools.get('/:kind/:name/content', async (c) => {
 	const kind = c.req.param('kind');
 	const name = c.req.param('name');
-	const profile = profileParam(c.req.query('tool'));
+	const tool = c.req.query('tool');
 	if (!isKind(kind)) return c.json({ error: 'unsupported kind' }, 400);
-	const a = adapterFor(kind, profile);
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'tools.content', { kind, name, tool });
+	}
+	const a = adapterFor(kind, profileParam(tool));
 	if (!a) return c.json({ error: 'unsupported kind' }, 400);
 	try {
 		return c.json(await a.view(name));

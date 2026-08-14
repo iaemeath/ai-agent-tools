@@ -8,6 +8,8 @@ import { profileOf } from '../profiles.js';
 import { listAgents, readAgent } from '../agents-reader.js';
 import { writeText } from '../settings.js';
 import { revealInExplorer } from '../explorer.js';
+import { getHostCtx } from '../hosts/context.js';
+import { sendRemote } from '../remote/runner.js';
 
 export const agents = new Hono();
 
@@ -17,15 +19,21 @@ function normPath(p: string): string {
 
 /** GET /api/agents?tool= — list global + project agent files. */
 agents.get('/', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(await listAgents(profile));
+	const tool = c.req.query('tool') ?? 'claude';
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.list', { resource: 'agents', tool });
+	}
+	return c.json(await listAgents(profileOf(tool)));
 });
 
 /** GET /api/agents/content?path=<encoded>&tool= */
 agents.get('/content', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	const requested = c.req.query('path') ?? '';
-	const decoded = decodeURIComponent(requested);
+	const tool = c.req.query('tool') ?? 'claude';
+	const decoded = decodeURIComponent(c.req.query('path') ?? '');
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.content', { resource: 'agents', path: decoded, tool });
+	}
+	const profile = profileOf(tool);
 	const known = (await listAgents(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not an agent file' }, 404);
@@ -48,8 +56,12 @@ agents.post('/open', async (c) => {
 /** POST /api/agents/save — body: { path, content, tool? }. Whitelist + .bak backup (same as instructions). */
 agents.post('/save', async (c) => {
 	const body = await c.req.json<{ path: string; content: string; tool?: string }>();
-	const profile = profileOf(body.tool ?? 'claude');
+	const tool = body.tool ?? 'claude';
 	const decoded = decodeURIComponent(body.path ?? '');
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.save', { resource: 'agents', path: decoded, content: body.content ?? '', tool });
+	}
+	const profile = profileOf(tool);
 	const known = (await listAgents(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not an agent file' }, 404);

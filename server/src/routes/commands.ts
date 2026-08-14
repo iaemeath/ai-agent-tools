@@ -8,6 +8,8 @@ import { profileOf } from '../profiles.js';
 import { listCommands, readCommand } from '../commands-reader.js';
 import { writeText } from '../settings.js';
 import { revealInExplorer } from '../explorer.js';
+import { getHostCtx } from '../hosts/context.js';
+import { sendRemote } from '../remote/runner.js';
 
 export const commands = new Hono();
 
@@ -17,15 +19,21 @@ function normPath(p: string): string {
 
 /** GET /api/commands?tool= — list global + project command files. */
 commands.get('/', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(await listCommands(profile));
+	const tool = c.req.query('tool') ?? 'claude';
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.list', { resource: 'commands', tool });
+	}
+	return c.json(await listCommands(profileOf(tool)));
 });
 
 /** GET /api/commands/content?path=<encoded>&tool= */
 commands.get('/content', async (c) => {
-	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	const requested = c.req.query('path') ?? '';
-	const decoded = decodeURIComponent(requested);
+	const tool = c.req.query('tool') ?? 'claude';
+	const decoded = decodeURIComponent(c.req.query('path') ?? '');
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.content', { resource: 'commands', path: decoded, tool });
+	}
+	const profile = profileOf(tool);
 	const known = (await listCommands(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a command file' }, 404);
@@ -48,8 +56,12 @@ commands.post('/open', async (c) => {
 /** POST /api/commands/save — body: { path, content, tool? }. Whitelist + .bak backup (same as instructions). */
 commands.post('/save', async (c) => {
 	const body = await c.req.json<{ path: string; content: string; tool?: string }>();
-	const profile = profileOf(body.tool ?? 'claude');
+	const tool = body.tool ?? 'claude';
 	const decoded = decodeURIComponent(body.path ?? '');
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'md.save', { resource: 'commands', path: decoded, content: body.content ?? '', tool });
+	}
+	const profile = profileOf(tool);
 	const known = (await listCommands(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a command file' }, 404);
