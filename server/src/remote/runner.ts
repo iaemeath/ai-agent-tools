@@ -63,14 +63,29 @@ function sftpToWin(p: string): string {
 }
 
 /** Ensure the bundle exists at the remote path. Single-level mkdir is SFTP-native (no POSIX
- *  exec) so it is reliable on Windows targets; existing dir errors are ignored. */
+ *  exec) so it is reliable on Windows targets; existing dir errors are ignored. Also prunes
+ *  bundles left by older code versions (different hashes) and any leftover temp args files. */
 async function ensureBundle(session: SshSession, remoteFile: string, code: string): Promise<void> {
 	const sftp = session.sftp;
 	const dir = remoteFile.slice(0, remoteFile.lastIndexOf('/'));
 	await new Promise<void>((res) => sftp.mkdir(dir, () => res())); // ignore "already exists"
 	const present = await new Promise<boolean>((res) => sftp.stat(remoteFile, (e) => res(!e)));
-	if (present) return;
-	await new Promise<void>((res, rej) => sftp.writeFile(remoteFile, code, (e) => (e ? rej(e) : res())));
+	if (!present) {
+		await new Promise<void>((res, rej) => sftp.writeFile(remoteFile, code, (e) => (e ? rej(e) : res())));
+	}
+	// Best-effort housekeeping: keep only THIS bundle; drop stale ccc-remote.<hash>.mjs from
+	// earlier code versions and orphaned args-*.json temp files (e.g. if an exec died mid-run).
+	const keep = remoteFile.slice(remoteFile.lastIndexOf('/') + 1);
+	sftp.readdir(dir, (err, entries) => {
+		if (err) return;
+		for (const e of entries as { filename: string }[]) {
+			const n = e.filename;
+			if (n === keep) continue;
+			if (/^ccc-remote\.[0-9a-f]+\.mjs$/.test(n) || /^args-.*\.json$/.test(n)) {
+				sftp.unlink(`${dir}/${n}`, () => undefined);
+			}
+		}
+	});
 }
 
 /** Run a command on the remote and collect stdout/stderr/exit. Args travel in argv (base64). */
