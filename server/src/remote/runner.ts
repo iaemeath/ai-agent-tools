@@ -6,15 +6,19 @@
 // reads the remote's OWN files at localhost speed (~0.5s) and returns one JSON blob. The cost
 // model flips from O(file-ops × RTT) to O(1 exec per request).
 //
-// Bundle is built to MEMORY (esbuild write:false) — no on-disk artifact to gitignore. It is
-// uploaded to <remote-home>/.ccc-ui/ccc-remote.<hash>.mjs; the hash is part of the filename
-// so a changed bundle never collides with a stale remote copy, and an unchanged bundle is
-// skipped (stat hit → no re-upload) across reconnects.
+// Where the bundle CODE comes from (resolved once, in this order):
+//   1. CCC_REMOTE_BUNDLE env — explicit path to a prebuilt ccc-remote.mjs (exe/SEA builds
+//      embed it as an asset and write it to a temp file at startup, pointing the env here);
+//   2. ccc-remote.mjs next to the running server bundle (repo dist/ layout — `npm run
+//      build:exe` emits both side by side);
+//   3. dev fallback — esbuild bundles entry.ts to memory on the fly (requires the devDeps).
+// The exe therefore carries NO runtime esbuild (a native binary that would have to be
+// shipped alongside); production always runs the prebuilt artifact.
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build } from 'esbuild';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { getSession, type SshSession } from '../hosts/pool.js';
@@ -27,7 +31,6 @@ export interface RemoteResult {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ENTRY = path.resolve(__dirname, 'entry.ts');
 const REMOTE_DIR_NAME = '.ccc-ui';
 
 let bundleCode = '';
@@ -35,19 +38,33 @@ let bundleHash = '';
 /** `${hostId}:${hash}` combos known to already be present on the remote (skip re-stat). */
 const uploaded = new Set<string>();
 
-/** Build the remote bundle once (memoized for the process lifetime). Returns code + short hash. */
+/** Resolve the remote-entry bundle code once (memoized for the process lifetime). */
 async function getBundle(): Promise<{ code: string; hash: string }> {
 	if (bundleHash) return { code: bundleCode, hash: bundleHash };
-	const res = await build({
-		entryPoints: [ENTRY],
-		bundle: true,
-		platform: 'node',
-		format: 'esm',
-		target: 'es2022',
-		write: false,
-		logLevel: 'silent',
-	});
-	bundleCode = res.outputFiles[0].text;
+	// 1. Explicit env override (exe/SEA layout).
+	const envPath = process.env['CCC_REMOTE_BUNDLE'];
+	if (envPath && fs.existsSync(envPath)) {
+		bundleCode = fs.readFileSync(envPath, 'utf8');
+	}
+	// 2. Sibling artifact of a built server (repo dist/ layout: dist/server.cjs + dist/ccc-remote.mjs).
+	if (!bundleCode) {
+		const sibling = path.resolve(__dirname, 'ccc-remote.mjs');
+		if (fs.existsSync(sibling)) bundleCode = fs.readFileSync(sibling, 'utf8');
+	}
+	// 3. Dev fallback — bundle on the fly (dynamic import keeps esbuild out of prod runs).
+	if (!bundleCode) {
+		const { build } = await import('esbuild');
+		const res = await build({
+			entryPoints: [path.resolve(__dirname, 'entry.ts')],
+			bundle: true,
+			platform: 'node',
+			format: 'esm',
+			target: 'es2022',
+			write: false,
+			logLevel: 'silent',
+		});
+		bundleCode = res.outputFiles[0]!.text;
+	}
 	bundleHash = crypto.createHash('sha256').update(bundleCode).digest('hex').slice(0, 16);
 	return { code: bundleCode, hash: bundleHash };
 }
