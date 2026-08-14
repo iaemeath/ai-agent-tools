@@ -4,7 +4,9 @@ import { Hono } from 'hono';
 import { adapterFor } from '../adapters/types.js';
 import { overview } from '../scan.js';
 import { profileOf } from '../profiles.js';
-import type { Scope, Status, ToolKind } from '../model.js';
+import { getHostCtx } from '../hosts/context.js';
+import { execRemote } from '../remote/runner.js';
+import type { Scope, Status, ToolKind, ToolOverview } from '../model.js';
 
 export const tools = new Hono();
 
@@ -23,7 +25,17 @@ tools.get('/overview', async (c) => {
 	const raw = c.req.query('project');
 	// "null" string or missing → overview mode (scan all projects).
 	const project = !raw || raw === 'null' ? null : raw;
-	const profile = profileParam(c.req.query('tool'));
+	const tool = c.req.query('tool');
+	const ctx = getHostCtx();
+	// Remote host: run the scan on the remote itself (one exec) instead of N SFTP round-trips.
+	if (ctx.isRemote) {
+		try {
+			return c.json(await execRemote<ToolOverview>(ctx.hostId, 'overview', { project, tool }));
+		} catch (e) {
+			return c.json({ error: `remote overview failed: ${(e as Error).message}` }, 502);
+		}
+	}
+	const profile = profileParam(tool);
 	return c.json(await overview(project, profile));
 });
 
