@@ -1,11 +1,13 @@
 # ccc-ui
 
 A web UI to manage AI coding-agent config — across scopes (user / project), across tools
-(Claude Code, ZCode, …). Toggle **skills** and **plugins** on/off; browse **projects** (session
-history), **instructions** (CLAUDE.md / AGENTS.md), **rules**, **commands**, **agents**, and
-**hooks**; inspect **MCP** servers and review **settings** — all from one place.
+(Claude Code, ZCode, …), and **across machines** (operate another host over SSH). Toggle
+**skills** and **plugins** on/off; browse **projects** (session history), **instructions**
+(CLAUDE.md / AGENTS.md), **rules**, **commands**, **agents**, and **hooks** — with in-place
+markdown editing; inspect **MCP** servers and review **settings** — all from one place.
 
-**Skills and plugins are toggle-able (live, no restart). Everything else is read-only browsing.**
+**Skills and plugins are toggle-able (live, no restart). Markdown resources (instructions /
+rules / commands / agents) are view + edit. Everything else is read-only browsing.**
 Source of truth is each tool's own native config; this app is a read/project/edit-back layer over it,
 never a parallel database.
 
@@ -28,20 +30,24 @@ See *Architecture → ResourceLocator* below for how.
 ## Scope
 
 **Skill** and **plugin** are toggle-able (live, no restart) — they carry a native per-name on/off switch
-in the tool's settings. Other resources are **read-only browsing**.
+in the tool's settings. Markdown resources are **view + edit** (save back with `.bak` backup).
+Other resources are **read-only browsing**.
 
 | kind | mode | source of truth | notes |
 |---|---|---|---|
 | **skill** | toggle | `skillOverrides` (on/off/name-only/user-only) | also: promote project→global, delete |
 | **plugin** | toggle | `enabledPlugins` (`name@marketplace`: bool) | also: inline file explorer (browse plugin dir + preview file content) |
 | **project** | read-only | session-history folders (Claude) / SQLite DB (ZCode) | list + delete session history |
-| **instruction** | read-only | `CLAUDE.md` / `AGENTS.md` (global + per-project) | split-pane markdown viewer + open in file manager |
+| **instruction** | view + edit | `CLAUDE.md` / `AGENTS.md` (global + per-project) | split-pane markdown viewer/editor + open in file manager |
 | **mcp** | read-only | `mcpServers` (Claude) / `mcp.servers` (ZCode) | list servers + view config detail (command/args/env/url/headers) + live tool probe |
-| **rule** | read-only | `~/.{tool}/rules/*.md` + `<proj>/.{tool}/rules/*.md` | split-pane viewer; Claude only (ZCode has no rules mechanism → empty state) |
-| **command** | read-only | `~/.{tool}/commands/*.md` + `<proj>/.{tool}/commands/*.md` | split-pane viewer; custom slash commands |
-| **agent** | read-only | `~/.{tool}/agents/*.md` + `<proj>/.{tool}/agents/*.md` | split-pane viewer; standalone subagents |
+| **rule** | view + edit | `~/.{tool}/rules/*.md` + `<proj>/.{tool}/rules/*.md` | split-pane viewer/editor; Claude only (ZCode has no rules mechanism → empty state) |
+| **command** | view + edit | `~/.{tool}/commands/*.md` + `<proj>/.{tool}/commands/*.md` | split-pane viewer/editor; custom slash commands |
+| **agent** | view + edit | `~/.{tool}/agents/*.md` + `<proj>/.{tool}/agents/*.md` | split-pane viewer/editor; standalone subagents |
 | **hook** | read-only | nested JSON in settings (`hooks` / `hooks.events`) | list + detail (event / matcher / command / timeout); Claude `settings.local.json` merged in |
 | **settings** | read-only | settings JSON | overview of toggles / env vars / permissions / marketplaces |
+
+On top of that, **remote SSH hosts** are first-class: the header host switcher retargets every
+page at another machine's config (see *Architecture → Remote hosts*).
 
 MCP edit/toggle is deferred — the three tools' on/off mechanisms differ too widely (ZCode has `enabled`,
 Claude has project-block arrays, Codex has none), so a unified toggle would create "fake" switches the
@@ -74,6 +80,17 @@ keys untouched). Every write is preceded by a `.bak` backup of the file it overw
   - `Hooks` view: list + detail (event / matcher / command / timeout / source file); Claude
     `settings.local.json` merged in, ZCode `hooks.enabled` kill-switch reflected.
   - `Settings` view: read-only overview of toggles / env vars / permissions / marketplaces.
+  - Markdown editing (instructions / rules / commands / agents): view/edit dual-mode with
+    safe save-back (whitelist check + `.bak` backup + atomic write).
+- **Phase 4** — remote SSH host management. **done**.
+  - `Hosts` view: add / edit / delete hosts, test connection, disconnect (AES-256-GCM
+    machine-bound secret storage; ssh2 connection pool with keepalive + dedupe).
+  - Header host switcher: any host selection transparently retargets all pages.
+  - **Architecture C remote exec** — on a remote host, reads AND writes run ON the remote
+    (bundled script + one `node` exec per request), not over per-file SFTP. Measured over a
+    VPN link: full overview 28.6s → **~0.5s**; markdown save ~0.8s. Windows remotes work
+    fully (native `node:fs` there — no POSIX-shell/`cmd` mismatch, no SFTP virtual-path
+    quirks, ZCode SQLite project source included).
 
 ---
 
@@ -165,11 +182,51 @@ Then add `'codex'` to `ToolId` in `profiles.ts` and to the frontend `TOOL_OPTION
 Skill/plugin toggle, projects, instructions all work without further change. MCP needs a TOML reader
 (the JSON-based `mcp-reader.ts` won't parse `.toml`).
 
+### Remote hosts (Architecture C — remote exec, not SFTP pulling)
+
+Every reader goes through a swappable `FsBackend` (`getFs()`), bound per-request from an
+`AsyncLocalStorage` host context (`X-Host` header → host middleware). Local requests bind
+`LocalFs` (node:fs) with zero overhead; remote requests used to bind `SshFs` (ssh2 SFTP) —
+which works, but over a slow link the per-file round-trips compound catastrophically (a full
+overview = hundreds of sequential SFTP calls ≈ **29s** over VPN).
+
+So remote requests now take a different path: **run the work on the remote itself.**
+
+```
+route (isRemote) ──▶ remote/runner.ts (local side)
+                       esbuild-bundles remote/entry.ts to MEMORY (once per process)
+                       uploads it via SFTP to <home>/.ccc-ui/ccc-remote.<hash>.mjs
+                       (hash-named; unchanged bundles skip re-upload; stale ones pruned)
+                    ──▶ ssh exec: node ccc-remote.<hash>.mjs <command> "<base64 args>"
+                       entry.ts runs ON the remote under its own node:
+                         getHostCtx() → LOCAL_CONTEXT = the REMOTE's os.homedir()
+                         + platform-native path + node:fs → localhost-speed reads/writes
+                       prints one JSON blob: { status, body }
+                    ──▶ sendRemote maps it onto c.json(body, status)
+```
+
+Consequences:
+
+- **O(1) exec per request** instead of O(file-ops × RTT) — overview 28.6s → ~0.5s warm.
+- Per-route status codes (404/409/413/…) pass through the hop intact.
+- Windows remotes are fully functional: recursive mkdir/copy/remove are native `node:fs`
+  there (no `cmd`-vs-POSIX gap), paths are platform-native (no SFTP `/C:/` virtual-path
+  quirks), and ZCode's SQLite project source is readable (the DB opens on the remote).
+- Args travel as base64 in argv (cmd-safe, no quoting); large args (e.g. file contents for
+  saves) exceed cmd's ~8k line cap, so they upload as a temp JSON file over SFTP and pass
+  as `"@<path>"` (auto-deleted after the exec). cmd.exe does not forward stdin EOF — that's
+  why argv/file, not stdin.
+- Requirements per remote host: SSH access + Node installed. Nothing else, nothing resident.
+- MCP live probes (`mcps.tools`) run on the remote too — semantically correct: they test
+  what the remote tool would reach.
+- `explorer.exe`-style "open in file manager" stays local-only (a remote desktop action is
+  out of scope); those routes refuse cleanly with `reason: 'remote'`.
+
 ### File map
 
 ```
 server/src/                      Hono API (tsx, runs on :8787)
-  index.ts                       entry: mounts 11 /api/* routes and (in prod) serves web/dist
+  index.ts                       entry: mounts 12 /api/* routes and (in prod) serves web/dist
   profiles.ts                    ★ ToolProfile declarations (the ONLY place tool differences live)
   locator.ts                     ★ tool-agnostic read/write engine (readRegistry / readFlag / writeFlag)
   paths.ts                       path helpers — all derived from profile fields
@@ -186,6 +243,22 @@ server/src/                      Hono API (tsx, runs on :8787)
   hooks-reader.ts                read-only hook discovery from nested settings JSON
   markdown-resource.ts           shared scan/parse primitives (frontmatter, line count, dedupe)
   mcp-tools.ts                   live MCP tool probe (stdio/http/sse JSON-RPC handshake → tools/list)
+  explorer.ts                    shared explorer.exe spawn (local-only; refuses remote cleanly)
+  fs-backend/                    ★ swappable filesystem behind every reader
+    types.ts                     FsBackend contract (exists/read/write/stat/readDir/mkdir/remove/copy/…)
+    local.ts                     LocalFs — node:fs/promises
+  hosts/                         remote-host machinery
+    context.ts                   HostContext + AsyncLocalStorage binding (getFs()/getHostCtx())
+    middleware.ts                X-Host header → resolve session → bind remote context (502 on failure)
+    pool.ts                      ssh2 connection pool (reuse/keepalive/dedupe + permanent error sink)
+    registry.ts                  ~/.ccc-ui/hosts.json CRUD (local-only bookkeeping)
+    secrets.ts                   AES-256-GCM machine-bound secret encryption
+    ssh.ts                       SshFs — SFTP-backed FsBackend (fallback path)
+  remote/                        ★ Architecture C — remote exec runtime
+    entry.ts                     runs ON the remote: command registry (22 commands mirroring
+                                  the routes' validation/whitelists/status codes), {status,body} out
+    runner.ts                    local side: esbuild bundle-to-memory, hash-cached upload,
+                                  cmd-safe base64-argv args (large args via temp file), sendRemote
   adapters/
     types.ts                     ToolAdapter interface + registry(profile) (extension point)
     skill.ts                     SkillAdapter   (delegates to locator engine)
@@ -193,30 +266,33 @@ server/src/                      Hono API (tsx, runs on :8787)
   mutations/
     jsonKey.ts                   leaf primitive: read/write settings[key][name] with encoding
   routes/
-    tools.ts                     overview / detail / set-status / view-content (?tool= param)
-    plugins.ts                   plugin detail + file browser (list dir / read file, path-traversal-guarded)
-    projects.ts                  list / delete session-history
-    skills.ts                    promote / delete skills
-    instructions.ts              list / content / open-in-explorer
-    mcps.ts                      list / detail / open-in-explorer + live tool probe
-    rules.ts commands.ts agents.ts hooks.ts   list / content / open-in-explorer (markdown resources)
-    settings.ts                  read-only settings overview (toggles / env / permissions / marketplaces)
+    tools.ts                     overview / detail / set-status / view-content (?tool= param; remote-split)
+    plugins.ts                   plugin detail + file browser (path-traversal-guarded; remote-split)
+    projects.ts                  list / delete session-history (remote-split)
+    skills.ts                    promote / delete skills + file browser (remote-split)
+    instructions.ts rules.ts commands.ts agents.ts   list / content / save / open (remote-split)
+    hooks.ts                     list / open (remote-split)
+    mcps.ts                      list / detail / live probe / open (remote-split; probe runs on remote)
+    settings.ts                  settings overview — remote fetch + local filter & secret masking
+    hosts.ts                     host CRUD / test-connection / disconnect / pool status (always local)
 web/src/                         Vue 3 SPA (Vite dev on :5173, proxies /api → :8787)
   stores/tool.ts                 ★ global tool selector (Claude ⇄ ZCode) shared by header + views
-  api/index.ts                   fetch client — every method takes an optional `tool`
+  stores/host.ts                 ★ global host selector ('local' ⇄ remote) — X-Host injection + reload
+  api/index.ts                   fetch client — every method takes an optional `tool`; injects X-Host
   views/SkillsView.vue           skills page (toggle / promote / delete)
   views/PluginsView.vue          plugins page (toggle + inline file explorer with content preview)
   views/ProjectsView.vue         projects page (card grid + delete session history)
-  views/InstructionsView.vue     instructions page (split-pane markdown viewer)
+  views/InstructionsView.vue     instructions page (split-pane viewer + editor)
   views/MCPsView.vue             MCP page (card grid + inline detail + tool list)
-  views/RulesView.vue            rules page (split-pane viewer; Claude only → empty state on ZCode)
-  views/CommandsView.vue         commands page (split-pane slash-command viewer)
-  views/AgentsView.vue           agents page (split-pane subagent viewer)
+  views/RulesView.vue            rules page (split-pane viewer + editor; Claude only)
+  views/CommandsView.vue         commands page (split-pane viewer + editor)
+  views/AgentsView.vue           agents page (split-pane viewer + editor)
   views/HooksView.vue            hooks page (list + detail: event / matcher / command / timeout)
   views/SettingsView.vue         settings page (read-only toggles / env / permissions overview)
-  components/                    AppHeader / AppSidebar / SkillCard / PluginCard / FileExplorer / MarkdownView
+  views/HostsView.vue            hosts page (add/edit/delete/test/disconnect)
+  components/                    AppHeader (tool + host switchers) / AppSidebar / SkillCard / PluginCard / FileExplorer / MarkdownView
   i18n/                          vue-i18n (zh / en)
-  router/                        /plugins /skills /projects /instructions /rules /commands /agents /hooks /mcps /settings — all live
+  router/                        /plugins /skills /projects /instructions /rules /commands /agents /hooks /mcps /settings /hosts — all live
 ```
 
 ### Two-level status resolution
