@@ -6,12 +6,12 @@ import { registry } from './adapters/types.js';
 import type { ToolOverview, ScanCtx } from './model.js';
 import { DEFAULT_PROFILE, type ToolProfile } from './profiles.js';
 
-export function overview(project: string | null, profile: ToolProfile = DEFAULT_PROFILE): ToolOverview {
+export async function overview(project: string | null, profile: ToolProfile = DEFAULT_PROFILE): Promise<ToolOverview> {
 	const ctx: ScanCtx = { project, profile };
 	const items: ToolOverview['items'] = [];
 	for (const adapter of registry(profile)) {
 		try {
-			items.push(...adapter.scan(ctx));
+			items.push(...(await adapter.scan(ctx)));
 		} catch (e) {
 			console.warn(`[scan] adapter ${adapter.kind} failed: ${(e as Error).message}`);
 		}

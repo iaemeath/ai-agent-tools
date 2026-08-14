@@ -55,7 +55,7 @@ function hookSourceFiles(profile: ToolProfile, scope: 'global' | 'project', proj
 	return files;
 }
 
-export function listHooks(profile: ToolProfile): HookInfo[] {
+export async function listHooks(profile: ToolProfile): Promise<HookInfo[]> {
 	// Tool has no hooks support → empty.
 	if (!profile.hooks) return [];
 
@@ -63,13 +63,13 @@ export function listHooks(profile: ToolProfile): HookInfo[] {
 
 	// 1. Global hooks (user-level settings file(s)).
 	for (const file of hookSourceFiles(profile, 'global', null)) {
-		collectFromFile(file, 'global', null, profile, out);
+		await collectFromFile(file, 'global', null, profile, out);
 	}
 
 	// 2. Project-level hooks (uses listProjects — supports fs Claude + sqlite ZCode).
-	for (const proj of listProjects(profile)) {
+	for (const proj of await listProjects(profile)) {
 		for (const file of hookSourceFiles(profile, 'project', proj.path)) {
-			collectFromFile(file, 'project', proj.path, profile, out);
+			await collectFromFile(file, 'project', proj.path, profile, out);
 		}
 	}
 
@@ -83,14 +83,14 @@ export function listHooks(profile: ToolProfile): HookInfo[] {
  * Read one settings file, dive to its events map, and flatten every hook entry.
  * Missing file / no hooks key / malformed structure → contributes nothing.
  */
-function collectFromFile(
+async function collectFromFile(
 	sourceFile: string,
 	scope: 'global' | 'project',
 	project: string | null,
 	profile: ToolProfile,
 	out: HookInfo[],
-): void {
-	const settings = read(sourceFile);
+): Promise<void> {
+	const settings = await read(sourceFile);
 	const { eventsKeyPath, enabledKeyPath } = profile.hooks!;
 
 	// Global enabled flag (ZCode only). Default true when absent.

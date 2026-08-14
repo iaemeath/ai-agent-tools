@@ -2,12 +2,17 @@
 // No tool-specific string literals live here: 'skills', 'installed_plugins.json', etc.
 // all come from the profile's locator blocks.
 
-import os from 'node:os';
 import path from 'node:path';
 import { DEFAULT_PROFILE, type ToolProfile } from './profiles.js';
+import { getHostCtx } from './hosts/context.js';
 
+/**
+ * The HOME directory tool config paths resolve against. Reads the per-request host
+ * context: local requests use os.homedir() (the historical behavior); remote requests
+ * use the SSH host's $HOME. Synchronous — only reads AsyncLocalStorage, does no I/O.
+ */
 export function homeDir(): string {
-	return os.homedir();
+	return getHostCtx().homeDir;
 }
 
 /** Root config dir of the given tool (e.g. ~/.claude, ~/.zcode). */

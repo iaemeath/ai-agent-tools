@@ -17,6 +17,8 @@ import { mcps } from './routes/mcps.js';
 import { settings } from './routes/settings.js';
 import { skills } from './routes/skills.js';
 import { tools } from './routes/tools.js';
+import { hosts } from './routes/hosts.js';
+import { hostMiddleware } from './hosts/middleware.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, '../../web/dist');
@@ -25,6 +27,12 @@ const app = new Hono();
 
 // API
 app.get('/api/health', (c) => c.json({ ok: true }));
+
+// Bind per-request host context (local machine vs SSH remote) for all API routes below.
+// X-Host header or ?host= selects the target host; defaults to 'local' (zero-effect).
+app.use('/api/*', hostMiddleware);
+
+app.route('/api/hosts', hosts);
 app.route('/api/tools', tools);
 app.route('/api/plugins', plugins);
 app.route('/api/projects', projects);

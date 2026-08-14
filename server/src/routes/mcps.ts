@@ -17,22 +17,22 @@ function findServer(all: McpServer[], name: string, scope: string, project: stri
 }
 
 /** GET /api/mcps?tool= — list all MCP servers (user-level + project-level). */
-mcps.get('/', (c) => {
+mcps.get('/', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(listMcps(profile));
+	return c.json(await listMcps(profile));
 });
 
 /**
  * GET /api/mcps/detail?tool=&name=&scope=&project=
  * Return the full config of one server. `project` is required for project-scoped servers.
  */
-mcps.get('/detail', (c) => {
+mcps.get('/detail', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
 	const name = c.req.query('name') ?? '';
 	const scope = c.req.query('scope') ?? 'user';
 	const project = c.req.query('project') ? decodeURIComponent(c.req.query('project')!) : null;
 	if (!name) return c.json({ error: 'name is required' }, 400);
-	const match = findServer(listMcps(profile), name, scope, project);
+	const match = findServer(await listMcps(profile), name, scope, project);
 	if (!match) return c.json({ error: 'mcp server not found' }, 404);
 	return c.json(match);
 });
@@ -50,7 +50,7 @@ mcps.get('/tools', async (c) => {
 	const scope = c.req.query('scope') ?? 'user';
 	const project = c.req.query('project') ? decodeURIComponent(c.req.query('project')!) : null;
 	if (!name) return c.json({ error: 'name is required' }, 400);
-	const match = findServer(listMcps(profile), name, scope, project);
+	const match = findServer(await listMcps(profile), name, scope, project);
 	if (!match) return c.json({ error: 'mcp server not found' }, 404);
 	try {
 		const tools = await listMcpTools(match);
@@ -70,7 +70,7 @@ mcps.post('/open', async (c) => {
 	const profile = profileOf(body.tool ?? 'claude');
 	const requested = body.sourceFile ?? '';
 	// Whitelist: the requested path must be one of the known MCP source files.
-	const known = new Set(listMcps(profile).map((s) => s.sourceFile));
+	const known = new Set((await listMcps(profile)).map((s) => s.sourceFile));
 	if (!known.has(requested)) {
 		return c.json({ error: 'not a known MCP config file' }, 404);
 	}

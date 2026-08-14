@@ -16,20 +16,20 @@ function normPath(p: string): string {
 }
 
 /** GET /api/agents?tool= — list global + project agent files. */
-agents.get('/', (c) => {
+agents.get('/', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(listAgents(profile));
+	return c.json(await listAgents(profile));
 });
 
 /** GET /api/agents/content?path=<encoded>&tool= */
-agents.get('/content', (c) => {
+agents.get('/content', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
 	const requested = c.req.query('path') ?? '';
 	const decoded = decodeURIComponent(requested);
-	const known = listAgents(profile).map((r) => r.path);
+	const known = (await listAgents(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not an agent file' }, 404);
-	const raw = readAgent(match);
+	const raw = await readAgent(match);
 	if (raw === null) return c.json({ error: 'cannot read file' }, 500);
 	return c.json({ path: match, raw });
 });
@@ -39,7 +39,7 @@ agents.post('/open', async (c) => {
 	const body = await c.req.json<{ path: string; tool?: string }>();
 	const profile = profileOf(body.tool ?? 'claude');
 	const decoded = decodeURIComponent(body.path ?? '');
-	const known = listAgents(profile).map((r) => r.path);
+	const known = (await listAgents(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not an agent file' }, 404);
 	return revealInExplorer(c, match);
@@ -50,11 +50,11 @@ agents.post('/save', async (c) => {
 	const body = await c.req.json<{ path: string; content: string; tool?: string }>();
 	const profile = profileOf(body.tool ?? 'claude');
 	const decoded = decodeURIComponent(body.path ?? '');
-	const known = listAgents(profile).map((r) => r.path);
+	const known = (await listAgents(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not an agent file' }, 404);
 	try {
-		writeText(match, body.content ?? '');
+		await writeText(match, body.content ?? '');
 	} catch (e) {
 		return c.json({ error: (e as Error).message }, 500);
 	}

@@ -17,7 +17,7 @@ import { scanMarkdownDir, parseFrontmatterField, countLines, readFileText, dedup
 import type { ToolProfile } from './profiles.js';
 import type { RuleInfo } from './model.js';
 
-export function listRules(profile: ToolProfile): RuleInfo[] {
+export async function listRules(profile: ToolProfile): Promise<RuleInfo[]> {
 	// Tool has no rules support → empty (capability gap, e.g. ZCode).
 	if (!profile.rules) return [];
 
@@ -25,29 +25,29 @@ export function listRules(profile: ToolProfile): RuleInfo[] {
 
 	// 1. Global rule files.
 	const gDir = globalRulesDir(profile);
-	if (gDir) scanMarkdownDir(gDir, 'global', null, out, makeRuleInfo);
+	if (gDir) await scanMarkdownDir(gDir, 'global', null, out, makeRuleInfo);
 
 	// 2. Project-level rule files (uses listProjects, NOT allProjectPaths —
 	//    listProjects supports both fs (Claude) and sqlite (ZCode)).
-	for (const proj of listProjects(profile)) {
+	for (const proj of await listProjects(profile)) {
 		const pDir = projectRulesDir(proj.path, profile);
-		if (pDir) scanMarkdownDir(pDir, 'project', proj.path, out, makeRuleInfo);
+		if (pDir) await scanMarkdownDir(pDir, 'project', proj.path, out, makeRuleInfo);
 	}
 
 	return dedupeByKey(out, (r) => r.path);
 }
 
-function makeRuleInfo(fullPath: string, name: string, scope: 'global' | 'project', project: string | null): RuleInfo {
+async function makeRuleInfo(fullPath: string, name: string, scope: 'global' | 'project', project: string | null): Promise<RuleInfo> {
 	return {
 		scope,
 		path: fullPath,
 		name,
-		description: parseFrontmatterField(fullPath, 'description'),
-		lineCount: countLines(fullPath),
+		description: await parseFrontmatterField(fullPath, 'description'),
+		lineCount: await countLines(fullPath),
 		project,
 	};
 }
 
-export function readRule(filePath: string): string | null {
+export function readRule(filePath: string): Promise<string | null> {
 	return readFileText(filePath);
 }

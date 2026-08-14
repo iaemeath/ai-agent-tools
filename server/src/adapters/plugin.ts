@@ -2,7 +2,6 @@
 // Plugins are recorded in <configRoot>/plugins/installed_plugins.json; toggle key is
 // enabledPlugins in settings (name@marketplace → boolean).
 
-import fs from 'node:fs';
 import path from 'node:path';
 import { readProject, readUser, writeProject, writeUser } from '../settings.js';
 import type { ToolProfile } from '../profiles.js';
@@ -13,6 +12,7 @@ import {
 } from '../model.js';
 import { readRegistry, readFlag, writeFlag, type InstallRecord } from '../locator.js';
 import { parseFrontmatterField } from '../markdown-resource.js';
+import { getFs } from '../hosts/context.js';
 import type { ToolAdapter } from './types.js';
 
 type Json = Record<string, unknown>;
@@ -23,10 +23,10 @@ interface PluginManifest {
 }
 
 /** Read a plugin's description from its own manifest (.claude-plugin/plugin.json). */
-function readDescription(installPath: string): string | null {
+async function readDescription(installPath: string): Promise<string | null> {
 	const manifestPath = path.join(installPath, '.claude-plugin', 'plugin.json');
 	try {
-		const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as PluginManifest;
+		const m = JSON.parse(await getFs().readFile(manifestPath)) as PluginManifest;
 		return m.description?.trim() || null;
 	} catch {
 		return null;
@@ -34,10 +34,10 @@ function readDescription(installPath: string): string | null {
 }
 
 /** Read the full manifest object (for component listing). */
-function readManifest(installPath: string): Record<string, unknown> | null {
+async function readManifest(installPath: string): Promise<Record<string, unknown> | null> {
 	const manifestPath = path.join(installPath, '.claude-plugin', 'plugin.json');
 	try {
-		const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+		const m = JSON.parse(await getFs().readFile(manifestPath));
 		return m && typeof m === 'object' && !Array.isArray(m) ? (m as Record<string, unknown>) : null;
 	} catch {
 		return null;
@@ -45,22 +45,20 @@ function readManifest(installPath: string): Record<string, unknown> | null {
 }
 
 /** List skill directory names present under {installPath}/skills/. */
-function listSkillDirs(installPath: string): string[] {
+async function listSkillDirs(installPath: string): Promise<string[]> {
 	const dir = path.join(installPath, 'skills');
 	try {
-		return fs.readdirSync(dir, { withFileTypes: true })
-			.filter((e) => e.isDirectory())
-			.map((e) => e.name);
+		return (await getFs().readDir(dir)).filter((e) => e.isDirectory).map((e) => e.name);
 	} catch {
 		return [];
 	}
 }
 
 /** Parse a SKILL.md description (front-matter, supporting folded >- / literal | block scalars). */
-function parseSkillDescription(skillMd: string): string | undefined {
+async function parseSkillDescription(skillMd: string): Promise<string | undefined> {
 	let raw: string;
 	try {
-		raw = fs.readFileSync(skillMd, 'utf8');
+		raw = await getFs().readFile(skillMd);
 	} catch {
 		return undefined;
 	}
@@ -94,10 +92,10 @@ function parseSkillDescription(skillMd: string): string | undefined {
 }
 
 /** List *.md filenames (without extension) directly under dir/. [] if dir missing. */
-function listMdFiles(dir: string): string[] {
+async function listMdFiles(dir: string): Promise<string[]> {
 	try {
-		return fs.readdirSync(dir, { withFileTypes: true })
-			.filter((e) => e.isFile() && e.name.toLowerCase().endsWith('.md'))
+		return (await getFs().readDir(dir))
+			.filter((e) => e.isFile && e.name.toLowerCase().endsWith('.md'))
 			.map((e) => e.name.replace(/\.md$/i, ''));
 	} catch {
 		return [];
@@ -105,11 +103,9 @@ function listMdFiles(dir: string): string[] {
 }
 
 /** List subdirectory names directly under dir/. [] if dir missing. */
-function listSubdirs(dir: string): string[] {
+async function listSubdirs(dir: string): Promise<string[]> {
 	try {
-		return fs.readdirSync(dir, { withFileTypes: true })
-			.filter((e) => e.isDirectory())
-			.map((e) => e.name);
+		return (await getFs().readDir(dir)).filter((e) => e.isDirectory).map((e) => e.name);
 	} catch {
 		return [];
 	}
@@ -120,10 +116,10 @@ function listSubdirs(dir: string): string[] {
  * Real plugins keep hook bindings in this single config file, not as per-hook
  * manifest fields. [] if the file is missing/unparseable.
  */
-function listHookEvents(installPath: string): string[] {
+async function listHookEvents(installPath: string): Promise<string[]> {
 	const f = path.join(installPath, 'hooks', 'hooks.json');
 	try {
-		const j = JSON.parse(fs.readFileSync(f, 'utf8')) as unknown;
+		const j = JSON.parse(await getFs().readFile(f)) as unknown;
 		const h = (j && typeof j === 'object' && !Array.isArray(j) && 'hooks' in (j as Record<string, unknown>))
 			? (j as Record<string, unknown>)['hooks']
 			: j;
@@ -165,38 +161,38 @@ function collectManifestNames(manifest: Record<string, unknown> | null, key: str
  *   - hooks/hooks.json      (one component per event present)
  * Results are filtered by `supported` (capability gap: e.g. ZCode ignores plugin agents).
  */
-function buildComponents(installPath: string, manifest: Record<string, unknown> | null, supported: readonly PluginComponent['kind'][]): PluginComponent[] {
+async function buildComponents(installPath: string, manifest: Record<string, unknown> | null, supported: readonly PluginComponent['kind'][]): Promise<PluginComponent[]> {
 	const out: PluginComponent[] = [];
 	const sup = new Set(supported);
 
 	if (sup.has('skill')) {
 		const names = new Set<string>();
 		collectManifestNames(manifest, 'skills', names);
-		for (const dir of listSkillDirs(installPath)) names.add(dir);
+		for (const dir of await listSkillDirs(installPath)) names.add(dir);
 		for (const name of [...names].sort()) {
-			out.push({ kind: 'skill', name, detail: parseSkillDescription(path.join(installPath, 'skills', name, 'SKILL.md')) });
+			out.push({ kind: 'skill', name, detail: await parseSkillDescription(path.join(installPath, 'skills', name, 'SKILL.md')) });
 		}
 	}
 	if (sup.has('command')) {
 		const names = new Set<string>();
 		collectManifestNames(manifest, 'commands', names);
-		for (const f of listMdFiles(path.join(installPath, 'commands'))) names.add(f);
+		for (const f of await listMdFiles(path.join(installPath, 'commands'))) names.add(f);
 		for (const name of [...names].sort()) {
-			out.push({ kind: 'command', name, detail: parseFrontmatterField(path.join(installPath, 'commands', name + '.md'), 'description') });
+			out.push({ kind: 'command', name, detail: await parseFrontmatterField(path.join(installPath, 'commands', name + '.md'), 'description') });
 		}
 	}
 	if (sup.has('agent')) {
 		const names = new Set<string>();
 		collectManifestNames(manifest, 'agents', names);
-		for (const f of listMdFiles(path.join(installPath, 'agents'))) names.add(f);
+		for (const f of await listMdFiles(path.join(installPath, 'agents'))) names.add(f);
 		for (const name of [...names].sort()) {
-			out.push({ kind: 'agent', name, detail: parseFrontmatterField(path.join(installPath, 'agents', name + '.md'), 'description') });
+			out.push({ kind: 'agent', name, detail: await parseFrontmatterField(path.join(installPath, 'agents', name + '.md'), 'description') });
 		}
 	}
 	if (sup.has('mcp')) {
 		const names = new Set<string>();
 		collectManifestNames(manifest, 'mcpServers', names);
-		for (const d of listSubdirs(path.join(installPath, 'mcp'))) names.add(d);
+		for (const d of await listSubdirs(path.join(installPath, 'mcp'))) names.add(d);
 		for (const name of [...names].sort()) {
 			out.push({ kind: 'mcp', name });
 		}
@@ -206,7 +202,7 @@ function buildComponents(installPath: string, manifest: Record<string, unknown> 
 		if (manifest && manifest['hooks'] && typeof manifest['hooks'] === 'object' && !Array.isArray(manifest['hooks'])) {
 			for (const ev of Object.keys(manifest['hooks'] as Record<string, unknown>)) events.add(ev);
 		}
-		for (const ev of listHookEvents(installPath)) events.add(ev);
+		for (const ev of await listHookEvents(installPath)) events.add(ev);
 		for (const name of [...events].sort()) {
 			out.push({ kind: 'hook', name });
 		}
@@ -228,16 +224,16 @@ export class PluginAdapter implements ToolAdapter {
 
 	constructor(private readonly profile: ToolProfile) {}
 
-	scan(ctx: ScanCtx): ToolInstance[] {
+	async scan(ctx: ScanCtx): Promise<ToolInstance[]> {
 		const out: ToolInstance[] = [];
 		const p = this.profile;
-		const installed = readRegistry(p);
+		const installed = await readRegistry(p);
 		for (const [full, records] of installed) {
 			const rec = records[0];
 			if (!rec) continue;
-			const perScope = this.statuses(full, ctx.project);
+			const perScope = await this.statuses(full, ctx.project);
 			// Prefer the manifest description; fall back to version; then null.
-			const manifestDesc = readDescription(rec.installPath);
+			const manifestDesc = await readDescription(rec.installPath);
 			const description = manifestDesc ?? (rec.version ? `v${rec.version}` : null);
 			out.push({
 				kind: 'plugin',
@@ -255,38 +251,38 @@ export class PluginAdapter implements ToolAdapter {
 		return out;
 	}
 
-	private statuses(name: string, project: string | null): ScopeStatus[] {
+	private async statuses(name: string, project: string | null): Promise<ScopeStatus[]> {
 		const p = this.profile;
 		const enc = p.plugins.enabledEncoding;
 		const kp = p.plugins.enabledKeyPath;
 		let userStatus: Status = 'inherited';
-		try { userStatus = readFlag(enc, readUser(p), kp, name); } catch { /* inherited */ }
+		try { userStatus = readFlag(enc, await readUser(p), kp, name); } catch { /* inherited */ }
 		const v: ScopeStatus[] = [{ scope: { level: 'user' }, status: userStatus }];
 		if (project) {
 			let prStatus: Status = 'inherited';
-			try { prStatus = readFlag(enc, readProject(project, p), kp, name); } catch { /* inherited */ }
+			try { prStatus = readFlag(enc, await readProject(project, p), kp, name); } catch { /* inherited */ }
 			v.push({ scope: { level: 'project', path: project }, status: prStatus });
 		}
 		return v;
 	}
 
-	setStatus(name: string, scope: Scope, status: Status, _ctx: ScopeCtx): void {
+	async setStatus(name: string, scope: Scope, status: Status, _ctx: ScopeCtx): Promise<void> {
 		const p = this.profile;
 		const enc = p.plugins.enabledEncoding;
 		const kp = p.plugins.enabledKeyPath;
 		if (scope.level === 'user') {
-			const s = readUser(p);
+			const s = await readUser(p);
 			writeFlag(enc, s, kp, name, status);
-			writeUser(p, s);
+			await writeUser(p, s);
 		} else {
-			const s = readProject(scope.path, p);
+			const s = await readProject(scope.path, p);
 			writeFlag(enc, s, kp, name, status);
-			writeProject(scope.path, p, s);
+			await writeProject(scope.path, p, s);
 		}
 	}
 
-	view(name: string): ToolContent {
-		const installed = readRegistry(this.profile);
+	async view(name: string): Promise<ToolContent> {
+		const installed = await readRegistry(this.profile);
 		const rec = installed.get(name)?.[0];
 		if (!rec) throw new Error(`plugin not found: ${name}`);
 		const raw = `plugin ${name} installed at ${rec.installPath} (scope ${rec.scope ?? '?'})`;
@@ -297,15 +293,15 @@ export class PluginAdapter implements ToolAdapter {
 	 * Structured detail: manifest metadata + per-scope status + component inventory.
 	 * Unlike view() (a text blob), this returns typed fields for structured rendering.
 	 */
-	detail(name: string, project: string | null): PluginDetail {
-		const installed = readRegistry(this.profile);
+	async detail(name: string, project: string | null): Promise<PluginDetail> {
+		const installed = await readRegistry(this.profile);
 		const rec = installed.get(name)?.[0];
 		if (!rec) throw new Error(`plugin not found: ${name}`);
-		const manifest = readManifest(rec.installPath);
+		const manifest = await readManifest(rec.installPath);
 		const description = (manifest && typeof manifest['description'] === 'string')
 			? manifest['description'].trim() || null
 			: (rec.version ? `v${rec.version}` : null);
-		const perScope = this.statuses(name, project);
+		const perScope = await this.statuses(name, project);
 		return {
 			kind: 'plugin',
 			name,
@@ -316,7 +312,7 @@ export class PluginAdapter implements ToolAdapter {
 			profile: this.profile.id,
 			perScope,
 			effective: resolveEffective(perScope),
-			components: buildComponents(rec.installPath, manifest, this.profile.plugins.supportedComponents),
+			components: await buildComponents(rec.installPath, manifest, this.profile.plugins.supportedComponents),
 		};
 	}
 }

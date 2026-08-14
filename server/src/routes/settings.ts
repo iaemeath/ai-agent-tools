@@ -43,9 +43,9 @@ function maskSecrets(obj: unknown): unknown {
  * dedicated pages (enabledPlugins shown in PluginsView, skillOverrides shown in SkillsView,
  * mcp/mcpServers shown in MCPsView). Returns {} if the file doesn't exist.
  */
-settings.get('/', (c) => {
+settings.get('/', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	const raw = readUser(profile) as Record<string, unknown>;
+	const raw = (await readUser(profile)) as Record<string, unknown>;
 	if (!raw || typeof raw !== 'object') return c.json({});
 
 	// Keys already managed by dedicated pages — don't duplicate them here.

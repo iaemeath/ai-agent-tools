@@ -16,20 +16,20 @@ function normPath(p: string): string {
 }
 
 /** GET /api/rules?tool= — list global + project rule files. */
-rules.get('/', (c) => {
+rules.get('/', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(listRules(profile));
+	return c.json(await listRules(profile));
 });
 
 /** GET /api/rules/content?path=<encoded>&tool= */
-rules.get('/content', (c) => {
+rules.get('/content', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
 	const requested = c.req.query('path') ?? '';
 	const decoded = decodeURIComponent(requested);
-	const known = listRules(profile).map((r) => r.path);
+	const known = (await listRules(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a rule file' }, 404);
-	const raw = readRule(match);
+	const raw = await readRule(match);
 	if (raw === null) return c.json({ error: 'cannot read file' }, 500);
 	return c.json({ path: match, raw });
 });
@@ -39,7 +39,7 @@ rules.post('/open', async (c) => {
 	const body = await c.req.json<{ path: string; tool?: string }>();
 	const profile = profileOf(body.tool ?? 'claude');
 	const decoded = decodeURIComponent(body.path ?? '');
-	const known = listRules(profile).map((r) => r.path);
+	const known = (await listRules(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a rule file' }, 404);
 	return revealInExplorer(c, match);
@@ -50,11 +50,11 @@ rules.post('/save', async (c) => {
 	const body = await c.req.json<{ path: string; content: string; tool?: string }>();
 	const profile = profileOf(body.tool ?? 'claude');
 	const decoded = decodeURIComponent(body.path ?? '');
-	const known = listRules(profile).map((r) => r.path);
+	const known = (await listRules(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a rule file' }, 404);
 	try {
-		writeText(match, body.content ?? '');
+		await writeText(match, body.content ?? '');
 	} catch (e) {
 		return c.json({ error: (e as Error).message }, 500);
 	}

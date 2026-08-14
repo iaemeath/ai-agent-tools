@@ -6,30 +6,31 @@
 // module owns the directory scan + frontmatter parse + line count, and each
 // reader supplies its own `makeInfo` to map a found file into its Info type.
 
-import fs from 'node:fs';
 import path from 'node:path';
+import { getFs } from './hosts/context.js';
+import type { DirentLike } from './fs-backend/types.js';
 
 /**
  * Scan one directory for *.md files and append an Info entry per file via
  * `makeInfo`. Non-existent / unreadable dirs are skipped gracefully (no throw).
  */
-export function scanMarkdownDir<T>(
+export async function scanMarkdownDir<T>(
 	dir: string,
 	scope: 'global' | 'project',
 	project: string | null,
 	out: T[],
-	makeInfo: (fullPath: string, name: string, scope: 'global' | 'project', project: string | null) => T,
-): void {
-	let entries: fs.Dirent[];
+	makeInfo: (fullPath: string, name: string, scope: 'global' | 'project', project: string | null) => T | Promise<T>,
+): Promise<void> {
+	let entries: DirentLike[];
 	try {
-		entries = fs.readdirSync(dir, { withFileTypes: true });
+		entries = await getFs().readDir(dir);
 	} catch {
 		return; // dir does not exist or unreadable — skip gracefully
 	}
 	for (const e of entries) {
-		if (!e.isFile() || !e.name.toLowerCase().endsWith('.md')) continue;
+		if (!e.isFile || !e.name.toLowerCase().endsWith('.md')) continue;
 		const fullPath = path.join(dir, e.name);
-		out.push(makeInfo(fullPath, e.name, scope, project));
+		out.push(await makeInfo(fullPath, e.name, scope, project));
 	}
 }
 
@@ -38,10 +39,10 @@ export function scanMarkdownDir<T>(
  * Supports inline values and folded/literal block scalars (>- / |).
  * Used by readers to pull `description` (and could pull any other field).
  */
-export function parseFrontmatterField(filePath: string, field: string): string | undefined {
+export async function parseFrontmatterField(filePath: string, field: string): Promise<string | undefined> {
 	let raw: string;
 	try {
-		raw = fs.readFileSync(filePath, 'utf8');
+		raw = await getFs().readFile(filePath);
 	} catch {
 		return undefined;
 	}
@@ -72,18 +73,18 @@ export function parseFrontmatterField(filePath: string, field: string): string |
 }
 
 /** Line count of a file (0 if empty/unreadable). */
-export function countLines(p: string): number {
+export async function countLines(p: string): Promise<number> {
 	try {
-		return fs.readFileSync(p, 'utf8').split('\n').length;
+		return (await getFs().readFile(p)).split('\n').length;
 	} catch {
 		return 0;
 	}
 }
 
 /** Read a file's text content (utf8), or null if unreadable. */
-export function readFileText(p: string): string | null {
+export async function readFileText(p: string): Promise<string | null> {
 	try {
-		return fs.readFileSync(p, 'utf8');
+		return await getFs().readFile(p);
 	} catch {
 		return null;
 	}

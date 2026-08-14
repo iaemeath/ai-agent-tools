@@ -14,9 +14,9 @@ function normPath(p: string): string {
 }
 
 /** GET /api/instructions?tool= — list global + project instruction files. */
-instructions.get('/', (c) => {
+instructions.get('/', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(listInstructions(profile));
+	return c.json(await listInstructions(profile));
 });
 
 /**
@@ -24,17 +24,17 @@ instructions.get('/', (c) => {
  * Read one instruction file's raw content. The path must match a file returned
  * by listInstructions for this tool (defense against arbitrary file reads).
  */
-instructions.get('/content', (c) => {
+instructions.get('/content', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
 	const requested = c.req.query('path') ?? '';
 	// Allow the path to be encoded (encodeURIComponent on the client side).
 	const decoded = decodeURIComponent(requested);
 	// Validate: the requested path must be one of the known instruction files.
 	// Compare with normalized separators (front-slash vs back-slash on Windows).
-	const known = listInstructions(profile).map((i) => i.path);
+	const known = (await listInstructions(profile)).map((i) => i.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not an instruction file' }, 404);
-	const raw = readInstruction(match);
+	const raw = await readInstruction(match);
 	if (raw === null) return c.json({ error: 'cannot read file' }, 500);
 	return c.json({ path: match, raw });
 });
@@ -49,7 +49,7 @@ instructions.post('/open', async (c) => {
 	const body = await c.req.json<{ path: string; tool?: string }>();
 	const profile = profileOf(body.tool ?? 'claude');
 	const decoded = decodeURIComponent(body.path ?? '');
-	const known = listInstructions(profile).map((i) => i.path);
+	const known = (await listInstructions(profile)).map((i) => i.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not an instruction file' }, 404);
 	return revealInExplorer(c, match);
@@ -66,11 +66,11 @@ instructions.post('/save', async (c) => {
 	const body = await c.req.json<{ path: string; content: string; tool?: string }>();
 	const profile = profileOf(body.tool ?? 'claude');
 	const decoded = decodeURIComponent(body.path ?? '');
-	const known = listInstructions(profile).map((i) => i.path);
+	const known = (await listInstructions(profile)).map((i) => i.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not an instruction file' }, 404);
 	try {
-		writeText(match, body.content ?? '');
+		await writeText(match, body.content ?? '');
 	} catch (e) {
 		return c.json({ error: (e as Error).message }, 500);
 	}

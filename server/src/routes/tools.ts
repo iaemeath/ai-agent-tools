@@ -19,16 +19,16 @@ function profileParam(tool: string | undefined) {
 }
 
 /** GET /api/tools/overview?project=<path|null>&tool=<claude|zcode> */
-tools.get('/overview', (c) => {
+tools.get('/overview', async (c) => {
 	const raw = c.req.query('project');
 	// "null" string or missing → overview mode (scan all projects).
 	const project = !raw || raw === 'null' ? null : raw;
 	const profile = profileParam(c.req.query('tool'));
-	return c.json(overview(project, profile));
+	return c.json(await overview(project, profile));
 });
 
 /** GET /api/tools/:kind/:name/detail?project=&tool= → per-scope status list. */
-tools.get('/:kind/:name/detail', (c) => {
+tools.get('/:kind/:name/detail', async (c) => {
 	const kind = c.req.param('kind');
 	const name = c.req.param('name');
 	const project = c.req.query('project') ?? null;
@@ -36,7 +36,7 @@ tools.get('/:kind/:name/detail', (c) => {
 	if (!isKind(kind)) return c.json({ error: 'unsupported kind' }, 400);
 	const a = adapterFor(kind, profile);
 	if (!a) return c.json({ error: 'unsupported kind' }, 400);
-	const items = a.scan({ project, profile });
+	const items = await a.scan({ project, profile });
 	const it = items.find((i) => i.name === name);
 	if (!it) return c.json({ error: 'not found' }, 404);
 	return c.json(it.perScope);
@@ -50,7 +50,7 @@ tools.post('/status', async (c) => {
 	const a = adapterFor(body.kind, profile);
 	if (!a) return c.json({ error: 'unsupported kind' }, 400);
 	try {
-		a.setStatus(body.name, body.scope, body.status, { project: body.project ?? null, profile });
+		await a.setStatus(body.name, body.scope, body.status, { project: body.project ?? null, profile });
 	} catch (e) {
 		return c.json({ error: (e as Error).message }, 500);
 	}
@@ -58,7 +58,7 @@ tools.post('/status', async (c) => {
 });
 
 /** GET /api/tools/:kind/:name/content?tool= → raw tool content. */
-tools.get('/:kind/:name/content', (c) => {
+tools.get('/:kind/:name/content', async (c) => {
 	const kind = c.req.param('kind');
 	const name = c.req.param('name');
 	const profile = profileParam(c.req.query('tool'));
@@ -66,7 +66,7 @@ tools.get('/:kind/:name/content', (c) => {
 	const a = adapterFor(kind, profile);
 	if (!a) return c.json({ error: 'unsupported kind' }, 400);
 	try {
-		return c.json(a.view(name));
+		return c.json(await a.view(name));
 	} catch (e) {
 		return c.json({ error: (e as Error).message }, 404);
 	}

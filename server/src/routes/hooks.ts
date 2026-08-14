@@ -19,9 +19,9 @@ function normPath(p: string): string {
 }
 
 /** GET /api/hooks?tool= — list all hooks (global + project), flattened. */
-hooks.get('/', (c) => {
+hooks.get('/', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(listHooks(profile));
+	return c.json(await listHooks(profile));
 });
 
 /** POST /api/hooks/open — body: { sourceFile, tool } — reveal the settings file. */
@@ -30,7 +30,7 @@ hooks.post('/open', async (c) => {
 	const profile = profileOf(body.tool ?? 'claude');
 	const decoded = decodeURIComponent(body.sourceFile ?? '');
 	// Whitelist: dedupe the source files that actually carry hooks.
-	const known = [...new Set(listHooks(profile).map((h) => h.sourceFile))];
+	const known = [...new Set((await listHooks(profile)).map((h) => h.sourceFile))];
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a hooks config file' }, 404);
 	return revealInExplorer(c, match);

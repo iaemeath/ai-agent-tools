@@ -10,16 +10,16 @@
 // mechanisms differ too widely across tools to unify (ZCode has `enabled`, Claude
 // has project-block arrays, Codex has none), so they are intentionally out of scope.
 
-import fs from 'node:fs';
 import { userMcpFile, projectMcpFile } from './paths.js';
 import { listProjects } from './projects-reader.js';
+import { getFs } from './hosts/context.js';
 import type { ToolProfile, ToolId } from './profiles.js';
 import type { McpServer } from './model.js';
 
 /** Read+parse a JSON file; return null if missing, empty, or unparseable. */
-function readJson(filePath: string): Record<string, unknown> | null {
+async function readJson(filePath: string): Promise<Record<string, unknown> | null> {
 	try {
-		const raw = fs.readFileSync(filePath, 'utf8');
+		const raw = await getFs().readFile(filePath);
 		if (!raw.trim()) return null;
 		const parsed = JSON.parse(raw);
 		return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
@@ -103,15 +103,15 @@ function buildServer(
 }
 
 /** Collect servers from one config file, appending to `out`. */
-function collectFromFile(
+async function collectFromFile(
 	filePath: string,
 	keyPath: string[],
 	tool: ToolId,
 	scope: 'user' | 'project',
 	project: string | null,
 	out: McpServer[],
-): void {
-	const root = readJson(filePath);
+): Promise<void> {
+	const root = await readJson(filePath);
 	if (!root) return;
 	const map = dive(root, keyPath);
 	if (!map) return;
@@ -125,15 +125,15 @@ function collectFromFile(
  * List all MCP servers for a tool: user-level + one entry per known project that has a
  * project-level config file. Returns [] when none exist. Read-only — never writes.
  */
-export function listMcps(profile: ToolProfile): McpServer[] {
+export async function listMcps(profile: ToolProfile): Promise<McpServer[]> {
 	const out: McpServer[] = [];
 
 	// 1. User-level servers.
-	collectFromFile(userMcpFile(profile), profile.mcps.userKeyPath, profile.id, 'user', null, out);
+	await collectFromFile(userMcpFile(profile), profile.mcps.userKeyPath, profile.id, 'user', null, out);
 
 	// 2. Project-level servers (use unified project discovery: fs folders OR sqlite rows).
-	for (const proj of listProjects(profile)) {
-		collectFromFile(projectMcpFile(proj.path, profile), profile.mcps.projectKeyPath, profile.id, 'project', proj.path, out);
+	for (const proj of await listProjects(profile)) {
+		await collectFromFile(projectMcpFile(proj.path, profile), profile.mcps.projectKeyPath, profile.id, 'project', proj.path, out);
 	}
 
 	return out;

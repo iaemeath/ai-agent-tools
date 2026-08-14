@@ -7,9 +7,9 @@ import type { ToolProfile } from '../profiles.js';
 export interface ToolAdapter {
 	kind: ToolKind;
 	mechanism: Mechanism;
-	scan(ctx: ScanCtx): ToolInstance[];
-	setStatus(name: string, scope: Scope, status: Status, ctx: ScopeCtx): void;
-	view(name: string): ToolContent;
+	scan(ctx: ScanCtx): Promise<ToolInstance[]>;
+	setStatus(name: string, scope: Scope, status: Status, ctx: ScopeCtx): Promise<void>;
+	view(name: string): Promise<ToolContent>;
 }
 
 import { SkillAdapter } from './skill.js';

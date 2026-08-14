@@ -16,20 +16,20 @@ function normPath(p: string): string {
 }
 
 /** GET /api/commands?tool= — list global + project command files. */
-commands.get('/', (c) => {
+commands.get('/', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(listCommands(profile));
+	return c.json(await listCommands(profile));
 });
 
 /** GET /api/commands/content?path=<encoded>&tool= */
-commands.get('/content', (c) => {
+commands.get('/content', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
 	const requested = c.req.query('path') ?? '';
 	const decoded = decodeURIComponent(requested);
-	const known = listCommands(profile).map((r) => r.path);
+	const known = (await listCommands(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a command file' }, 404);
-	const raw = readCommand(match);
+	const raw = await readCommand(match);
 	if (raw === null) return c.json({ error: 'cannot read file' }, 500);
 	return c.json({ path: match, raw });
 });
@@ -39,7 +39,7 @@ commands.post('/open', async (c) => {
 	const body = await c.req.json<{ path: string; tool?: string }>();
 	const profile = profileOf(body.tool ?? 'claude');
 	const decoded = decodeURIComponent(body.path ?? '');
-	const known = listCommands(profile).map((r) => r.path);
+	const known = (await listCommands(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a command file' }, 404);
 	return revealInExplorer(c, match);
@@ -50,11 +50,11 @@ commands.post('/save', async (c) => {
 	const body = await c.req.json<{ path: string; content: string; tool?: string }>();
 	const profile = profileOf(body.tool ?? 'claude');
 	const decoded = decodeURIComponent(body.path ?? '');
-	const known = listCommands(profile).map((r) => r.path);
+	const known = (await listCommands(profile)).map((r) => r.path);
 	const match = known.find((p) => normPath(p) === normPath(decoded));
 	if (!match) return c.json({ error: 'file not found or not a command file' }, 404);
 	try {
-		writeText(match, body.content ?? '');
+		await writeText(match, body.content ?? '');
 	} catch (e) {
 		return c.json({ error: (e as Error).message }, 500);
 	}

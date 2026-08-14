@@ -6,9 +6,9 @@
 //
 // Adding a new tool never touches this file — it only adds a profile entry.
 
-import fs from 'node:fs';
 import path from 'node:path';
 import { configRoot } from './paths.js';
+import { getFs } from './hosts/context.js';
 import type { PluginLocator, ToolProfile } from './profiles.js';
 import { readJsonKey, writeJsonKey, type JsonKeyEncoding } from './mutations/jsonKey.js';
 import type { Status } from './model.js';
@@ -46,6 +46,9 @@ function resolveNested(root: Json, keyPath: string[], create: boolean): { parent
 /**
  * Read a per-name toggle flag from settings JSON, walking `keyPath` to the map first.
  * Missing path or missing name → 'inherited'. Delegates leaf read to jsonKey.
+ *
+ * Pure in-memory operation (the caller passes an already-loaded settings object), so it
+ * stays synchronous — only readRegistry below actually touches the filesystem.
  */
 export function readFlag(encoding: JsonKeyEncoding, settings: Json, keyPath: string[], name: string): Status {
 	const node = resolveNested(settings, keyPath, false);
@@ -56,7 +59,7 @@ export function readFlag(encoding: JsonKeyEncoding, settings: Json, keyPath: str
 /**
  * Write a per-name toggle flag into settings JSON, walking `keyPath` (auto-creating
  * intermediate objects). 'inherited' removes the per-name key; empty map cleans up.
- * Delegates leaf write to jsonKey.
+ * Delegates leaf write to jsonKey. In-memory only — synchronous.
  */
 export function writeFlag(encoding: JsonKeyEncoding, settings: Json, keyPath: string[], name: string, status: Status): void {
 	const node = resolveNested(settings, keyPath, true);
@@ -70,13 +73,13 @@ export function writeFlag(encoding: JsonKeyEncoding, settings: Json, keyPath: st
  * object map (Claude). The shape + id field come from the profile locator, so this
  * function holds no tool-specific knowledge.
  */
-export function readRegistry(profile: ToolProfile): Map<string, InstallRecord[]> {
+export async function readRegistry(profile: ToolProfile): Promise<Map<string, InstallRecord[]>> {
 	const loc: PluginLocator = profile.plugins;
 	const file = path.join(configRoot(profile), ...loc.dirRelative, loc.manifestFile);
-	if (!fs.existsSync(file)) return new Map();
+	if (!(await getFs().exists(file))) return new Map();
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+		parsed = JSON.parse(await getFs().readFile(file));
 	} catch {
 		return new Map();
 	}
@@ -95,9 +98,9 @@ export function readRegistry(profile: ToolProfile): Map<string, InstallRecord[]>
 			const id = typeof r[idField] === 'string' ? (r[idField] as string) : undefined;
 			if (!id) continue;
 			map.set(id, [{
-				installPath: typeof r['installPath'] === 'string' ? r['installPath'] : '',
-				version: typeof r['version'] === 'string' ? r['version'] : null,
-				scope: typeof r['scope'] === 'string' ? r['scope'] : undefined,
+				installPath: typeof r['installPath'] === 'string' ? (r['installPath'] as string) : '',
+				version: typeof r['version'] === 'string' ? (r['version'] as string) : null,
+				scope: typeof r['scope'] === 'string' ? (r['scope'] as string) : undefined,
 			}]);
 		}
 	} else {

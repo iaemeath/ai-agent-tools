@@ -8,10 +8,10 @@
 // by walking the real filesystem, matching the longest possible directory-name prefix at
 // each step. On Windows we start from a detected drive root (`D:\`) instead of `/`.
 
-import fs from 'node:fs';
 import path from 'node:path';
+import { getFs } from './hosts/context.js';
 
-export function decodeProjectFolder(name: string): string {
+export async function decodeProjectFolder(name: string): Promise<string> {
 	if (name === '') return name;
 
 	const tokens = name.split('-');
@@ -24,7 +24,7 @@ export function decodeProjectFolder(name: string): string {
 	let i = 0;
 	if (tokens.length >= 2 && tokens[0].length === 1 && /^[a-zA-Z]$/.test(tokens[0]) && tokens[1] === '') {
 		const driveRoot = `${tokens[0]}:\\`;
-		if (fs.existsSync(driveRoot)) {
+		if (await getFs().exists(driveRoot)) {
 			resolved = driveRoot;
 			i = 2; // consumed the drive letter + the empty separator token
 		}
@@ -52,7 +52,7 @@ export function decodeProjectFolder(name: string): string {
 			// either separator. Try dash-join first (real '-'), then underscore-join.
 			for (const candidate of [slice.join('-'), slice.join('_')]) {
 				const probe = path.join(resolved, candidate);
-				if (fs.existsSync(probe) && fs.statSync(probe).isDirectory()) {
+				if ((await getFs().exists(probe)) && (await getFs().stat(probe)).isDirectory) {
 					resolved = probe;
 					i += take;
 					matched = true;

@@ -14,7 +14,7 @@ import { scanMarkdownDir, parseFrontmatterField, countLines, readFileText, dedup
 import type { ToolProfile } from './profiles.js';
 import type { CommandInfo } from './model.js';
 
-export function listCommands(profile: ToolProfile): CommandInfo[] {
+export async function listCommands(profile: ToolProfile): Promise<CommandInfo[]> {
 	// Tool has no commands support → empty.
 	if (!profile.commands) return [];
 
@@ -22,29 +22,29 @@ export function listCommands(profile: ToolProfile): CommandInfo[] {
 
 	// 1. Global command files.
 	const gDir = globalCommandsDir(profile);
-	if (gDir) scanMarkdownDir(gDir, 'global', null, out, makeCommandInfo);
+	if (gDir) await scanMarkdownDir(gDir, 'global', null, out, makeCommandInfo);
 
 	// 2. Project-level command files (uses listProjects, NOT allProjectPaths —
 	//    listProjects supports both fs (Claude) and sqlite (ZCode)).
-	for (const proj of listProjects(profile)) {
+	for (const proj of await listProjects(profile)) {
 		const pDir = projectCommandsDir(proj.path, profile);
-		if (pDir) scanMarkdownDir(pDir, 'project', proj.path, out, makeCommandInfo);
+		if (pDir) await scanMarkdownDir(pDir, 'project', proj.path, out, makeCommandInfo);
 	}
 
 	return dedupeByKey(out, (r) => r.path);
 }
 
-function makeCommandInfo(fullPath: string, name: string, scope: 'global' | 'project', project: string | null): CommandInfo {
+async function makeCommandInfo(fullPath: string, name: string, scope: 'global' | 'project', project: string | null): Promise<CommandInfo> {
 	return {
 		scope,
 		path: fullPath,
 		name,
-		description: parseFrontmatterField(fullPath, 'description'),
-		lineCount: countLines(fullPath),
+		description: await parseFrontmatterField(fullPath, 'description'),
+		lineCount: await countLines(fullPath),
 		project,
 	};
 }
 
-export function readCommand(filePath: string): string | null {
+export function readCommand(filePath: string): Promise<string | null> {
 	return readFileText(filePath);
 }

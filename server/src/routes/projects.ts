@@ -12,17 +12,17 @@ function isValidEncoded(encoded: string): boolean {
 }
 
 /** GET /api/projects?tool=<claude|zcode> — list projects for the tool. */
-projects.get('/', (c) => {
+projects.get('/', async (c) => {
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	return c.json(listProjects(profile));
+	return c.json(await listProjects(profile));
 });
 
 /** DELETE /api/projects/:encoded?tool= — delete session history for one project. */
-projects.delete('/:encoded', (c) => {
+projects.delete('/:encoded', async (c) => {
 	const encoded = decodeURIComponent(c.req.param('encoded'));
 	if (!isValidEncoded(encoded)) return c.json({ error: 'invalid project id' }, 400);
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	const ok = deleteProject(profile, encoded);
+	const ok = await deleteProject(profile, encoded);
 	if (!ok) return c.json({ error: 'project not found or not removable' }, 404);
 	return c.json({ ok: true });
 });

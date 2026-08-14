@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { Refresh, Sunny, Moon, } from '@element-plus/icons-vue';
 import { availableLocales, i18n, nextLocale } from '../i18n';
 import { useTool } from '../stores/tool';
+import { useHost } from '../stores/host';
+import { api } from '../api';
 
 const route = useRoute();
 const { t } = useI18n();
 const { tool, TOOL_OPTIONS, setTool } = useTool();
+const { currentHost, remoteHosts, setHost } = useHost();
 
 const isDark = ref(document.documentElement.classList.contains('dark'));
 const isRefreshing = ref(false);
@@ -26,6 +29,7 @@ const titleKey = computed(() => {
 		hooks: 'page.hooks.title',
 		mcps: 'page.mcps.title',
 		settings: 'page.settings.title',
+		hosts: 'page.hosts.title',
 	};
 	const seg = route.path.split('/')[1];
 	return map[seg] ?? 'page.placeholder.title';
@@ -42,10 +46,28 @@ const subtitleKey = computed(() => {
 		hooks: 'page.hooks.subtitle',
 		mcps: 'page.mcps.subtitle',
 		settings: 'page.settings.subtitle',
+		hosts: 'page.hosts.subtitle',
 	};
 	const seg = route.path.split('/')[1];
 	return map[seg] ?? '';
 });
+
+// Remote host list for the selector; reloaded when HostsView adds/removes one.
+async function loadHosts() {
+	try {
+		const { hosts } = await api.listHosts();
+		remoteHosts.value = hosts.map((h) => ({ id: h.id, name: h.name, isLocal: false, status: h.status }));
+	} catch { /* ignore */ }
+}
+onMounted(() => {
+	loadHosts();
+	window.addEventListener('ccc-ui:hosts-changed', loadHosts);
+});
+onUnmounted(() => window.removeEventListener('ccc-ui:hosts-changed', loadHosts));
+
+function onHostChange(val: unknown) {
+	setHost(String(val));
+}
 
 // Skills view exposes a global reload via a custom event; others refresh via location reload.
 function onRefresh() {
@@ -75,7 +97,11 @@ function switchLanguage() {
       <p v-if="subtitleKey" class="subtitle">{{ t(subtitleKey) }}</p>
     </div>
     <div class="actions">
-      <el-radio-group :model-value="tool" size="small" class="tool-switch" @change="setTool">
+      <el-select :model-value="currentHost" size="default" class="host-switch" :title="t('header.switchHost')" @change="onHostChange">
+        <el-option value="local" :label="t('host.local')" />
+        <el-option v-for="h in remoteHosts" :key="h.id" :value="h.id" :label="h.name" />
+      </el-select>
+      <el-radio-group :model-value="tool" size="default" class="tool-switch" @change="setTool">
         <el-radio-button v-for="opt in TOOL_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</el-radio-button>
       </el-radio-group>
       <el-button text :title="t('header.switchLanguage')" @click="switchLanguage">
@@ -110,9 +136,12 @@ function switchLanguage() {
 .actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
-.tool-switch {
-  margin-right: 8px;
+/* Both use size="default" → identical 24px height. Widths: host fixed (132px fits typical
+   host names), tool auto-sizes to "Claude Code / ZCode" labels. Unified gap replaces
+   the old per-element margin-right so spacing is even across the whole row. */
+.host-switch {
+  width: 132px;
 }
 </style>

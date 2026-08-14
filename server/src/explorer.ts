@@ -10,6 +10,7 @@
 
 import { execFile } from 'node:child_process';
 import type { Context } from 'hono';
+import { getHostCtx } from './hosts/context.js';
 
 /**
  * Reveal a path in the Windows file manager via explorer.exe. `select=true`
@@ -21,6 +22,11 @@ import type { Context } from 'hono';
  * (ENOENT), a stderr message, or a spawn error is treated as an error.
  */
 export function revealInExplorer(c: Context, absPath: string, select = true): Promise<Response> {
+	// explorer.exe is a LOCAL desktop action — meaningless for a remote SSH host. Refuse
+	// early so the 7 calling routes get a clean {ok:false,reason:'remote'} without spawning.
+	if (getHostCtx().isRemote) {
+		return Promise.resolve(c.json({ ok: false, reason: 'remote', error: 'opening in the file manager is only available for the local host' }));
+	}
 	const args = select ? [`/select,${absPath}`] : [absPath];
 	return new Promise<Response>((resolve) => {
 		const child = execFile('explorer.exe', args, (err, _stdout, stderr) => {

@@ -18,7 +18,7 @@ import { scanMarkdownDir, parseFrontmatterField, countLines, readFileText, dedup
 import type { ToolProfile } from './profiles.js';
 import type { AgentInfo } from './model.js';
 
-export function listAgents(profile: ToolProfile): AgentInfo[] {
+export async function listAgents(profile: ToolProfile): Promise<AgentInfo[]> {
 	// Tool has no standalone-agents support → empty.
 	if (!profile.agents) return [];
 
@@ -26,29 +26,29 @@ export function listAgents(profile: ToolProfile): AgentInfo[] {
 
 	// 1. Global agent files.
 	const gDir = globalAgentsDir(profile);
-	if (gDir) scanMarkdownDir(gDir, 'global', null, out, makeAgentInfo);
+	if (gDir) await scanMarkdownDir(gDir, 'global', null, out, makeAgentInfo);
 
 	// 2. Project-level agent files (uses listProjects, NOT allProjectPaths —
 	//    listProjects supports both fs (Claude) and sqlite (ZCode)).
-	for (const proj of listProjects(profile)) {
+	for (const proj of await listProjects(profile)) {
 		const pDir = projectAgentsDir(proj.path, profile);
-		if (pDir) scanMarkdownDir(pDir, 'project', proj.path, out, makeAgentInfo);
+		if (pDir) await scanMarkdownDir(pDir, 'project', proj.path, out, makeAgentInfo);
 	}
 
 	return dedupeByKey(out, (r) => r.path);
 }
 
-function makeAgentInfo(fullPath: string, name: string, scope: 'global' | 'project', project: string | null): AgentInfo {
+async function makeAgentInfo(fullPath: string, name: string, scope: 'global' | 'project', project: string | null): Promise<AgentInfo> {
 	return {
 		scope,
 		path: fullPath,
 		name,
-		description: parseFrontmatterField(fullPath, 'description'),
-		lineCount: countLines(fullPath),
+		description: await parseFrontmatterField(fullPath, 'description'),
+		lineCount: await countLines(fullPath),
 		project,
 	};
 }
 
-export function readAgent(filePath: string): string | null {
+export function readAgent(filePath: string): Promise<string | null> {
 	return readFileText(filePath);
 }

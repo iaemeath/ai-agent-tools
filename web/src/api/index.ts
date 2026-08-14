@@ -1,27 +1,43 @@
 // API client — replaces the Tauri `invoke(...)` calls with fetch.
 // Mirrors the server's route table 1:1. Every method takes an optional `tool` so the
 // same UI can target multiple AI tools (claude / zcode).
+//
+// Host targeting: getJson/postJson/del inject an `X-Host` header when the active host is
+// not 'local', so all resource requests transparently hit the selected SSH host. Host-
+// management methods pass { injectHost: false } because they operate on the LOCAL registry.
 
 import type { AgentInfo, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, ProjectInfo, RuleInfo, Scope, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
+import { currentHost } from '../stores/host';
 
-async function getJson<T>(url: string): Promise<T> {
-	const res = await fetch(url);
+interface HostOpts {
+	/** When false, skip the X-Host injection (host-management routes target the local registry). */
+	injectHost?: boolean;
+}
+
+function hostHeaders(opts: HostOpts): Record<string, string> {
+	const h: Record<string, string> = {};
+	if (opts.injectHost !== false && currentHost.value !== 'local') h['X-Host'] = currentHost.value;
+	return h;
+}
+
+async function getJson<T>(url: string, opts: HostOpts = {}): Promise<T> {
+	const res = await fetch(url, { headers: hostHeaders(opts) });
 	if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
 	return res.json() as Promise<T>;
 }
 
-async function postJson<T>(url: string, body: unknown): Promise<T> {
+async function postJson<T>(url: string, body: unknown, opts: HostOpts = {}): Promise<T> {
 	const res = await fetch(url, {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
+		headers: { 'Content-Type': 'application/json', ...hostHeaders(opts) },
 		body: JSON.stringify(body),
 	});
 	if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
 	return res.json() as Promise<T>;
 }
 
-async function del<T>(url: string): Promise<T> {
-	const res = await fetch(url, { method: 'DELETE' });
+async function del<T>(url: string, opts: HostOpts = {}): Promise<T> {
+	const res = await fetch(url, { method: 'DELETE', headers: hostHeaders(opts) });
 	if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
 	return res.json() as Promise<T>;
 }
@@ -85,7 +101,7 @@ export const api = {
 	saveCommand: (filePath: string, content: string, tool?: ToolId) =>
 		postJson<{ ok: true; path: string }>('/api/commands/save', { path: filePath, content, tool }),
 	openCommandInExplorer: (filePath: string, tool?: ToolId) =>
-		postJson<{ ok: true }>('/api/commands/open', { path: filePath, tool }),
+		postJson<{ ok: true }>(`/api/commands/open`, { path: filePath, tool }),
 	listAgents: (tool?: ToolId) =>
 		getJson<AgentInfo[]>(`/api/agents${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	readAgent: (filePath: string, tool?: ToolId) =>
@@ -93,11 +109,11 @@ export const api = {
 	saveAgent: (filePath: string, content: string, tool?: ToolId) =>
 		postJson<{ ok: true; path: string }>('/api/agents/save', { path: filePath, content, tool }),
 	openAgentInExplorer: (filePath: string, tool?: ToolId) =>
-		postJson<{ ok: true }>('/api/agents/open', { path: filePath, tool }),
+		postJson<{ ok: true }>(`/api/agents/open`, { path: filePath, tool }),
 	listHooks: (tool?: ToolId) =>
 		getJson<HookInfo[]>(`/api/hooks${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	openHookSourceInExplorer: (sourceFile: string, tool?: ToolId) =>
-		postJson<{ ok: true }>('/api/hooks/open', { sourceFile, tool }),
+		postJson<{ ok: true }>(`/api/hooks/open`, { sourceFile, tool }),
 	listMcps: (tool?: ToolId) =>
 		getJson<McpServer[]>(`/api/mcps${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	getMcpDetail: (name: string, scope: 'user' | 'project', project: string | null, tool?: ToolId) =>
@@ -105,7 +121,7 @@ export const api = {
 	getMcpTools: (name: string, scope: 'user' | 'project', project: string | null, tool?: ToolId) =>
 		getJson<{ tools: { name: string; description?: string }[]; error?: string }>(`/api/mcps/tools?name=${encodeURIComponent(name)}&scope=${scope}${project ? `&project=${encodeURIComponent(project)}` : ''}${toolQ(tool)}`),
 	openMcpInExplorer: (sourceFile: string, tool?: ToolId) =>
-		postJson<{ ok: true }>('/api/mcps/open', { sourceFile, tool }),
+		postJson<{ ok: true }>(`/api/mcps/open`, { sourceFile, tool }),
 	listPluginFiles: (name: string, subpath: string, project: string | null, tool?: ToolId) =>
 		getJson<{ entries: { name: string; isDir: boolean }[]; root: string }>(
 			`/api/plugins/${encodeURIComponent(name)}/files?subpath=${encodeURIComponent(subpath)}&project=${encodeURIComponent(project ?? 'null')}${toolQ(tool)}`,
@@ -118,4 +134,51 @@ export const api = {
 		getJson<{ sourceFile: string; values: Record<string, unknown> }>(
 			`/api/settings${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`,
 		),
+
+	// ---- Host management (always LOCAL — never inject X-Host) ----
+	listHosts: () =>
+		getJson<{ hosts: HostSummary[] }>('/api/hosts', { injectHost: false }),
+	saveHost: (body: HostInput) =>
+		postJson<{ id: string }>('/api/hosts', body, { injectHost: false }),
+	testHost: (body: HostTestInput) =>
+		postJson<{ ok: boolean; homeDir?: string; error?: string }>('/api/hosts/test', body, { injectHost: false }),
+	deleteHost: (id: string) =>
+		del<{ ok: true }>(`/api/hosts/${encodeURIComponent(id)}`, { injectHost: false }),
+	disconnectHost: (id: string) =>
+		postJson<{ ok: true }>(`/api/hosts/${encodeURIComponent(id)}/disconnect`, {}, { injectHost: false }),
 };
+
+// ---- Host types (mirror the server's safeView) ----
+export interface HostSummary {
+	id: string;
+	name: string;
+	host: string;
+	port: number;
+	userName: string;
+	authMethod: 'password' | 'privateKey';
+	privateKeyPath?: string;
+	hasPassword: boolean;
+	hasPassphrase: boolean;
+	createdAt: string;
+	status: 'connected' | 'connecting' | 'idle';
+}
+export interface HostInput {
+	id?: string;
+	name: string;
+	host: string;
+	port?: number;
+	userName: string;
+	authMethod: 'password' | 'privateKey';
+	password?: string;
+	privateKeyPath?: string;
+	passphrase?: string;
+}
+export interface HostTestInput {
+	host: string;
+	port?: number;
+	userName: string;
+	authMethod: 'password' | 'privateKey';
+	password?: string;
+	privateKeyPath?: string;
+	passphrase?: string;
+}

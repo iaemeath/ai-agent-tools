@@ -3,11 +3,12 @@
 // this module adds a plugin-specific detail that returns typed fields.
 
 import { Hono } from 'hono';
-import fs from 'node:fs';
 import path from 'node:path';
 import { registry } from '../adapters/types.js';
 import { profileOf } from '../profiles.js';
 import { revealInExplorer } from '../explorer.js';
+import { getFs } from '../hosts/context.js';
+import type { StatResult } from '../fs-backend/types.js';
 import type { PluginDetail } from '../model.js';
 
 export const plugins = new Hono();
@@ -23,13 +24,13 @@ const MAX_PREVIEW_BYTES = 512 * 1024;
 const HIDDEN_DIRS = new Set(['node_modules', '.git', '__pycache__']);
 
 /** Resolve the install path of a plugin by name (used by both detail and open). */
-function resolveInstallPath(name: string, project: string | null, profile: ReturnType<typeof profileOf>): string | null {
+async function resolveInstallPath(name: string, project: string | null, profile: ReturnType<typeof profileOf>): Promise<string | null> {
 	const adapter = registry(profile).find((a) => a.kind === 'plugin');
 	if (!adapter) return null;
-	const detailFn = (adapter as { detail?: (n: string, p: string | null) => PluginDetail }).detail;
+	const detailFn = (adapter as { detail?: (n: string, p: string | null) => Promise<PluginDetail> }).detail;
 	if (!detailFn) return null;
 	try {
-		const detail = detailFn.call(adapter, name, project);
+		const detail = await detailFn.call(adapter, name, project);
 		return detail.installPath || null;
 	} catch {
 		return null;
@@ -41,7 +42,7 @@ function resolveInstallPath(name: string, project: string | null, profile: Retur
  * Returns structured plugin detail: metadata + per-scope status + component inventory.
  * `:name` is the full plugin id "name@marketplace" (URL-encoded).
  */
-plugins.get('/:name/detail', (c) => {
+plugins.get('/:name/detail', async (c) => {
 	const name = decodeURIComponent(c.req.param('name'));
 	const projectRaw = c.req.query('project');
 	const project = !projectRaw || projectRaw === 'null' ? null : projectRaw;
@@ -49,10 +50,10 @@ plugins.get('/:name/detail', (c) => {
 	const adapter = registry(profile).find((a) => a.kind === 'plugin');
 	if (!adapter) return c.json({ error: 'plugin adapter not registered' }, 500);
 	// The adapter is typed as ToolAdapter; cast to access detail().
-	const detailFn = (adapter as { detail?: (n: string, p: string | null) => PluginDetail }).detail;
+	const detailFn = (adapter as { detail?: (n: string, p: string | null) => Promise<PluginDetail> }).detail;
 	if (!detailFn) return c.json({ error: 'detail not supported' }, 404);
 	try {
-		return c.json(detailFn.call(adapter, name, project));
+		return c.json(await detailFn.call(adapter, name, project));
 	} catch (e) {
 		return c.json({ error: (e as Error).message }, 404);
 	}
@@ -69,7 +70,7 @@ plugins.post('/:name/open', async (c) => {
 	const body = await c.req.json<{ project?: string | null; tool?: string }>().catch(() => ({}) as { project?: string | null; tool?: string });
 	const project = !body.project || body.project === 'null' ? null : body.project;
 	const profile = profileOf(body.tool ?? 'claude');
-	const installPath = resolveInstallPath(name, project, profile);
+	const installPath = await resolveInstallPath(name, project, profile);
 	if (!installPath) return c.json({ error: 'plugin not found or has no install path' }, 404);
 	// Open the install directory itself (no /select, since installPath is a folder).
 	return revealInExplorer(c, installPath, false);
@@ -81,13 +82,13 @@ plugins.post('/:name/open', async (c) => {
  * (path traversal via `..` or absolute paths). This is the single security chokepoint
  * for the file-browser endpoints.
  */
-function resolveSafePath(
+async function resolveSafePath(
 	name: string,
 	subpath: string | undefined,
 	project: string | null,
 	profile: ReturnType<typeof profileOf>,
-): { absPath: string; installPath: string } | null {
-	const raw = resolveInstallPath(name, project, profile);
+): Promise<{ absPath: string; installPath: string } | null> {
+	const raw = await resolveInstallPath(name, project, profile);
 	if (!raw) return null;
 	// Normalize separators so the containment check is reliable regardless of whether
 	// the registry stored the install path with forward slashes (some installs do) or
@@ -109,29 +110,29 @@ function resolveSafePath(
  * List one directory level inside the plugin install path. Folders first, then files,
  * both alphabetical. node_modules / .git / __pycache__ are hidden.
  */
-plugins.get('/:name/files', (c) => {
+plugins.get('/:name/files', async (c) => {
 	const name = decodeURIComponent(c.req.param('name'));
 	const projectRaw = c.req.query('project');
 	const project = !projectRaw || projectRaw === 'null' ? null : projectRaw;
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	const resolved = resolveSafePath(name, c.req.query('subpath'), project, profile);
+	const resolved = await resolveSafePath(name, c.req.query('subpath'), project, profile);
 	if (!resolved) return c.json({ error: 'plugin not found or path outside install dir' }, 403);
 
-	let stats: fs.Stats;
+	let stats: StatResult;
 	try {
-		stats = fs.statSync(resolved.absPath);
+		stats = await getFs().stat(resolved.absPath);
 	} catch {
 		return c.json({ error: 'path not found' }, 404);
 	}
-	if (!stats.isDirectory()) return c.json({ error: 'not a directory' }, 400);
+	if (!stats.isDirectory) return c.json({ error: 'not a directory' }, 400);
 
 	const entries: { name: string; isDir: boolean }[] = [];
 	try {
-		for (const e of fs.readdirSync(resolved.absPath, { withFileTypes: true })) {
-			if (e.isDirectory()) {
+		for (const e of await getFs().readDir(resolved.absPath)) {
+			if (e.isDirectory) {
 				if (HIDDEN_DIRS.has(e.name)) continue;
 				entries.push({ name: e.name, isDir: true });
-			} else if (e.isFile()) {
+			} else if (e.isFile) {
 				entries.push({ name: e.name, isDir: false });
 			}
 		}
@@ -148,21 +149,21 @@ plugins.get('/:name/files', (c) => {
  * Read one text file's raw content. Binary files and files > 512 KB are rejected with a
  * friendly message. Path must be inside the plugin install dir (traversal-guarded).
  */
-plugins.get('/:name/file-content', (c) => {
+plugins.get('/:name/file-content', async (c) => {
 	const name = decodeURIComponent(c.req.param('name'));
 	const projectRaw = c.req.query('project');
 	const project = !projectRaw || projectRaw === 'null' ? null : projectRaw;
 	const profile = profileOf(c.req.query('tool') ?? 'claude');
-	const resolved = resolveSafePath(name, c.req.query('subpath'), project, profile);
+	const resolved = await resolveSafePath(name, c.req.query('subpath'), project, profile);
 	if (!resolved) return c.json({ error: 'plugin not found or path outside install dir' }, 403);
 
-	let stats: fs.Stats;
+	let stats: StatResult;
 	try {
-		stats = fs.statSync(resolved.absPath);
+		stats = await getFs().stat(resolved.absPath);
 	} catch {
 		return c.json({ error: 'file not found' }, 404);
 	}
-	if (stats.isDirectory()) return c.json({ error: 'path is a directory' }, 400);
+	if (stats.isDirectory) return c.json({ error: 'path is a directory' }, 400);
 	if (stats.size > MAX_PREVIEW_BYTES) return c.json({ error: 'file too large (>512KB)' }, 413);
 
 	const ext = path.extname(resolved.absPath).toLowerCase();
@@ -170,7 +171,7 @@ plugins.get('/:name/file-content', (c) => {
 		return c.json({ error: 'binary or unsupported file type' }, 415);
 	}
 	try {
-		const raw = fs.readFileSync(resolved.absPath, 'utf8');
+		const raw = await getFs().readFile(resolved.absPath);
 		return c.json({ name: path.basename(resolved.absPath), raw, ext });
 	} catch {
 		return c.json({ error: 'cannot read file' }, 500);
