@@ -30,7 +30,15 @@ export interface RemoteResult {
 	body: unknown;
 }
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// SEA/CJS note: import.meta.url compiles to undefined in the CJS exe bundle — fall back
+// to the bundle's native __dirname (dist-exe), where ccc-remote.mjs sits as a sibling.
+function here(): string {
+	try {
+		return path.dirname(fileURLToPath(import.meta.url));
+	} catch {
+		return typeof __dirname !== 'undefined' ? __dirname : process.cwd();
+	}
+}
 const REMOTE_DIR_NAME = '.ccc-ui';
 
 let bundleCode = '';
@@ -48,14 +56,14 @@ async function getBundle(): Promise<{ code: string; hash: string }> {
 	}
 	// 2. Sibling artifact of a built server (repo dist/ layout: dist/server.cjs + dist/ccc-remote.mjs).
 	if (!bundleCode) {
-		const sibling = path.resolve(__dirname, 'ccc-remote.mjs');
+		const sibling = path.resolve(here(), 'ccc-remote.mjs');
 		if (fs.existsSync(sibling)) bundleCode = fs.readFileSync(sibling, 'utf8');
 	}
 	// 3. Dev fallback — bundle on the fly (dynamic import keeps esbuild out of prod runs).
 	if (!bundleCode) {
 		const { build } = await import('esbuild');
 		const res = await build({
-			entryPoints: [path.resolve(__dirname, 'entry.ts')],
+			entryPoints: [path.resolve(here(), 'entry.ts')],
 			bundle: true,
 			platform: 'node',
 			format: 'esm',
