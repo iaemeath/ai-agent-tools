@@ -1,159 +1,141 @@
 # ccc-ui
 
-A web UI to manage AI coding-agent config — across scopes (user / project), across tools
-(Claude Code, ZCode, …), and **across machines** (operate another host over SSH). Toggle
-**skills** and **plugins** on/off; browse **projects** (session history), **instructions**
-(CLAUDE.md / AGENTS.md), **rules**, **commands**, **agents**, and **hooks** — with in-place
-markdown editing; inspect **MCP** servers and review **settings** — all from one place.
+一个管理 AI 编码代理配置的 Web UI —— 跨作用域(user / project)、跨工具(Claude Code、ZCode、…),并且**跨机器**(通过 SSH 操控另一台主机)。开关 **skills** 与 **plugins**;浏览 **projects**(会话历史)、**instructions**(CLAUDE.md / AGENTS.md)、**rules**、**commands**、**agents**、**hooks** —— 支持就地 markdown 编辑;查看 **MCP** 服务器与 **settings** 总览 —— 全部集中一处。
 
-**Skills and plugins are toggle-able (live, no restart). Markdown resources (instructions /
-rules / commands / agents) are view + edit. Everything else is read-only browsing.**
-Source of truth is each tool's own native config; this app is a read/project/edit-back layer over it,
-never a parallel database.
+**Skills 与 plugins 可开关(实时生效,无需重启)。Markdown 资源(instructions / rules / commands / agents)可查看 + 编辑。其余均为只读浏览。**
+事实源(source of truth)始终是各工具自身的原生配置;本应用只是架在其上的读取/投影/回写层,绝不另建平行数据库。
 
-Node + Hono backend, Vue 3 + Element Plus frontend.
+后端 Node + Hono,前端 Vue 3 + Element Plus。
 
 ---
 
-## Why multi-tool
+## 为什么做多工具
 
-Different AI coding tools (Claude Code, ZCode, …) store their config under different directories,
-with different settings-file layouts, different plugin-manifest formats, and different key-nesting for
-the on/off switch. ccc-ui abstracts all those differences into a **declarative profile** per tool, so:
+不同的 AI 编码工具(Claude Code、ZCode、…)把配置存在不同目录下,settings 文件布局不同、plugin manifest 格式不同、开关所在的 key 嵌套也不同。ccc-ui 把这些差异全部抽象为每个工具一份**声明式 profile**,于是:
 
-- **Adding a new tool = adding one profile object.** No engine/adapter changes.
-- The read/write engine, the adapters, and the path helpers are **tool-agnostic** — they hold zero
-  tool-specific string literals.
+- **新增一个工具 = 新增一个 profile 对象。** 引擎/adapter 零改动。
+- 读写引擎、adapters、路径助手全部**与工具无关** —— 不含任何工具专属的字符串字面量。
 
-See *Architecture → ResourceLocator* below for how.
+实现方式见下文 *架构 → ResourceLocator*。
 
-## Scope
+## 功能范围
 
-**Skill** and **plugin** are toggle-able (live, no restart) — they carry a native per-name on/off switch
-in the tool's settings. Markdown resources are **view + edit** (save back with `.bak` backup).
-Other resources are **read-only browsing**.
+**Skill** 与 **plugin** 可开关(实时生效,无需重启)—— 它们在工具的 settings 里有原生的按名开关。Markdown 资源为**查看 + 编辑**(回写时带 `.bak` 备份)。其余资源为**只读浏览**。
 
-| kind | mode | source of truth | notes |
+| 类型 | 模式 | 事实源 | 备注 |
 |---|---|---|---|
-| **skill** | toggle | `skillOverrides` (on/off/name-only/user-only) | also: promote project→global, delete |
-| **plugin** | toggle | `enabledPlugins` (`name@marketplace`: bool) | also: inline file explorer (browse plugin dir + preview file content) |
-| **project** | read-only | session-history folders (Claude) / SQLite DB (ZCode) | list + delete session history |
-| **instruction** | view + edit | `CLAUDE.md` / `AGENTS.md` (global + per-project) | split-pane markdown viewer/editor + open in file manager |
-| **mcp** | read-only | `mcpServers` (Claude) / `mcp.servers` (ZCode) | list servers + view config detail (command/args/env/url/headers) + live tool probe |
-| **rule** | view + edit | `~/.{tool}/rules/*.md` + `<proj>/.{tool}/rules/*.md` | split-pane viewer/editor; Claude only (ZCode has no rules mechanism → empty state) |
-| **command** | view + edit | `~/.{tool}/commands/*.md` + `<proj>/.{tool}/commands/*.md` | split-pane viewer/editor; custom slash commands |
-| **agent** | view + edit | `~/.{tool}/agents/*.md` + `<proj>/.{tool}/agents/*.md` | split-pane viewer/editor; standalone subagents |
-| **hook** | read-only | nested JSON in settings (`hooks` / `hooks.events`) | list + detail (event / matcher / command / timeout); Claude `settings.local.json` merged in |
-| **settings** | read-only | settings JSON | overview of toggles / env vars / permissions / marketplaces |
+| **skill** | 开关 | `skillOverrides`(on/off/name-only/user-only) | 另支持:项目级提升为全局、删除 |
+| **plugin** | 开关 | `enabledPlugins`(`name@marketplace`: bool) | 另支持:内嵌文件浏览器(浏览 plugin 目录 + 预览文件内容) |
+| **project** | 只读 | 会话历史文件夹(Claude)/ SQLite DB(ZCode) | 列表 + 删除会话历史 |
+| **instruction** | 查看 + 编辑 | `CLAUDE.md` / `AGENTS.md`(全局 + 各项目) | 分栏 markdown 查看/编辑器 + 在文件管理器中打开 |
+| **mcp** | 只读 | `mcpServers`(Claude)/ `mcp.servers`(ZCode) | 服务器列表 + 配置详情(command/args/env/url/headers)+ 实时工具探测 |
+| **rule** | 查看 + 编辑 | `~/.{tool}/rules/*.md` + `<proj>/.{tool}/rules/*.md` | 分栏查看/编辑器;仅 Claude(ZCode 无 rules 机制 → 空态) |
+| **command** | 查看 + 编辑 | `~/.{tool}/commands/*.md` + `<proj>/.{tool}/commands/*.md` | 分栏查看/编辑器;自定义斜杠命令 |
+| **agent** | 查看 + 编辑 | `~/.{tool}/agents/*.md` + `<proj>/.{tool}/agents/*.md` | 分栏查看/编辑器;独立子代理 |
+| **hook** | 只读 | settings 里的嵌套 JSON(`hooks` / `hooks.events`) | 列表 + 详情(event / matcher / command / timeout);合并 Claude `settings.local.json` |
+| **settings** | 只读 | settings JSON | 开关 / 环境变量 / 权限 / 插件市场总览 |
 
-On top of that, **remote SSH hosts** are first-class: the header host switcher retargets every
-page at another machine's config (see *Architecture → Remote hosts*).
+在此之上,**远程 SSH 主机**是一等公民:顶栏的主机切换器可以把每个页面整体重定向到另一台机器的配置(见 *架构 → 远程主机*)。
 
-MCP edit/toggle is deferred — the three tools' on/off mechanisms differ too widely (ZCode has `enabled`,
-Claude has project-block arrays, Codex has none), so a unified toggle would create "fake" switches the
-tool ignores. Read-only aggregation is the honest MVP.
+MCP 的编辑/开关暂缓 —— 三个工具的开关机制差异过大(ZCode 用 `enabled`,Claude 用项目级禁用数组,Codex 没有),强行统一开关只会造出工具根本不认的"假开关"。只读聚合才是诚实的 MVP。
 
-## Philosophy
+## 设计哲学
 
-**Config-as-SSOT.** This app holds no parallel copy of any tool's data. It only reads each tool's native
-config (`skillOverrides`, `enabledPlugins`) and writes it back with key-preserving merges (other top-level
-keys untouched). Every write is preceded by a `.bak` backup of the file it overwrites.
+**配置即唯一事实源(Config-as-SSOT)。** 本应用不保存任何工具数据的平行副本。它只读取各工具的原生配置(`skillOverrides`、`enabledPlugins`),并以保 key 合并的方式回写(其它顶层 key 原样保留)。每次写入前都会先对被覆盖文件做 `.bak` 备份。
 
-## Status
+## 当前状态
 
-- **Phase 0** — scaffold (Node + Hono + Vue 3 + Element Plus). done.
-- **Phase 1** — skill + plugin toggle, profile-aware. **done** for Claude Code + ZCode.
-  - `Skills` view: live (toggle / promote / delete, tool switcher in header).
-  - `Plugins` view: live (toggle + inline **file explorer** — browse plugin dir, preview file content,
-    open in file manager).
-  - Tool switching (Claude Code ⇄ ZCode) is global, in the header.
-- **Phase 2** — read-only browsing pages. **done** for Claude Code + ZCode.
-  - `Projects` view: card grid (session count / last activity) + delete session history.
-    Supports both fs folders (Claude) and SQLite DB (ZCode) via unified `ProjectsLocator`.
-  - `Instructions` view: split-pane markdown viewer (global CLAUDE.md/AGENTS.md left, project cards right,
-    draggable splitter) + open in file manager.
-  - `MCP` view: card grid + inline detail (transport / command / args / env / url / headers).
-    Claude + ZCode only (Codex TOML deferred).
-- **Phase 3** — markdown-resource browsing + config overview. **done** for Claude Code + ZCode.
-  - `Rules` / `Commands` / `Agents` views: split-pane markdown viewer (global left, project cards right)
-    + open in file manager. Rules is Claude-only (ZCode has no rules mechanism → empty state).
-  - `Hooks` view: list + detail (event / matcher / command / timeout / source file); Claude
-    `settings.local.json` merged in, ZCode `hooks.enabled` kill-switch reflected.
-  - `Settings` view: read-only overview of toggles / env vars / permissions / marketplaces.
-  - Markdown editing (instructions / rules / commands / agents): view/edit dual-mode with
-    safe save-back (whitelist check + `.bak` backup + atomic write).
-- **Phase 4** — remote SSH host management. **done**.
-  - `Hosts` view: add / edit / delete hosts, test connection, disconnect (AES-256-GCM
-    machine-bound secret storage; ssh2 connection pool with keepalive + dedupe).
-  - Header host switcher: any host selection transparently retargets all pages.
-  - **Architecture C remote exec** — on a remote host, reads AND writes run ON the remote
-    (bundled script + one `node` exec per request), not over per-file SFTP. Measured over a
-    VPN link: full overview 28.6s → **~0.5s**; markdown save ~0.8s. Windows remotes work
-    fully (native `node:fs` there — no POSIX-shell/`cmd` mismatch, no SFTP virtual-path
-    quirks, ZCode SQLite project source included).
+- **阶段 0** —— 脚手架(Node + Hono + Vue 3 + Element Plus)。已完成。
+- **阶段 1** —— skill + plugin 开关,profile 感知。Claude Code + ZCode **已完成**。
+  - `Skills` 页:实时(开关 / 提升 / 删除,顶栏工具切换器)。
+  - `Plugins` 页:实时(开关 + 内嵌**文件浏览器** —— 浏览 plugin 目录、预览文件内容、在文件管理器中打开)。
+  - 工具切换(Claude Code ⇄ ZCode)是全局的,在顶栏。
+- **阶段 2** —— 只读浏览页。Claude Code + ZCode **已完成**。
+  - `Projects` 页:卡片网格(会话数 / 最近活动)+ 删除会话历史。通过统一的 `ProjectsLocator`
+    同时支持文件系统目录(Claude)与 SQLite DB(ZCode)。
+  - `Instructions` 页:分栏 markdown 查看器(左侧全局 CLAUDE.md/AGENTS.md,右侧项目卡片,
+    分栏可拖动)+ 在文件管理器中打开。
+  - `MCP` 页:卡片网格 + 内嵌详情(transport / command / args / env / url / headers)。
+    仅 Claude + ZCode(Codex TOML 暂缓)。
+- **阶段 3** —— markdown 资源浏览 + 配置总览。Claude Code + ZCode **已完成**。
+  - `Rules` / `Commands` / `Agents` 页:分栏 markdown 查看器(左全局、右项目卡片)
+    + 在文件管理器中打开。Rules 仅 Claude(ZCode 无 rules 机制 → 空态)。
+  - `Hooks` 页:列表 + 详情(event / matcher / command / timeout / 来源文件);合并 Claude
+    `settings.local.json`,反映 ZCode `hooks.enabled` 总开关。
+  - `Settings` 页:开关 / 环境变量 / 权限 / 插件市场的只读总览。
+  - Markdown 编辑(instructions / rules / commands / agents):查看/编辑双模式,
+    安全回写(白名单校验 + `.bak` 备份 + 原子写入)。
+- **阶段 4** —— 远程 SSH 主机管理。**已完成**。
+  - `Hosts` 页:主机的增 / 改 / 删、测试连接、断开(AES-256-GCM 机器绑定密文存储;
+    ssh2 连接池,带 keepalive + 去重)。
+  - 顶栏主机切换器:选中任意主机即透明地把所有页面重定向过去。
+  - **架构 C 远程 exec** —— 在远程主机上,读和写都跑在**远程本机**
+    (内置脚本 + 每请求一次 `node` exec),而非逐文件 SFTP。VPN 链路实测:
+    完整 overview 28.6s → **约 0.5s**;markdown 保存约 0.8s。Windows 远程完全可用
+    (那边是原生 `node:fs` —— 没有 POSIX-shell/`cmd` 差异,没有 SFTP 虚拟路径
+    怪癖,ZCode SQLite 项目源也包含在内)。
 
 ---
 
-## Dev
+## 开发
 
-Prerequisites: Node 18+ (developed on Node 22+). Plain npm workspace — no native toolchain.
+前置条件:Node 18+(在 Node 22+ 上开发)。纯 npm workspace,无原生工具链。
 
 ```bash
-npm install            # installs both server and web workspaces
-npm run dev            # concurrently starts backend (:8787) + frontend (:5173)
+npm install            # 同时安装 server 与 web 两个 workspace
+npm run dev            # 并发启动后端(:8787)+ 前端(:5173)
 ```
 
-Open **http://localhost:5173**. Vite proxies `/api` → `:8787`, so the frontend talks to the Hono API
-in dev. (In production, `npm run build` emits `web/dist/` and the server serves it at `/`.)
+打开 **http://localhost:5173**。开发模式下 Vite 把 `/api` 代理到 `:8787`,前端由此对接 Hono API。
+(生产模式下,`npm run build` 产出 `web/dist/`,由 server 在 `/` 提供服务。)
 
 ```bash
-npm run dev:server     # backend only (tsx watch)
-npm run dev:web        # frontend only (vite)
-npm run build          # type-check (vue-tsc) + vite build → web/dist
-npm run typecheck      # tsc (server) + vue-tsc (web), no emit
-npm start              # run server (serves API + built frontend) on $PORT or 8787
+npm run dev:server     # 仅后端(tsx watch)
+npm run dev:web        # 仅前端(vite)
+npm run build          # 类型检查(vue-tsc)+ vite build → web/dist
+npm run typecheck      # tsc(server)+ vue-tsc(web),不产出
+npm start              # 运行 server(提供 API + 已构建前端),端口 $PORT 或 8787
 ```
 
 ---
 
-## Architecture
+## 架构
 
-### The ResourceLocator model (core design)
+### ResourceLocator 模型(核心设计)
 
-Every tool-specific difference — where skills live, how the plugin manifest is keyed, where the
-enabled-switch nests in settings JSON, how values are encoded — is declared in one place
-(`profiles.ts`) as a **profile**. Everything else is a tool-agnostic engine.
+每个工具差异 —— skills 存在哪、plugin manifest 以什么为 key、settings JSON 里开关嵌在哪层、
+值如何编码 —— 都集中声明在一处(`profiles.ts`),构成一份 **profile**。其余全部是与工具无关的引擎。
 
 ```
-profiles.ts         ToolProfile — the single source of truth for per-tool layout
+profiles.ts         ToolProfile —— 每工具布局的唯一事实源
                       skills:       { dirName, marker, overridesKeyPath, overridesEncoding }
                       plugins:      { dirRelative, manifestFile, manifestIsArray, manifestIdField,
                                        enabledKeyPath, enabledEncoding }
-                      projects:     ProjectsLocator — fs (dash-encoded folders) OR sqlite (session DB)
-                      instructions: { fileName }   — CLAUDE.md / AGENTS.md
+                      projects:     ProjectsLocator —— fs(短横线编码目录)或 sqlite(会话 DB)
+                      instructions: { fileName }   —— CLAUDE.md / AGENTS.md
                       mcps:         { userFile, userKeyPath, projectFile, projectDir, projectKeyPath }
-                    ↓ read by
-locator.ts          tool-agnostic engine:
-                      readRegistry(profile)   — parse manifest (array OR map) → normalized Map
-                      readFlag(enc, json, keyPath, name)   — walk nested key path → Status
-                      writeFlag(enc, json, keyPath, name, status) — walk + auto-create + write
-                    ↓ used by
-adapters/           SkillAdapter / PluginAdapter — scan / setStatus / view / detail
-                      (hold NO tool-specific literals; everything comes from the profile)
-paths.ts            path helpers — derive from profile locator fields, no hardcoded segments
-mutations/jsonKey.ts  leaf-level read/write of settings[key][name] (boolean OR string encoding)
-projects-reader.ts  unified project discovery (fs folders OR sqlite rows) + delete
-instructions-reader.ts  read-only instruction file discovery + content read
-mcp-reader.ts       read-only MCP server discovery (user-level + project-level) + transport inference
-decode.ts           decode dash-encoded project folder names (Windows drive + underscore recombination)
+                    ↓ 被……读取
+locator.ts          与工具无关的引擎:
+                      readRegistry(profile)   —— 解析 manifest(数组或 map)→ 归一化 Map
+                      readFlag(enc, json, keyPath, name)   —— 沿嵌套 key 路径求值 → Status
+                      writeFlag(enc, json, keyPath, name, status) —— 遍历 + 自动建层 + 写入
+                    ↓ 被……使用
+adapters/           SkillAdapter / PluginAdapter —— scan / setStatus / view / detail
+                      (不含任何工具专属字面量;一切来自 profile)
+paths.ts            路径助手 —— 全部由 profile 的 locator 字段推导,无硬编码片段
+mutations/jsonKey.ts  叶子级原语:settings[key][name] 的读写(boolean 或 string 编码)
+projects-reader.ts  统一的项目发现(fs 目录或 sqlite 行)+ 删除
+instructions-reader.ts  只读的 instruction 文件发现 + 内容读取
+mcp-reader.ts       只读的 MCP 服务器发现(用户级 + 项目级)+ transport 推断
+decode.ts           解码短横线编码的项目目录名(Windows 盘符 + 下划线重组)
 ```
 
-**The invariant:** no tool-specific string literal ('skills', 'SKILL.md', 'enabledPlugins', 'id', …)
-lives outside `profiles.ts`. Adding a tool never touches the engine, adapters, or paths.
+**不变式:** 任何工具专属字符串字面量('skills'、'SKILL.md'、'enabledPlugins'、'id'、…)只允许
+出现在 `profiles.ts` 里。新增工具永远不需要碰引擎、adapters 或 paths。
 
-### Adding a new tool (e.g. Codex)
+### 新增一个工具(例如 Codex)
 
-Add one entry to `PROFILES` in `profiles.ts`. That's the whole change:
+在 `profiles.ts` 的 `PROFILES` 里加一个条目。改动仅此一处:
 
 ```typescript
 codex: {
@@ -171,157 +153,152 @@ codex: {
   },
   instructions: { fileName: 'AGENTS.md' },
   mcps: {
-    userFile: ['.codex', 'config.toml'],       // NB: TOML needs its own reader (not JSON)
+    userFile: ['.codex', 'config.toml'],       // 注意:TOML 需要专用 reader(非 JSON)
     userKeyPath: ['mcp_servers'],
     projectFile: 'config.toml', projectDir: '.codex', projectKeyPath: ['mcp_servers'],
   },
 }
 ```
 
-Then add `'codex'` to `ToolId` in `profiles.ts` and to the frontend `TOOL_OPTIONS` in `stores/tool.ts`.
-Skill/plugin toggle, projects, instructions all work without further change. MCP needs a TOML reader
-(the JSON-based `mcp-reader.ts` won't parse `.toml`).
+然后在 `profiles.ts` 的 `ToolId` 与前端 `stores/tool.ts` 的 `TOOL_OPTIONS` 里加上 `'codex'`。
+Skill/plugin 开关、projects、instructions 无需其它改动即可工作。MCP 需要 TOML reader
+(基于 JSON 的 `mcp-reader.ts` 解析不了 `.toml`)。
 
-### Remote hosts (Architecture C — remote exec, not SFTP pulling)
+### 远程主机(架构 C —— 远程 exec,而非 SFTP 拉取)
 
-Every reader goes through a swappable `FsBackend` (`getFs()`), bound per-request from an
-`AsyncLocalStorage` host context (`X-Host` header → host middleware). Local requests bind
-`LocalFs` (node:fs) with zero overhead; remote requests used to bind `SshFs` (ssh2 SFTP) —
-which works, but over a slow link the per-file round-trips compound catastrophically (a full
-overview = hundreds of sequential SFTP calls ≈ **29s** over VPN).
+每个 reader 都经过一个可替换的 `FsBackend`(`getFs()`),由 `AsyncLocalStorage` 的 host 上下文
+按请求绑定(`X-Host` 头 → host 中间件)。本地请求绑定 `LocalFs`(node:fs),零开销;远程请求
+过去绑定 `SshFs`(ssh2 SFTP)—— 能用,但慢链路上逐文件的往返会灾难性叠加(一次完整
+overview = 数百次串行 SFTP 调用,VPN 上约 **29s**)。
 
-So remote requests now take a different path: **run the work on the remote itself.**
+因此远程请求现在走另一条路:**把工作放到远程本机执行。**
 
 ```
-route (isRemote) ──▶ remote/runner.ts (local side)
-                       esbuild-bundles remote/entry.ts to MEMORY (once per process)
-                       uploads it via SFTP to <home>/.ccc-ui/ccc-remote.<hash>.mjs
-                       (hash-named; unchanged bundles skip re-upload; stale ones pruned)
+route (isRemote) ──▶ remote/runner.ts(本地侧)
+                       esbuild 把 remote/entry.ts 打包进内存(每进程一次)
+                       经 SFTP 上传到 <home>/.ccc-ui/ccc-remote.<hash>.mjs
+                       (按 hash 命名;未变化的 bundle 跳过上传;过期文件自动清理)
                     ──▶ ssh exec: node ccc-remote.<hash>.mjs <command> "<base64 args>"
-                       entry.ts runs ON the remote under its own node:
-                         getHostCtx() → LOCAL_CONTEXT = the REMOTE's os.homedir()
-                         + platform-native path + node:fs → localhost-speed reads/writes
-                       prints one JSON blob: { status, body }
-                    ──▶ sendRemote maps it onto c.json(body, status)
+                       entry.ts 运行在远程自己的 node 里:
+                         getHostCtx() → LOCAL_CONTEXT = 远程的 os.homedir()
+                         + 平台原生 path + node:fs → 本机速度的读写
+                       输出一个 JSON 块:{ status, body }
+                    ──▶ sendRemote 把它映射为 c.json(body, status)
 ```
 
-Consequences:
+带来的结果:
 
-- **O(1) exec per request** instead of O(file-ops × RTT) — overview 28.6s → ~0.5s warm.
-- Per-route status codes (404/409/413/…) pass through the hop intact.
-- Windows remotes are fully functional: recursive mkdir/copy/remove are native `node:fs`
-  there (no `cmd`-vs-POSIX gap), paths are platform-native (no SFTP `/C:/` virtual-path
-  quirks), and ZCode's SQLite project source is readable (the DB opens on the remote).
-- Args travel as base64 in argv (cmd-safe, no quoting); large args (e.g. file contents for
-  saves) exceed cmd's ~8k line cap, so they upload as a temp JSON file over SFTP and pass
-  as `"@<path>"` (auto-deleted after the exec). cmd.exe does not forward stdin EOF — that's
-  why argv/file, not stdin.
-- Requirements per remote host: SSH access + Node installed. Nothing else, nothing resident.
-- MCP live probes (`mcps.tools`) run on the remote too — semantically correct: they test
-  what the remote tool would reach.
-- `explorer.exe`-style "open in file manager" stays local-only (a remote desktop action is
-  out of scope); those routes refuse cleanly with `reason: 'remote'`.
+- 每请求 **O(1) 次 exec**,而非 O(文件操作数 × RTT)—— overview 28.6s → 预热后约 0.5s。
+- 各路由的状态码(404/409/413/…)原样跨跃传递。
+- Windows 远程完全可用:递归 mkdir/copy/remove 在那边是原生 `node:fs`(没有 `cmd` 与
+  POSIX 的差异),路径是平台原生的(没有 SFTP `/C:/` 虚拟路径怪癖),ZCode 的 SQLite
+  项目源也能读(DB 在远程打开)。
+- 参数以 base64 放在 argv 里传输(cmd 安全,无引号问题);大参数(例如保存的文件内容)
+  超过 cmd 约 8k 的行上限,于是经 SFTP 上传为临时 JSON 文件,以 `"@<path>"` 传递
+  (exec 后自动删除)。cmd.exe 不转发 stdin EOF —— 所以用 argv/文件而不是 stdin。
+- 每台远程主机的要求:可 SSH + 装有 Node。仅此而已,不留常驻。
+- MCP 实时探测(`mcps.tools`)也在远程跑 —— 语义正确:测的正是远程工具会连到的东西。
+- `explorer.exe` 式的"在文件管理器中打开"仅限本地(远程桌面动作超出范围);这些路由
+  会以 `reason: 'remote'` 干净地拒绝。
 
-### File map
+### 文件地图
 
 ```
-server/src/                      Hono API (tsx, runs on :8787)
-  index.ts                       entry: mounts 12 /api/* routes and (in prod) serves web/dist
-  profiles.ts                    ★ ToolProfile declarations (the ONLY place tool differences live)
-  locator.ts                     ★ tool-agnostic read/write engine (readRegistry / readFlag / writeFlag)
-  paths.ts                       path helpers — all derived from profile fields
-  model.ts                       data model + resolveEffective (two-level status resolution)
-  settings.ts                    SSOT-safe JSON read/write (key-preserving merge + .bak backup)
-  scan.ts                        overview aggregator — runs every adapter for a profile
-  decode.ts                      decode dash-encoded project folder names (Windows drive + underscore)
-  projects-reader.ts             unified project discovery (fs folders OR sqlite) + delete
-  instructions-reader.ts         read-only instruction file discovery + content read
-  mcp-reader.ts                  read-only MCP server discovery (user-level + project-level) + transport inference
-  rules-reader.ts                read-only rule discovery (Claude only — ZCode has no rules mechanism)
-  commands-reader.ts             read-only slash-command discovery (*.md)
-  agents-reader.ts               read-only subagent discovery (*.md)
-  hooks-reader.ts                read-only hook discovery from nested settings JSON
-  markdown-resource.ts           shared scan/parse primitives (frontmatter, line count, dedupe)
-  mcp-tools.ts                   live MCP tool probe (stdio/http/sse JSON-RPC handshake → tools/list)
-  explorer.ts                    shared explorer.exe spawn (local-only; refuses remote cleanly)
-  fs-backend/                    ★ swappable filesystem behind every reader
-    types.ts                     FsBackend contract (exists/read/write/stat/readDir/mkdir/remove/copy/…)
-    local.ts                     LocalFs — node:fs/promises
-  hosts/                         remote-host machinery
-    context.ts                   HostContext + AsyncLocalStorage binding (getFs()/getHostCtx())
-    middleware.ts                X-Host header → resolve session → bind remote context (502 on failure)
-    pool.ts                      ssh2 connection pool (reuse/keepalive/dedupe + permanent error sink)
-    registry.ts                  ~/.ccc-ui/hosts.json CRUD (local-only bookkeeping)
-    secrets.ts                   AES-256-GCM machine-bound secret encryption
-    ssh.ts                       SshFs — SFTP-backed FsBackend (fallback path)
-  remote/                        ★ Architecture C — remote exec runtime
-    entry.ts                     runs ON the remote: command registry (22 commands mirroring
-                                  the routes' validation/whitelists/status codes), {status,body} out
-    runner.ts                    local side: esbuild bundle-to-memory, hash-cached upload,
-                                  cmd-safe base64-argv args (large args via temp file), sendRemote
+server/src/                      Hono API(tsx,跑在 :8787)
+  index.ts                       入口:挂载 12 个 /api/* 路由,生产模式服务 web/dist
+  profiles.ts                    ★ ToolProfile 声明(工具差异唯一存在的地方)
+  locator.ts                     ★ 与工具无关的读写引擎(readRegistry / readFlag / writeFlag)
+  paths.ts                       路径助手 —— 全部由 profile 字段推导
+  model.ts                       数据模型 + resolveEffective(两级状态解析)
+  settings.ts                    SSOT 安全的 JSON 读写(保 key 合并 + .bak 备份)
+  scan.ts                        overview 聚合器 —— 对一个 profile 跑全部 adapter
+  decode.ts                      解码短横线编码的项目目录名(Windows 盘符 + 下划线)
+  projects-reader.ts             统一项目发现(fs 目录或 sqlite)+ 删除
+  instructions-reader.ts         只读 instruction 文件发现 + 内容读取
+  mcp-reader.ts                  只读 MCP 服务器发现(用户级 + 项目级)+ transport 推断
+  rules-reader.ts                只读 rule 发现(仅 Claude —— ZCode 无 rules 机制)
+  commands-reader.ts             只读斜杠命令发现(*.md)
+  agents-reader.ts               只读子代理发现(*.md)
+  hooks-reader.ts                只读 hook 发现(来自嵌套 settings JSON)
+  markdown-resource.ts           共享的扫描/解析原语(frontmatter、行数、去重)
+  mcp-tools.ts                   MCP 实时工具探测(stdio/http/sse JSON-RPC 握手 → tools/list)
+  explorer.ts                    共享 explorer.exe 拉起(仅本地;远程时干净拒绝)
+  fs-backend/                    ★ 所有 reader 身后的可替换文件系统
+    types.ts                     FsBackend 契约(exists/read/write/stat/readDir/mkdir/remove/copy/…)
+    local.ts                     LocalFs —— node:fs/promises
+  hosts/                         远程主机机制
+    context.ts                   HostContext + AsyncLocalStorage 绑定(getFs()/getHostCtx())
+    middleware.ts                X-Host 头 → 解析会话 → 绑定远程上下文(失败给 502)
+    pool.ts                      ssh2 连接池(复用/keepalive/去重 + 永久 error 汇)
+    registry.ts                  ~/.ccc-ui/hosts.json CRUD(纯本地记账)
+    secrets.ts                   AES-256-GCM 机器绑定密文
+    ssh.ts                       SshFs —— SFTP 实现的 FsBackend(兜底路径)
+  remote/                        ★ 架构 C —— 远程 exec 运行时
+    entry.ts                     运行在远程:命令注册表(22 个命令,镜像各路由的
+                                  校验/白名单/状态码),输出 {status,body}
+    runner.ts                    本地侧:esbuild 打包进内存、按 hash 缓存上传、
+                                  cmd 安全的 base64-argv 传参(大参数走临时文件)、sendRemote
   adapters/
-    types.ts                     ToolAdapter interface + registry(profile) (extension point)
-    skill.ts                     SkillAdapter   (delegates to locator engine)
-    plugin.ts                    PluginAdapter  (delegates to locator engine + manifest parsing)
+    types.ts                     ToolAdapter 接口 + registry(profile)(扩展点)
+    skill.ts                     SkillAdapter  (委托 locator 引擎)
+    plugin.ts                    PluginAdapter(委托 locator 引擎 + manifest 解析)
   mutations/
-    jsonKey.ts                   leaf primitive: read/write settings[key][name] with encoding
+    jsonKey.ts                   叶子原语:按编码读写 settings[key][name]
   routes/
-    tools.ts                     overview / detail / set-status / view-content (?tool= param; remote-split)
-    plugins.ts                   plugin detail + file browser (path-traversal-guarded; remote-split)
-    projects.ts                  list / delete session-history (remote-split)
-    skills.ts                    promote / delete skills + file browser (remote-split)
-    instructions.ts rules.ts commands.ts agents.ts   list / content / save / open (remote-split)
-    hooks.ts                     list / open (remote-split)
-    mcps.ts                      list / detail / live probe / open (remote-split; probe runs on remote)
-    settings.ts                  settings overview — remote fetch + local filter & secret masking
-    hosts.ts                     host CRUD / test-connection / disconnect / pool status (always local)
-web/src/                         Vue 3 SPA (Vite dev on :5173, proxies /api → :8787)
-  stores/tool.ts                 ★ global tool selector (Claude ⇄ ZCode) shared by header + views
-  stores/host.ts                 ★ global host selector ('local' ⇄ remote) — X-Host injection + reload
-  api/index.ts                   fetch client — every method takes an optional `tool`; injects X-Host
-  views/SkillsView.vue           skills page (toggle / promote / delete)
-  views/PluginsView.vue          plugins page (toggle + inline file explorer with content preview)
-  views/ProjectsView.vue         projects page (card grid + delete session history)
-  views/InstructionsView.vue     instructions page (split-pane viewer + editor)
-  views/MCPsView.vue             MCP page (card grid + inline detail + tool list)
-  views/RulesView.vue            rules page (split-pane viewer + editor; Claude only)
-  views/CommandsView.vue         commands page (split-pane viewer + editor)
-  views/AgentsView.vue           agents page (split-pane viewer + editor)
-  views/HooksView.vue            hooks page (list + detail: event / matcher / command / timeout)
-  views/SettingsView.vue         settings page (read-only toggles / env / permissions overview)
-  views/HostsView.vue            hosts page (add/edit/delete/test/disconnect)
-  components/                    AppHeader (tool + host switchers) / AppSidebar / SkillCard / PluginCard / FileExplorer / MarkdownView
-  i18n/                          vue-i18n (zh / en)
-  router/                        /plugins /skills /projects /instructions /rules /commands /agents /hooks /mcps /settings /hosts — all live
+    tools.ts                     overview / detail / set-status / view-content(?tool= 参数;远程拆分)
+    plugins.ts                   plugin 详情 + 文件浏览(防路径穿越;远程拆分)
+    projects.ts                  列表 / 删除会话历史(远程拆分)
+    skills.ts                    提升 / 删除 skill + 文件浏览(远程拆分)
+    instructions.ts rules.ts commands.ts agents.ts   列表 / 内容 / 保存 / 打开(远程拆分)
+    hooks.ts                     列表 / 打开(远程拆分)
+    mcps.ts                      列表 / 详情 / 实时探测 / 打开(远程拆分;探测在远程跑)
+    settings.ts                  settings 总览 —— 远程抓取 + 本地过滤与密文掩码
+    hosts.ts                     host 增删改查 / 测试连接 / 断开 / 连接池状态(恒为本地)
+web/src/                         Vue 3 SPA(Vite 开发于 :5173,/api 代理 → :8787)
+  stores/tool.ts                 ★ 全局工具选择器(Claude ⇄ ZCode),顶栏与各页共享
+  stores/host.ts                 ★ 全局主机选择器('local' ⇄ 远程)—— 注入 X-Host 并重载
+  api/index.ts                   fetch 客户端 —— 每个方法接受可选 `tool`;注入 X-Host
+  views/SkillsView.vue           skills 页(开关 / 提升 / 删除)
+  views/PluginsView.vue          plugins 页(开关 + 内嵌文件浏览器,含内容预览)
+  views/ProjectsView.vue         projects 页(卡片网格 + 删除会话历史)
+  views/InstructionsView.vue     instructions 页(分栏查看器 + 编辑器)
+  views/MCPsView.vue             MCP 页(卡片网格 + 内嵌详情 + 工具列表)
+  views/RulesView.vue            rules 页(分栏查看器 + 编辑器;仅 Claude)
+  views/CommandsView.vue         commands 页(分栏查看器 + 编辑器)
+  views/AgentsView.vue           agents 页(分栏查看器 + 编辑器)
+  views/HooksView.vue            hooks 页(列表 + 详情:event / matcher / command / timeout)
+  views/SettingsView.vue         settings 页(只读:开关 / 环境变量 / 权限总览)
+  views/HostsView.vue            hosts 页(增/改/删/测试/断开)
+  components/                    AppHeader(工具 + 主机切换器)/ AppSidebar / SkillCard / PluginCard / FileExplorer / MarkdownView
+  i18n/                          vue-i18n(zh / en)
+  router/                        /plugins /skills /projects /instructions /rules /commands /agents /hooks /mcps /settings /hosts —— 全部可用
 ```
 
-### Two-level status resolution
+### 两级状态解析
 
-Each tool instance carries a `perScope` list: `[user, ...project?]`. `resolveEffective()` walks from
-the most-specific scope (project — last) outward to user; the first non-`inherited` status wins.
-If everything is `inherited` (or the list is empty), the default is `enabled`. The UI shows both the
-per-scope breakdown and the computed effective status.
+每个工具实例带一个 `perScope` 列表:`[user, ...project?]`。`resolveEffective()` 从最具体的
+作用域(project —— 列表末尾)向外走到 user;第一个非 `inherited` 的状态胜出。若全部为
+`inherited`(或列表为空),默认为 `enabled`。UI 同时展示各作用域的明细与计算出的生效状态。
 
 ---
 
-## Project evolution & branch map
+## 项目演进与分支地图
 
-This repository is the **`ccc-ui` mainline**. It also preserves earlier attempts that explored the
-design space, each as an **orphan branch** (isolated history, never merged into `main`).
+本仓库是 **`ccc-ui` 主线**。它同时保留了早期探索设计空间的尝试,各自作为 **orphan 分支**
+(孤立历史,从不合入 `main`)。
 
-| branch | what it holds | license | merged? |
+| 分支 | 内容 | 许可证 | 是否合并? |
 |---|---|---|---|
-| **`main`** | mainline — profile-aware multi-tool architecture | MIT | — (trunk) |
-| `attempts/claude-code-config-ui` | earlier mainline snapshot (pre-profile) | MIT | ✅ fast-forwards |
-| `attempts/glyphic` | attempt #1 — fork of [caioricciuti/glyphic](https://github.com/caioricciuti/glyphic) + i18n / card UI | AGPL-3.0 | ❌ orphan, reference only |
-| `attempts/claude-code-tool-manager` | attempt #2 — fork of [tylergraydev/claude-code-tool-manager](https://github.com/tylergraydev/claude-code-tool-manager) + the architecture proposal | MIT | ❌ orphan, reference only |
+| **`main`** | 主线 —— profile 感知的多工具架构 | MIT | ——(主干) |
+| `attempts/claude-code-config-ui` | 早期主线快照(pre-profile) | MIT | ✅ 可 fast-forward |
+| `attempts/glyphic` | 尝试 #1 —— fork 自 [caioricciuti/glyphic](https://github.com/caioricciuti/glyphic) + i18n / 卡片 UI | AGPL-3.0 | ❌ orphan,仅作参考 |
+| `attempts/claude-code-tool-manager` | 尝试 #2 —— fork 自 [tylergraydev/claude-code-tool-manager](https://github.com/tylergraydev/claude-code-tool-manager) + 架构提案 | MIT | ❌ orphan,仅作参考 |
 
-**Per-branch licensing:** orphan branches are not merged, so `main` stays MIT-clean (no AGPL glyphic
-code lives on it).
+**按分支许可:** orphan 分支不合入,`main` 保持纯 MIT(其上不存在 AGPL 的 glyphic 代码)。
 
-## Acknowledgements
+## 致谢
 
-- **[tylergraydev/claude-code-tool-manager](https://github.com/tylergraydev/claude-code-tool-manager)** —
-  the Tauri 2 + SvelteKit + Rust foundation and UI patterns explored earlier (MIT).
-- **[caioricciuti/glyphic](https://github.com/caioricciuti/glyphic)** — i18n approach and card UI that
-  informed early design exploration (AGPL-3.0, kept on its own branch only).
+- **[tylergraydev/claude-code-tool-manager](https://github.com/tylergraydev/claude-code-tool-manager)** ——
+  早期探索过的 Tauri 2 + SvelteKit + Rust 基础与 UI 模式(MIT)。
+- **[caioricciuti/glyphic](https://github.com/caioricciuti/glyphic)** ——
+  影响早期设计探索的 i18n 思路与卡片 UI(AGPL-3.0,仅保留在其独立分支)。
