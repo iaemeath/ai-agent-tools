@@ -63,6 +63,11 @@ function seaModule(): SeaModule | null {
 	}
 }
 
+/** True only inside the single-exe build (gates exe-only behavior like auto-open-browser). */
+export function isSeaExe(): boolean {
+	return seaModule() !== null;
+}
+
 /**
  * Register static-frontend routes on the app. Resolution order:
  * SEA assets (exe) → web/dist folder (repo). No source → no routes (vite dev).

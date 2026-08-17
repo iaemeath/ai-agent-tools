@@ -2,6 +2,7 @@
 
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
+import { exec } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { plugins } from './routes/plugins.js';
@@ -17,7 +18,7 @@ import { skills } from './routes/skills.js';
 import { tools } from './routes/tools.js';
 import { hosts } from './routes/hosts.js';
 import { hostMiddleware } from './hosts/middleware.js';
-import { serveWebDist } from './web-assets.js';
+import { serveWebDist, isSeaExe } from './web-assets.js';
 
 // SEA/CJS note: esbuild compiles `import.meta.url` to undefined in CJS output, so the
 // fileURLToPath call throws inside the exe — fall back to the bundle's native __dirname
@@ -60,4 +61,15 @@ serveWebDist(app, path.resolve(here(), '../../web/dist'));
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port }, ({ port }) => {
 	console.log(`ccc-ui server: http://localhost:${port}  (api at /api/*)`);
+	// Desktop-app feel for the exe: once listening, open the default browser at the app.
+	// SEA builds only (dev runs use vite on :5173 and must not pop a browser); CCC_NO_OPEN=1
+	// opts out for headless/service use. NB: `start ""` — the empty title arg, else cmd
+	// treats the quoted URL as the window title and opens nothing.
+	if (isSeaExe() && !process.env['CCC_NO_OPEN']) {
+		const url = `http://localhost:${port}`;
+		const cmd = process.platform === 'win32' ? `start "" "${url}"`
+			: process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
+		exec(cmd, () => undefined);
+		console.log(`[web] opened ${url} in the default browser (set CCC_NO_OPEN=1 to disable)`);
+	}
 });
