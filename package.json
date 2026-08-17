@@ -1,6 +1,6 @@
 {
   "name": "ccc-ui",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Manage AI coding-agent config across tools (Claude Code, ZCode) — skills, plugins, projects, instructions, rules, commands, agents, hooks, MCP, settings (Config-as-SSOT). Node + Hono + Vue 3 + Element Plus.",
