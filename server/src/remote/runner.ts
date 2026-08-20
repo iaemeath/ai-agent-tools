@@ -7,9 +7,9 @@
 // model flips from O(file-ops × RTT) to O(1 exec per request).
 //
 // Where the bundle CODE comes from (resolved once, in this order):
-//   1. CCC_REMOTE_BUNDLE env — explicit path to a prebuilt ccc-remote.mjs (exe/SEA builds
+//   1. AI_AGENT_REMOTE_BUNDLE env — explicit path to a prebuilt ai-agent-remote.mjs (exe/SEA builds
 //      embed it as an asset and write it to a temp file at startup, pointing the env here);
-//   2. ccc-remote.mjs next to the running server bundle (repo dist/ layout — `npm run
+//   2. ai-agent-remote.mjs next to the running server bundle (repo dist/ layout — `npm run
 //      build:exe` emits both side by side);
 //   3. dev fallback — esbuild bundles entry.ts to memory on the fly (requires the devDeps).
 // The exe therefore carries NO runtime esbuild (a native binary that would have to be
@@ -31,7 +31,7 @@ export interface RemoteResult {
 }
 
 // SEA/CJS note: import.meta.url compiles to undefined in the CJS exe bundle — fall back
-// to the bundle's native __dirname (dist-exe), where ccc-remote.mjs sits as a sibling.
+// to the bundle's native __dirname (dist-exe), where ai-agent-remote.mjs sits as a sibling.
 function here(): string {
 	try {
 		return path.dirname(fileURLToPath(import.meta.url));
@@ -39,7 +39,8 @@ function here(): string {
 		return typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 	}
 }
-const REMOTE_DIR_NAME = '.ccc-ui';
+const REMOTE_DIR_NAME = '.ai-agent-tools';
+const LEGACY_REMOTE_DIR_NAME = '.ccc-ui';
 
 let bundleCode = '';
 let bundleHash = '';
@@ -50,13 +51,13 @@ const uploaded = new Set<string>();
 async function getBundle(): Promise<{ code: string; hash: string }> {
 	if (bundleHash) return { code: bundleCode, hash: bundleHash };
 	// 1. Explicit env override (exe/SEA layout).
-	const envPath = process.env['CCC_REMOTE_BUNDLE'];
+	const envPath = process.env['AI_AGENT_REMOTE_BUNDLE'];
 	if (envPath && fs.existsSync(envPath)) {
 		bundleCode = fs.readFileSync(envPath, 'utf8');
 	}
-	// 2. Sibling artifact of a built server (repo dist/ layout: dist/server.cjs + dist/ccc-remote.mjs).
+	// 2. Sibling artifact of a built server (repo dist/ layout: dist/server.cjs + dist/ai-agent-remote.mjs).
 	if (!bundleCode) {
-		const sibling = path.resolve(here(), 'ccc-remote.mjs');
+		const sibling = path.resolve(here(), 'ai-agent-remote.mjs');
 		if (fs.existsSync(sibling)) bundleCode = fs.readFileSync(sibling, 'utf8');
 	}
 	// 3. Dev fallback — bundle on the fly (dynamic import keeps esbuild out of prod runs).
@@ -98,7 +99,7 @@ async function ensureBundle(session: SshSession, remoteFile: string, code: strin
 	if (!present) {
 		await new Promise<void>((res, rej) => sftp.writeFile(remoteFile, code, (e) => (e ? rej(e) : res())));
 	}
-	// Best-effort housekeeping: keep only THIS bundle; drop stale ccc-remote.<hash>.mjs from
+	// Best-effort housekeeping: keep only THIS bundle; drop stale ai-agent-remote.<hash>.mjs from
 	// earlier code versions and orphaned args-*.json temp files (e.g. if an exec died mid-run).
 	const keep = remoteFile.slice(remoteFile.lastIndexOf('/') + 1);
 	sftp.readdir(dir, (err, entries) => {
@@ -106,8 +107,20 @@ async function ensureBundle(session: SshSession, remoteFile: string, code: strin
 		for (const e of entries as { filename: string }[]) {
 			const n = e.filename;
 			if (n === keep) continue;
-			if (/^ccc-remote\.[0-9a-f]+\.mjs$/.test(n) || /^args-.*\.json$/.test(n)) {
+			if (/^ai-agent-remote\.[0-9a-f]+\.mjs$/.test(n) || /^args-.*\.json$/.test(n)) {
 				sftp.unlink(`${dir}/${n}`, () => undefined);
+			}
+		}
+	});
+	// Pre-rename remotes keep bundles under ~/.ccc-ui/ — clear them out the same way (once
+	// the legacy dir is empty, remove it so only the new dir remains).
+	const legacyDir = `${session.homeDir}/${LEGACY_REMOTE_DIR_NAME}`;
+	sftp.readdir(legacyDir, (err, entries) => {
+		if (err) return; // most remotes never had the legacy dir
+		for (const e of entries as { filename: string }[]) {
+			const n = e.filename;
+			if (/^(ai-agent-remote|ccc-remote)\.[0-9a-f]+\.mjs$/.test(n) || /^args-.*\.json$/.test(n)) {
+				sftp.unlink(`${legacyDir}/${n}`, () => undefined);
 			}
 		}
 	});
@@ -146,7 +159,7 @@ export async function execRemote(hostId: string, command: string, args: unknown)
 	const session = await getSession(hostId);
 	const { code, hash } = await getBundle();
 	const key = `${hostId}:${hash}`;
-	const remoteFile = `${session.homeDir}/${REMOTE_DIR_NAME}/ccc-remote.${hash}.mjs`;
+	const remoteFile = `${session.homeDir}/${REMOTE_DIR_NAME}/ai-agent-remote.${hash}.mjs`;
 	if (!uploaded.has(key)) {
 		await ensureBundle(session, remoteFile, code);
 		uploaded.add(key);

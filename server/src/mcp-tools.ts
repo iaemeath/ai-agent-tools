@@ -16,7 +16,7 @@ export interface McpToolInfo {
 }
 
 const PROTOCOL_VERSION = '2024-11-05';
-const CLIENT_INFO = { name: 'ccc-ui', version: '0.3.0' };
+const CLIENT_INFO = { name: 'ai-agent-tools', version: '0.3.0' };
 const DEFAULT_TIMEOUT = 12000;
 
 /** Connect to the server per its transport and return its declared tools. */

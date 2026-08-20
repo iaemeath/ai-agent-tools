@@ -26,7 +26,7 @@
 
 import { ref, type Ref } from 'vue';
 
-const STORAGE_PREFIX = 'ccc-ui:';
+const STORAGE_PREFIX = 'ai-agent-tools:';
 
 export function useDragOrder(storageKey: string) {
 	const fullKey = STORAGE_PREFIX + storageKey;

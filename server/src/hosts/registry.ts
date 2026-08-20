@@ -1,8 +1,9 @@
 // Host registry — the persisted list of configured remote SSH hosts.
 //
-// Stored at ~/.ccc-ui/hosts.json. This is the MAIN machine's own bookkeeping file, NOT
-// a remote config — so it uses node:fs/promises directly (never the FsBackend/SSH path),
+// Stored at ~/.ai-agent-tools/hosts.json. This is the MAIN machine's own bookkeeping file,
+// NOT a remote config — so it uses node:fs/promises directly (never the FsBackend/SSH path),
 // and is therefore unaffected by which host a request is operating on.
+// A legacy ~/.ccc-ui/hosts.json (pre-rename) is migrated once on first read.
 
 import os from 'node:os';
 import path from 'node:path';
@@ -26,11 +27,33 @@ export interface HostRecord {
 	createdAt: string;
 }
 
-const HOSTS_DIR = path.join(os.homedir(), '.ccc-ui');
+const HOSTS_DIR = path.join(os.homedir(), '.ai-agent-tools');
 const HOSTS_FILE = path.join(HOSTS_DIR, 'hosts.json');
+const LEGACY_HOSTS_FILE = path.join(os.homedir(), '.ccc-ui', 'hosts.json');
+
+let migrated = false;
+/**
+ * One-time best-effort migration from the pre-rename location (~/.ccc-ui/hosts.json).
+ * Copies (never deletes) the legacy file when the new one doesn't exist yet. Secrets stay
+ * decryptable because the APP_SALT in secrets.ts was deliberately kept unchanged.
+ */
+async function migrateLegacy(): Promise<void> {
+	if (migrated) return;
+	migrated = true;
+	try {
+		await fsp.access(HOSTS_FILE);
+		return; // new file already exists — nothing to migrate
+	} catch { /* new file absent — try legacy */ }
+	try {
+		const legacy = await fsp.readFile(LEGACY_HOSTS_FILE, 'utf8');
+		await fsp.mkdir(HOSTS_DIR, { recursive: true });
+		await fsp.writeFile(HOSTS_FILE, legacy, 'utf8');
+	} catch { /* no legacy file either — fresh start */ }
+}
 
 /** Read the whole registry; missing/corrupt file → empty list (never throws). */
 async function readAll(): Promise<HostRecord[]> {
+	await migrateLegacy();
 	try {
 		const raw = await fsp.readFile(HOSTS_FILE, 'utf8');
 		const parsed = JSON.parse(raw);

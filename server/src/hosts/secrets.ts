@@ -2,13 +2,15 @@
 //
 // Machine-bound AES-256-GCM. The key is derived from the OS hostname + a fixed app
 // salt. This is NOT a strong secret against a determined local admin (they can recompute
-// the key), but it ensures a copied ~/.ccc-ui/hosts.json is unreadable on a different
-// machine — which is the realistic threat model for a single-user config tool. For
-// higher assurance, swap machineKey() for an OS keychain (DPAPI / libsecret) later.
+// the key), but it ensures a copied ~/.ai-agent-tools/hosts.json is unreadable on a
+// different machine — which is the realistic threat model for a single-user config tool.
+// For higher assurance, swap machineKey() for an OS keychain (DPAPI / libsecret) later.
 
 import crypto from 'node:crypto';
 import os from 'node:os';
 
+// Deliberately kept from the pre-rename ("ccc-ui") era: the salt is part of key derivation,
+// so changing it would render every already-stored hosts.json secret undecryptable.
 const APP_SALT = 'ccc-ui/hosts/v1';
 
 /** Derive a 32-byte AES-256 key bound to this machine's hostname. */

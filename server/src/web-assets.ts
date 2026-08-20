@@ -2,7 +2,7 @@
 //
 //   1. SEA (single-executable) builds: `web/dist/**` (+ the remote-entry bundle) are
 //      embedded into the exe as Node SEA assets. At startup this module serves the frontend
-//      from RAM, extracts ccc-remote.mjs to a temp file, and points CCC_REMOTE_BUNDLE at it
+//      from RAM, extracts ai-agent-remote.mjs to a temp file, and points AI_AGENT_REMOTE_BUNDLE at it
 //      — the exe needs no files beside it.
 //   2. Repo/node layout: files come from the web/dist folder on disk (dev builds,
 //      `npm start` after `npm run build`).
@@ -113,15 +113,15 @@ export function serveWebDist(app: Hono, distDir: string): void {
 /**
  * Inside a SEA exe there is no filesystem path to the embedded remote-entry bundle, so
  * extract it to a temp file once and point the remote runner at it via env var (its
- * resolution order checks CCC_REMOTE_BUNDLE first).
+ * resolution order checks AI_AGENT_REMOTE_BUNDLE first).
  */
 function extractRemoteBundle(sea: SeaModule): void {
 	try {
-		if (!sea.getAssetKeys().includes('ccc-remote.mjs')) return;
-		const code = Buffer.from(sea.getAsset('ccc-remote.mjs'));
-		const tmp = path.join(os.tmpdir(), `ccc-remote-${process.pid}.mjs`);
+		if (!sea.getAssetKeys().includes('ai-agent-remote.mjs')) return;
+		const code = Buffer.from(sea.getAsset('ai-agent-remote.mjs'));
+		const tmp = path.join(os.tmpdir(), `ai-agent-remote-${process.pid}.mjs`);
 		fs.writeFileSync(tmp, code);
-		process.env['CCC_REMOTE_BUNDLE'] = tmp;
+		process.env['AI_AGENT_REMOTE_BUNDLE'] = tmp;
 	} catch (e) {
 		console.warn(`[web] failed to extract remote bundle: ${(e as Error).message}`);
 	}

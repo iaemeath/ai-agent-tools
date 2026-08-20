@@ -150,14 +150,14 @@ onMounted(async () => {
 	drag.loadOrder();
 	leftWidth.value = Math.min(window.innerWidth * 0.7, Math.max(240, window.innerWidth * 0.4));
 	await reload();
-	window.addEventListener('ccc-ui:reload', reload);
-	window.addEventListener('ccc-ui:tool-change', reload);
+	window.addEventListener('ai-agent-tools:reload', reload);
+	window.addEventListener('ai-agent-tools:tool-change', reload);
 	window.addEventListener('mousemove', onDrag);
 	window.addEventListener('mouseup', stopDrag);
 });
 onUnmounted(() => {
-	window.removeEventListener('ccc-ui:reload', reload);
-	window.removeEventListener('ccc-ui:tool-change', reload);
+	window.removeEventListener('ai-agent-tools:reload', reload);
+	window.removeEventListener('ai-agent-tools:tool-change', reload);
 	window.removeEventListener('mousemove', onDrag);
 	window.removeEventListener('mouseup', stopDrag);
 });

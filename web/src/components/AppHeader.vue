@@ -61,9 +61,9 @@ async function loadHosts() {
 }
 onMounted(() => {
 	loadHosts();
-	window.addEventListener('ccc-ui:hosts-changed', loadHosts);
+	window.addEventListener('ai-agent-tools:hosts-changed', loadHosts);
 });
-onUnmounted(() => window.removeEventListener('ccc-ui:hosts-changed', loadHosts));
+onUnmounted(() => window.removeEventListener('ai-agent-tools:hosts-changed', loadHosts));
 
 function onHostChange(val: unknown) {
 	setHost(String(val));
@@ -73,7 +73,7 @@ function onHostChange(val: unknown) {
 function onRefresh() {
 	if (isRefreshing.value) return;
 	isRefreshing.value = true;
-	window.dispatchEvent(new CustomEvent('ccc-ui:reload'));
+	window.dispatchEvent(new CustomEvent('ai-agent-tools:reload'));
 	setTimeout(() => (isRefreshing.value = false), 600);
 }
 

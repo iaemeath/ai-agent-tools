@@ -1,4 +1,4 @@
-// ccc-ui server entry — Hono app serving /api/* and (in production) the Vue build.
+// ai-agent-tools server entry — Hono app serving /api/* and (in production) the Vue build.
 
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
@@ -60,7 +60,7 @@ serveWebDist(app, path.resolve(here(), '../../web/dist'));
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port }, ({ port }) => {
-	console.log(`ccc-ui server: http://localhost:${port}  (api at /api/*)`);
+	console.log(`ai-agent-tools server: http://localhost:${port}  (api at /api/*)`);
 	// Desktop-app feel for the exe: once listening, open the default browser at the app.
 	// SEA builds only (dev runs use vite on :5173 and must not pop a browser); CCC_NO_OPEN=1
 	// opts out for headless/service use. NB: `start ""` — the empty title arg, else cmd

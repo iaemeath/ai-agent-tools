@@ -392,7 +392,7 @@ function strOrNull(v: unknown): string | null {
 const command = process.argv[2];
 const handler = command ? COMMANDS[command] : undefined;
 if (!handler) {
-	process.stderr.write(`[ccc-remote] unknown command: ${command ?? '(none)'}\n`);
+	process.stderr.write(`[ai-agent-remote] unknown command: ${command ?? '(none)'}\n`);
 	process.exit(2);
 }
 
@@ -410,6 +410,6 @@ try {
 	const result = await handler(args);
 	process.stdout.write(JSON.stringify(result));
 } catch (e) {
-	process.stderr.write(`[ccc-remote] ${command} failed: ${(e as Error).message}\n${(e as Error).stack ?? ''}\n`);
+	process.stderr.write(`[ai-agent-remote] ${command} failed: ${(e as Error).message}\n${(e as Error).stack ?? ''}\n`);
 	process.exit(1);
 }

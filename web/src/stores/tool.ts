@@ -3,7 +3,7 @@
 // every View (Skills, Plugins, …) consumes it via useTool().
 //
 // Implemented as a module-scope singleton ref so all callers share one state
-// without pulling in Pinia. A change dispatches a 'ccc-ui:tool-change' event so
+// without pulling in Pinia. A change dispatches a 'ai-agent-tools:tool-change' event so
 // views can reset+reload their tool-dependent data (projects, overview).
 
 import { ref } from 'vue';
@@ -21,7 +21,7 @@ export function useTool() {
 		if (next === tool.value) return;
 		tool.value = next;
 		// Notify views to reset and reload their tool-dependent data.
-		window.dispatchEvent(new CustomEvent<ToolId>('ccc-ui:tool-change', { detail: next }));
+		window.dispatchEvent(new CustomEvent<ToolId>('ai-agent-tools:tool-change', { detail: next }));
 	}
 	return { tool, TOOL_OPTIONS, setTool };
 }

@@ -100,7 +100,7 @@ async function save() {
 		ElMessage.success(t('host.saved'));
 		dialogVisible.value = false;
 		await load();
-		window.dispatchEvent(new CustomEvent('ccc-ui:hosts-changed'));
+		window.dispatchEvent(new CustomEvent('ai-agent-tools:hosts-changed'));
 	} catch (e) {
 		ElMessage.error((e as Error).message);
 	} finally {
@@ -117,7 +117,7 @@ async function remove(h: HostSummary) {
 	try {
 		await api.deleteHost(h.id);
 		await load();
-		window.dispatchEvent(new CustomEvent('ccc-ui:hosts-changed'));
+		window.dispatchEvent(new CustomEvent('ai-agent-tools:hosts-changed'));
 	} catch (e) {
 		ElMessage.error((e as Error).message);
 	}

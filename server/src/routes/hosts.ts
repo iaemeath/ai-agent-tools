@@ -1,6 +1,6 @@
 // Host routes — manage the SSH host registry + test connections + pool status.
 //
-// These routes operate on the MAIN machine's own ~/.ccc-ui/hosts.json and the connection
+// These routes operate on the MAIN machine's own ~/.ai-agent-tools/hosts.json and the connection
 // pool — they are NOT affected by the host middleware (hostId defaults to 'local', and
 // even a remote X-Host is irrelevant since these never read remote config).
 

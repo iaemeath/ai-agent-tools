@@ -69,9 +69,9 @@ So remote requests instead **run the work on the remote itself**:
 ```
 route (isRemote) ──▶ remote/runner.ts (local side)
                        esbuild bundles remote/entry.ts into memory (once per process)
-                       uploads to <home>/.ccc-ui/ccc-remote.<hash>.mjs via SFTP
+                       uploads to <home>/.ai-agent-tools/ai-agent-remote.<hash>.mjs via SFTP
                        (hash-named; unchanged bundles skip upload; stale files cleaned up)
-                    ──▶ ssh exec: node ccc-remote.<hash>.mjs <command> "<base64 args>"
+                    ──▶ ssh exec: node ai-agent-remote.<hash>.mjs <command> "<base64 args>"
                        entry.ts runs in the remote's own node:
                          homedir / platform-native path / node:fs → native-speed I/O
                        emits one JSON block: { status, body }
@@ -113,7 +113,7 @@ server/src/                      Hono API (tsx, :8787)
   hosts/                         remote-host machinery
     context.ts / middleware.ts   host context + AsyncLocalStorage binding (X-Host header)
     pool.ts                      ssh2 connection pool (reuse / keepalive / dedupe)
-    registry.ts / secrets.ts     ~/.ccc-ui/hosts.json CRUD; AES-256-GCM machine-bound secrets
+    registry.ts / secrets.ts     ~/.ai-agent-tools/hosts.json CRUD; AES-256-GCM machine-bound secrets
     ssh.ts                       SshFs — SFTP-backed FsBackend (fallback path)
   remote/                        ★ remote-exec runtime
     entry.ts                     runs on the remote: command registry mirroring route validation,

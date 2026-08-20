@@ -1,5 +1,5 @@
 {
-  "name": "@ccc-ui/server",
+  "name": "@ai-agent-tools/server",
   "version": "0.3.0",
   "private": true,
   "type": "module",

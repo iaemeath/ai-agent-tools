@@ -3,9 +3,9 @@
 // Pipeline:
 //   1. vite build                                  → web/dist
 //   2. esbuild server/src/index.ts  → dist-exe/server.cjs   (SEA requires a CJS entry)
-//   3. esbuild server/src/remote/entry.ts → dist-exe/ccc-remote.mjs (runs on remote hosts)
+//   3. esbuild server/src/remote/entry.ts → dist-exe/ai-agent-remote.mjs (runs on remote hosts)
 //   4. sea-config.json: main=server.cjs, assets = web/dist/** (keyed "web/<rel>") +
-//      ccc-remote.mjs                              → dist-exe/sea-prep.blob
+//      ai-agent-remote.mjs                              → dist-exe/sea-prep.blob
 //   5. copy node.exe → dist-exe/ai-agent-tools.exe, postject-inject the blob
 //
 // Requirements: Node 22+ (node:sea assets), postject (devDependency).
@@ -55,14 +55,14 @@ await build({
 
 // 3. Remote-entry bundle → ESM (executed by the remote host's own node; NOT part of the exe
 //    code — embedded as an asset and extracted to a temp file at runtime).
-console.log('+ esbuild server/src/remote/entry.ts → dist-exe/ccc-remote.mjs');
+console.log('+ esbuild server/src/remote/entry.ts → dist-exe/ai-agent-remote.mjs');
 await build({
 	entryPoints: [path.join(root, 'server/src/remote/entry.ts')],
 	bundle: true,
 	platform: 'node',
 	format: 'esm',
 	target: 'es2022',
-	outfile: path.join(distExe, 'ccc-remote.mjs'),
+	outfile: path.join(distExe, 'ai-agent-remote.mjs'),
 	logLevel: 'warning',
 });
 
@@ -73,7 +73,7 @@ const assets = {};
 for (const f of walk(webDist)) {
 	assets[`web/${path.relative(webDist, f).replaceAll('\\', '/')}`] = path.relative(root, f).replaceAll('\\', '/');
 }
-assets['ccc-remote.mjs'] = 'dist-exe/ccc-remote.mjs';
+assets['ai-agent-remote.mjs'] = 'dist-exe/ai-agent-remote.mjs';
 const seaConfig = {
 	main: path.join(distExe, 'server.cjs'),
 	output: path.join(distExe, 'sea-prep.blob'),

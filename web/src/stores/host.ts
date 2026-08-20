@@ -5,7 +5,7 @@
 // as an X-Host header on every request so all 10 views transparently target it.
 //
 // Implemented as a module-scope singleton ref (mirrors stores/tool.ts — no Pinia). A
-// change dispatches 'ccc-ui:reload', which every view already listens for, so switching
+// change dispatches 'ai-agent-tools:reload', which every view already listens for, so switching
 // the host refreshes every page with zero per-view changes.
 
 import { ref } from 'vue';
@@ -27,9 +27,9 @@ export function useHost() {
 	function setHost(next: HostId) {
 		if (next === currentHost.value) return;
 		currentHost.value = next;
-		// All 10 views listen on 'ccc-ui:reload' and re-fetch — reuse it so a host switch
+		// All 10 views listen on 'ai-agent-tools:reload' and re-fetch — reuse it so a host switch
 		// refreshes every page (the api layer now targets the new host) with no view edits.
-		window.dispatchEvent(new CustomEvent('ccc-ui:reload'));
+		window.dispatchEvent(new CustomEvent('ai-agent-tools:reload'));
 	}
 	return { currentHost, remoteHosts, setHost };
 }

@@ -33,12 +33,12 @@ async function onToolChange() {
 
 onMounted(async () => {
 	await reload();
-	window.addEventListener('ccc-ui:reload', reload);
-	window.addEventListener('ccc-ui:tool-change', onToolChange);
+	window.addEventListener('ai-agent-tools:reload', reload);
+	window.addEventListener('ai-agent-tools:tool-change', onToolChange);
 });
 onUnmounted(() => {
-	window.removeEventListener('ccc-ui:reload', reload);
-	window.removeEventListener('ccc-ui:tool-change', onToolChange);
+	window.removeEventListener('ai-agent-tools:reload', reload);
+	window.removeEventListener('ai-agent-tools:tool-change', onToolChange);
 });
 
 // ---- Section extraction (computed from raw values) ----
