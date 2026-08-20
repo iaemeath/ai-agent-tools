@@ -10,6 +10,8 @@
 
 Skills、plugins、instructions、rules、commands、agents、hooks、MCP、projects、settings —— 跨 **user / project 作用域**、跨**工具**、甚至**跨机器(SSH)**,全部集中一处管理。
 
+![插件页 —— 实时开关、多插件市场](docs/screenshots/plugins.png)
+
 ## 亮点
 
 - **开关实时生效,无需重启** —— 开关直接回写工具*自身的原生配置*(`skillOverrides`、`enabledPlugins`),工具立刻可见。
@@ -29,6 +31,10 @@ Skills、plugins、instructions、rules、commands、agents、hooks、MCP、proj
 | Projects | 浏览 · 删除会话历史 | 文件系统(Claude)或 SQLite(ZCode)会话存储 |
 
 Markdown 编辑带白名单校验 + `.bak` 备份 + 原子写入,放心改。
+
+| 技能(分作用域开关) | MCP 服务器 | 项目(会话历史) |
+|:-:|:-:|:-:|
+| ![技能](docs/screenshots/skills.png) | ![MCP](docs/screenshots/mcps.png) | ![项目](docs/screenshots/projects.png) |
 
 ## 快速开始
 

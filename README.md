@@ -10,7 +10,7 @@
 
 Skills, plugins, instructions, rules, commands, agents, hooks, MCP servers, projects and settings — manage them across **user / project scopes**, across **tools**, and even **across machines over SSH**, all from one place.
 
-<!-- TODO: add a screenshot / demo GIF here — the single highest-impact thing for visitors -->
+![Plugins — instant toggles, per-tool marketplaces](docs/screenshots/plugins.png)
 
 ## Highlights
 
@@ -31,6 +31,10 @@ Skills, plugins, instructions, rules, commands, agents, hooks, MCP servers, proj
 | Projects | browse · delete history | session stores on filesystem (Claude) or SQLite (ZCode) |
 
 Markdown editing comes with a whitelist check, `.bak` backup and atomic write — edit confidently.
+
+| Skills (per-scope toggles) | MCP servers | Projects (session history) |
+|:-:|:-:|:-:|
+| ![Skills](docs/screenshots/skills.png) | ![MCP](docs/screenshots/mcps.png) | ![Projects](docs/screenshots/projects.png) |
 
 ## Quick start
 
