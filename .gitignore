@@ -17,4 +17,5 @@ CLAUDE.md
 
 # Tooling scratch dirs
 .playwright-mcp/
+.playwright-cli/
 .stfolder/
