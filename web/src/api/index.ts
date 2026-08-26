@@ -6,7 +6,7 @@
 // not 'local', so all resource requests transparently hit the selected SSH host. Host-
 // management methods pass { injectHost: false } because they operate on the LOCAL registry.
 
-import type { AgentInfo, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, ProjectInfo, RuleInfo, Scope, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
+import type { AgentInfo, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, ProjectInfo, RuleInfo, Scope, SessionRead, SessionSummary, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
 import { currentHost } from '../stores/host';
 
 interface HostOpts {
@@ -66,6 +66,10 @@ export const api = {
 		postJson<{ ok: true }>(`/api/plugins/${encodeURIComponent(name)}/open`, { project: project ?? null, tool }),
 	deleteProject: (encoded: string, tool?: ToolId) =>
 		del<{ ok: true }>(`/api/projects/${encodeURIComponent(encoded)}${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
+	listSessions: (project: string, tool?: ToolId) =>
+		getJson<SessionSummary[]>(`/api/sessions?project=${encodeURIComponent(project)}${toolQ(tool)}`),
+	readSession: (id: string, tool?: ToolId) =>
+		getJson<SessionRead>(`/api/sessions/${encodeURIComponent(id)}${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	promoteSkill: (name: string, project: string, tool?: ToolId) =>
 		postJson<{ ok: true }>('/api/skills/promote', { name, project, tool }),
 	deleteSkill: (p: { name: string; scope: 'user' | 'project'; project?: string; tool?: ToolId }) =>

@@ -63,6 +63,55 @@ export interface ProjectInfo {
 	hasSettings: boolean;
 }
 
+// ---- Session reading (mirror of server model.ts + transcript-parser.ts) ----
+
+export interface TranscriptStep {
+	type: 'thinking' | 'text';
+	text: string;
+}
+
+export interface TranscriptToolCall {
+	name: string;
+	summary: string;
+	input: string;
+}
+
+export interface TranscriptTurn {
+	ts: string | null;
+	user: string;
+	steps: TranscriptStep[];
+	tools: TranscriptToolCall[];
+	response: string;
+	stats?: { toolCalls?: number; tokens?: number; durationMs?: number };
+}
+
+export interface SessionSummary {
+	id: string;
+	title: string | null;
+	taskType: string | null;
+	parentId: string | null;
+	timeCreated: string | null;
+	timeUpdated: string | null;
+	hasTranscript: boolean;
+}
+
+export interface SessionFlow {
+	id: string;
+	kind: 'main' | 'subagent';
+	description: string;
+	sourcePath: string;
+	/** When this flow began (ISO). Subagents: spawn time — interleaves into main turns. */
+	startedAt?: string | null;
+	turns: TranscriptTurn[];
+	stats: { lines: number; firstTs: string | null; lastTs: string | null; toolCalls: number };
+}
+
+export interface SessionRead {
+	session: SessionSummary;
+	main: SessionFlow | null;
+	subagents: SessionFlow[];
+}
+
 export interface InstructionInfo {
 	scope: 'global' | 'project';
 	path: string;

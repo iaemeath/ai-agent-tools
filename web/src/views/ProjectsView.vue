@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Delete } from '@element-plus/icons-vue';
-import { EllipsisVertical } from 'lucide-vue-next';
+import { EllipsisVertical, MessagesSquare } from 'lucide-vue-next';
 import { api } from '../api';
 import { useTool } from '../stores/tool';
 import { useDragOrder } from '../composables/useDragOrder';
 import type { ProjectInfo } from '../types/tool';
 
 const { t } = useI18n();
+const router = useRouter();
 const { tool } = useTool();
 
 // Drag-to-reorder (pure UI preference, persisted to localStorage).
@@ -68,6 +70,12 @@ function basename(p: string): string {
 
 function onCommand(cmd: string, p: ProjectInfo) {
 	if (cmd === 'delete') removeProject(p);
+	else if (cmd === 'sessions') openSessions(p);
+}
+
+/** Drill into this project's session history (reading view). */
+function openSessions(p: ProjectInfo): void {
+	router.push({ path: '/sessions', query: { project: p.encoded } });
 }
 
 async function removeProject(p: ProjectInfo) {
@@ -119,6 +127,7 @@ async function removeProject(p: ProjectInfo) {
         @dragover="drag.onDragOver($event, p.encoded)"
         @drop="dropAt($event, p.encoded)"
         @dragend="drag.onDragEnd"
+        @click="openSessions(p)"
       >
         <div class="card-name" :title="p.path">{{ basename(p.path) }}</div>
         <div class="card-path" :title="p.path">{{ p.path }}</div>
@@ -128,14 +137,17 @@ async function removeProject(p: ProjectInfo) {
           </el-tag>
           <span class="card-date">{{ fmtDate(p.lastActivity) }}</span>
         </div>
-        <div class="card-foot">
+        <div class="card-foot" @click.stop>
           <el-dropdown trigger="click" @command="(cmd: string) => onCommand(cmd, p)">
             <el-button class="more-btn" text :title="t('common.more')">
               <el-icon><EllipsisVertical /></el-icon>
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="delete" :icon="Delete" :disabled="deleting === p.encoded">
+                <el-dropdown-item command="sessions" :icon="MessagesSquare">
+                  {{ t('project.viewSessions') }}
+                </el-dropdown-item>
+                <el-dropdown-item command="delete" :icon="Delete" :disabled="deleting === p.encoded" divided>
                   {{ deleting === p.encoded ? t('project.deleting') : t('common.delete') }}
                 </el-dropdown-item>
               </el-dropdown-menu>
@@ -172,6 +184,7 @@ async function removeProject(p: ProjectInfo) {
 }
 .proj-card {
   transition: opacity 0.15s;
+  cursor: pointer;
 }
 .proj-card.dragging {
   opacity: 0.4;
