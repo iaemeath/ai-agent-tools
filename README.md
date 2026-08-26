@@ -28,7 +28,7 @@ Skills, plugins, instructions, rules, commands, agents, hooks, MCP servers, proj
 | Instructions · Rules · Commands · Agents | view + **edit** | markdown editor with safe writes; Rules is Claude-only (ZCode has no rules mechanism) |
 | Hooks · Settings | read-only dashboards | merges Claude `settings.local.json`; env / permissions / marketplaces overview |
 | MCP | read-only + live tool probe | stdio / http / sse transports; probing runs on the selected host |
-| Projects | browse · delete history | session stores on filesystem (Claude) or SQLite (ZCode) |
+| Projects | browse · read sessions · delete history | session stores on filesystem (Claude) or SQLite (ZCode); ZCode sessions are readable end-to-end (user turns, thinking, tool calls, responses) |
 
 Markdown editing comes with a whitelist check, `.bak` backup and atomic write — edit confidently.
 

@@ -105,6 +105,16 @@ server/src/                      Hono API (tsx, :8787)
   scan.ts                        overview aggregator — runs all adapters for a profile
   decode.ts                      decodes dash-encoded project dir names (Windows drives + underscores)
   *-reader.ts                    projects / instructions / mcp / rules / commands / agents / hooks discovery
+  sessions-reader.ts             ★ session-history reading: sqlite index rows (titles, parents,
+                                  task types) + full-session reading. PRIMARY source is the sqlite
+                                  message+part store (survives context compaction, carries thinking
+                                  for main sessions too — the rollout model-io files ROTATE on
+                                  compaction and lose pre-compaction turns, so they are fallback only;
+                                  agents/<sess>/agent_<id>/ transcript dirs are the subagent fallback)
+  transcript-parser.ts           pure parsers: sqlite message+part rows / rollout model-io /
+                                  agent transcript.jsonl → normalized turns (user → thinking/text
+                                  steps + tool calls → final response). No fs access — shared by
+                                  local routes and the remote-exec mirror
   markdown-resource.ts           shared scan/parse primitives (frontmatter, line counts, dedupe)
   mcp-tools.ts                   live MCP tool probing (stdio/http/sse JSON-RPC → tools/list)
   explorer.ts                    explorer.exe launch (local-only; declines cleanly when remote)
@@ -127,9 +137,11 @@ web/src/                         Vue 3 SPA (Vite dev on :5173, /api proxied to :
   stores/tool.ts                 ★ global tool selector (Claude ⇄ ZCode), shared by header + views
   stores/host.ts                 ★ global host selector ('local' ⇄ remote) — injects X-Host, reloads
   api/index.ts                   fetch client — optional `tool` per method; injects X-Host
-  views/                         Skills / Plugins / Projects / Instructions / MCPs / Rules /
+  views/                         Skills / Plugins / Projects / Sessions (drill-in from Projects:
+                                  session list → reading view) / Instructions / MCPs / Rules /
                                   Commands / Agents / Hooks / Settings / Hosts
   components/                    AppHeader (tool + host switchers) / AppSidebar / cards /
-                                  FileExplorer / MarkdownView
+                                  FileExplorer / MarkdownView / SessionTurns (turn rendering:
+                                  user → collapsed process w/ thinking + tools → response)
   i18n/                          vue-i18n (zh / en)
 ```
