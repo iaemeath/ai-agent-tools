@@ -73,6 +73,26 @@ export type ProjectsLocator =
 	| { source: 'sqlite'; dbRelative: string[]; table: string; pathColumn: string; timeColumn: string };
 
 /**
+ * Locator for session transcripts (read-only session reading).
+ * Optional — a capability gap, same pattern as rules/commands/agents: tools whose
+ * transcript layout is not yet modeled omit this field and the sessions routes
+ * decline with a clean 'unsupported' response the UI renders as an empty state.
+ *
+ * Modeled layouts:
+ * - zcode-transcripts: the sqlite session table is the index (titles, parents,
+ *   timestamps); turn content lives in TWO sibling stores under configRoot:
+ *     - rollout/model-io-<sessionId>.jsonl  — main-session model IO (no thinking)
+ *     - agents/<sessionId>/agent_<id>/transcript.jsonl — subagent runs (with thinking)
+ */
+export type TranscriptLocator = {
+	source: 'zcode-transcripts';
+	/** Path segments from configRoot to the model-io rollout dir. */
+	rolloutRelative: string[];
+	/** Path segments from configRoot to the subagent transcripts dir. */
+	agentsRelative: string[];
+};
+
+/**
  * Locator for the MCP (Model Context Protocol) server resource.
  * MCP servers are read-only in this UI (list + detail view). Each tool stores its
  * user-level and project-level server maps at different paths and under different keys:
@@ -153,6 +173,8 @@ export interface ToolProfile {
 	};
 	/** MCP server locator (read-only: list + detail). */
 	mcps: McpLocator;
+	/** Session transcript locator (read-only: list + read). Undefined = not supported. */
+	transcripts?: TranscriptLocator;
 }
 
 /** Boolean encoding shared by all plugin enabled maps. */
@@ -255,6 +277,13 @@ export const PROFILES: Record<ToolId, ToolProfile> = {
 			projectFile: 'config.json',
 			projectDir: '.zcode',
 			projectKeyPath: ['mcp', 'servers'],
+		},
+		// Session transcripts: index = the sqlite session table (see projects locator),
+		// content = rollout model-io files + per-session subagent transcript dirs.
+		transcripts: {
+			source: 'zcode-transcripts',
+			rolloutRelative: ['cli', 'rollout'],
+			agentsRelative: ['cli', 'agents'],
 		},
 	},
 };

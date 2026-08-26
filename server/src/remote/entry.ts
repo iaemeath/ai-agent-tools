@@ -23,6 +23,7 @@ import { overview } from '../scan.js';
 import { profileOf } from '../profiles.js';
 import { registry } from '../adapters/types.js';
 import { listProjects, deleteProject } from '../projects-reader.js';
+import { listSessions, readSession } from '../sessions-reader.js';
 import { listInstructions, readInstruction } from '../instructions-reader.js';
 import { listRules, readRule } from '../rules-reader.js';
 import { listCommands, readCommand } from '../commands-reader.js';
@@ -221,6 +222,20 @@ const COMMANDS: Record<string, (args: Args) => Promise<RemoteResult>> = {
 		const done = await deleteProject(profileOf(str(a.tool, 'claude')), str(a.encoded));
 		if (!done) return err(404, 'project not found or not removable');
 		return ok({ ok: true });
+	},
+
+	// ---- sessions (mirror of routes/sessions.ts) ----
+	'sessions.list': async (a) => {
+		const profile = profileOf(str(a.tool, 'claude'));
+		if (!profile.transcripts) return err(400, 'unsupported');
+		return ok(await listSessions(profile, str(a.project, '')));
+	},
+	'sessions.read': async (a) => {
+		const profile = profileOf(str(a.tool, 'claude'));
+		if (!profile.transcripts) return err(400, 'unsupported');
+		const read = await readSession(profile, str(a.id, ''));
+		if (!read) return err(404, 'session not found or no transcript content');
+		return ok(read);
 	},
 
 	// ---- markdown resources (mirror of routes/{instructions,rules,commands,agents}.ts) ----

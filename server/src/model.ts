@@ -3,6 +3,7 @@
 // (Rust used #[serde(rename_all = "camelCase")]), so TS fields are already aligned.
 
 import type { ToolId, ToolProfile } from './profiles.js';
+import type { TranscriptTurn } from './transcript-parser.js';
 
 export type ToolKind = 'skill' | 'plugin';
 export type Status = 'enabled' | 'disabled' | 'name-only' | 'user-only' | 'inherited';
@@ -72,6 +73,38 @@ export interface ProjectInfo {
 	sessionCount: number;
 	lastActivity: string | null;
 	hasSettings: boolean;
+}
+
+/** One session of a project, as listed for reading (index-level, no turns). */
+export interface SessionSummary {
+	id: string;
+	title: string | null;
+	taskType: string | null;
+	parentId: string | null;
+	timeCreated: string | null;
+	timeUpdated: string | null;
+	/** Whether any transcript content exists on disk for this session. */
+	hasTranscript: boolean;
+}
+
+/** One readable conversation flow inside a session (main rollout or a subagent run). */
+export interface SessionFlow {
+	id: string;
+	kind: 'main' | 'subagent';
+	description: string;
+	sourcePath: string;
+	/** When this flow began (ISO). For subagents: spawn time — used to interleave
+	 *  the flow into the main conversation at the turn that spawned it. */
+	startedAt?: string | null;
+	turns: TranscriptTurn[];
+	stats: { lines: number; firstTs: string | null; lastTs: string | null; toolCalls: number };
+}
+
+/** Full session read: index row + main flow + subagent flows. */
+export interface SessionRead {
+	session: SessionSummary;
+	main: SessionFlow | null;
+	subagents: SessionFlow[];
 }
 
 /** One instruction file entry (global or project-level). */
