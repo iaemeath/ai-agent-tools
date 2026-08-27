@@ -55,6 +55,13 @@ export interface PluginDetail {
 	effective: Status;
 	components: PluginComponent[];
 }
+
+/** Skills provided by one installed plugin (Skills page "from plugins" section). */
+export interface PluginSkillGroup {
+	plugin: string;
+	effective: Status;
+	skills: { name: string; description: string | null }[];
+}
 export interface ProjectInfo {
 	path: string;
 	encoded: string;

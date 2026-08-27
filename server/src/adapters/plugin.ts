@@ -6,7 +6,7 @@ import path from 'node:path';
 import { readProject, readUser, writeProject, writeUser } from '../settings.js';
 import type { ToolProfile } from '../profiles.js';
 import {
-	type Mechanism, type PluginComponent, type PluginDetail, resolveEffective,
+	type Mechanism, type PluginComponent, type PluginDetail, type PluginSkillGroup, resolveEffective,
 	type ScanCtx, type Scope, type ScopeCtx, type ScopeStatus, type Status,
 	type ToolContent, type ToolInstance,
 } from '../model.js';
@@ -315,4 +315,24 @@ export class PluginAdapter implements ToolAdapter {
 			components: await buildComponents(rec.installPath, manifest, this.profile.plugins.supportedComponents),
 		};
 	}
+}
+
+/**
+ * Skills provided by installed plugins, one group per plugin — feeds the Skills
+ * page's "from plugins" section. One aggregate call (not N per-plugin requests)
+ * so the remote-exec path stays O(1) SSH execs. Groups with zero skills are
+ * omitted; a disabled plugin still lists (its skills just don't load).
+ */
+export async function listPluginSkillGroups(profile: ToolProfile, project: string | null): Promise<PluginSkillGroup[]> {
+	const adapter = new PluginAdapter(profile);
+	const out: PluginSkillGroup[] = [];
+	for (const inst of await adapter.scan({ project, profile })) {
+		const detail = await adapter.detail(inst.name, project);
+		const skills = detail.components
+			.filter((cpt) => cpt.kind === 'skill')
+			.map((cpt) => ({ name: cpt.name, description: cpt.detail ?? null }));
+		if (skills.length > 0) out.push({ plugin: inst.name, effective: inst.effective, skills });
+	}
+	out.sort((a, b) => a.plugin.localeCompare(b.plugin));
+	return out;
 }

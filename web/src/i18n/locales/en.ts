@@ -210,6 +210,8 @@ export default {
 	'settings.skipAutoPermission': 'Skip auto-permission prompt',
 	'settings.skipWorkflow': 'Skip workflow usage warning',
 	'skill.groupGlobal': 'User Skills',
+	'skill.groupPlugin': 'Plugin Skills',
+	'skill.pluginDisabled': 'Plugin disabled',
 	'skill.promote': 'Promote to user',
 	'skill.promoteConfirm': 'Copy this project skill to the global skills directory?',
 	'skill.promoting': 'Promoting…',

@@ -5,10 +5,11 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, ArrowLeft } from '@element-plus/icons-vue';
 import { api } from '../api';
 import SkillCard from '../components/SkillCard.vue';
+import PluginSkillCard from '../components/PluginSkillCard.vue';
 import FileExplorer from '../components/FileExplorer.vue';
 import { useTool } from '../stores/tool';
 import { useDragOrder } from '../composables/useDragOrder';
-import type { ProjectInfo, Scope, Status, ToolInstance, ToolOverview } from '../types/tool';
+import type { PluginSkillGroup, ProjectInfo, Scope, Status, ToolInstance, ToolOverview } from '../types/tool';
 
 const { t } = useI18n();
 const { tool } = useTool();
@@ -19,6 +20,7 @@ const { dragPath, dragOverPath } = drag;
 
 const projects = ref<ProjectInfo[]>([]);
 const overview = ref<ToolOverview | null>(null);
+const pluginGroups = ref<PluginSkillGroup[]>([]);
 const errorMsg = ref<string | null>(null);
 const loading = ref(true);
 
@@ -27,8 +29,16 @@ const search = ref('');
 const promoting = ref<string | null>(null);
 const deleting = ref<string | null>(null);
 
-// Inline detail state: when selectedSkill is set, the list hides and detail shows.
+// Inline detail state: when selectedSkill / selectedPluginSkill is set, the list
+// hides and detail shows. Two flavors share one panel:
+//   selectedSkill      — standalone skill → skill-dir file browser (skills API)
+//   selectedPluginSkill — plugin-provided skill → plugin install-dir browser
+//                        (plugins API, subpath rooted at skills/<name>/)
 const selectedSkill = ref<ToolInstance | null>(null);
+const selectedPluginSkill = ref<{ plugin: string; name: string } | null>(null);
+
+/** True when the detail panel is open (either flavor). */
+const inDetail = computed(() => selectedSkill.value !== null || selectedPluginSkill.value !== null);
 
 /** Resolve the skill scope ('user' | 'project') from its origin. */
 function skillScope(s: ToolInstance): 'user' | 'project' {
@@ -58,8 +68,15 @@ const scopeOptions = computed<ScopeOption[]>(() => [
 async function reload() {
 	errorMsg.value = null;
 	selectedSkill.value = null;
+	selectedPluginSkill.value = null;
 	try {
-		overview.value = await api.getOverview(projectPath.value, tool.value);
+		// Plugin-provided skills load in parallel; a failure only hides that section.
+		const [ov, pg] = await Promise.all([
+			api.getOverview(projectPath.value, tool.value),
+			api.getPluginSkills(projectPath.value, tool.value).catch(() => []),
+		]);
+		overview.value = ov;
+		pluginGroups.value = pg;
 	} catch (e) {
 		errorMsg.value = (e as Error).message;
 	} finally {
@@ -80,7 +97,9 @@ async function onToolChange() {
 	selected.value = null;
 	search.value = '';
 	overview.value = null;
+	pluginGroups.value = [];
 	selectedSkill.value = null;
+	selectedPluginSkill.value = null;
 	loading.value = true;
 	await loadProjects();
 	await reload();
@@ -128,8 +147,22 @@ const projectGroups = computed<[string, ToolInstance[]][]>(() => {
 		.sort((a, b) => a[0].localeCompare(b[0]));
 });
 
-/** Drop wrapper: supplies the group's current name[] order to the composable. */
-function groupCurrentIds(groupKey: string): string[] {
+// Plugin-provided skills, filtered by the same search box (plugin name counts as a hit).
+const filteredPluginGroups = computed<PluginSkillGroup[]>(() => {
+	const q = search.value.trim().toLowerCase();
+	return pluginGroups.value
+		.map((g) => {
+			if (!q) return g;
+			const hitPlugin = g.plugin.toLowerCase().includes(q);
+			const skills = hitPlugin ? g.skills : g.skills.filter(
+				(s) => s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q),
+			);
+			return { ...g, skills };
+		})
+		.filter((g) => g.skills.length > 0);
+});
+
+/** Drop wrapper: supplies the group's current name[] order to the composable. */function groupCurrentIds(groupKey: string): string[] {
 	if (groupKey === 'global') return globalSkills.value.map((s) => s.name);
 	const proj = groupKey.slice('project:'.length);
 	const g = projectGroups.value.find(([p]) => p === proj);
@@ -201,18 +234,32 @@ function basename(p: string): string {
 // ---- Detail view ----
 
 function showDetail(s: ToolInstance) {
+	selectedPluginSkill.value = null;
 	selectedSkill.value = s;
+}
+
+/** Open the detail panel for a plugin-provided skill (browse via plugins API). */
+function showPluginDetail(g: PluginSkillGroup, name: string) {
+	selectedSkill.value = null;
+	selectedPluginSkill.value = { plugin: g.plugin, name };
+}
+
+/** Subpath relative to the PLUGIN install root for the selected plugin skill + sp. */
+function pluginSkillSubpath(sp: string): string {
+	const s = selectedPluginSkill.value!;
+	return `skills/${s.name}${sp ? '/' + sp : ''}`;
 }
 
 function closeDetail() {
 	selectedSkill.value = null;
+	selectedPluginSkill.value = null;
 }
 </script>
 
 <template>
   <div class="skills-view">
     <!-- Toolbar: search + scope — only in list mode (hidden in detail) -->
-    <div v-if="!selectedSkill" class="toolbar">
+    <div v-if="!inDetail" class="toolbar">
       <el-input
         v-model="search"
         :placeholder="t('scope.searchPlaceholder')"
@@ -243,8 +290,8 @@ function closeDetail() {
     <el-alert v-else-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
 
     <!-- List mode -->
-    <template v-else-if="!selectedSkill">
-      <div v-if="skills.length === 0" class="state">{{ t('skill.empty') }}</div>
+    <template v-else-if="!inDetail">
+      <div v-if="skills.length === 0 && filteredPluginGroups.length === 0" class="state">{{ t('skill.empty') }}</div>
       <section v-if="globalSkills.length" class="group">
         <div class="group-head">
           <h2 class="group-title">{{ t('skill.groupGlobal') }}</h2>
@@ -301,21 +348,53 @@ function closeDetail() {
           </div>
         </div>
       </section>
+
+      <!-- Plugin-provided skills (grouped by providing plugin, read-only) -->
+      <section v-for="g in filteredPluginGroups" :key="'plugin:' + g.plugin" class="group">
+        <div class="group-head group-head-plugin">
+          <h2 class="group-title">{{ t('skill.groupPlugin') }} — {{ g.plugin }}</h2>
+          <el-tag v-if="g.effective === 'disabled'" size="small" type="info" effect="plain">
+            {{ t('skill.pluginDisabled') }}
+          </el-tag>
+        </div>
+        <div class="card-grid">
+          <PluginSkillCard
+            v-for="s in g.skills"
+            :key="g.plugin + '/' + s.name"
+            :name="s.name"
+            :description="s.description"
+            :disabled="g.effective === 'disabled'"
+            @detail="showPluginDetail(g, s.name)"
+          />
+        </div>
+      </section>
     </template>
 
     <!-- Detail mode: file explorer for the skill directory -->
     <div v-else class="detail-panel">
       <div class="detail-toolbar">
         <el-button text :icon="ArrowLeft" @click="closeDetail">{{ t('skill.backToList') }}</el-button>
-        <span class="detail-skill-name">{{ selectedSkill.name }}</span>
-        <el-tag v-if="selectedSkill.origin === 'project'" size="small" type="info">
+        <span class="detail-skill-name">{{ selectedSkill?.name ?? selectedPluginSkill?.name }}</span>
+        <el-tag v-if="selectedSkill?.origin === 'project'" size="small" type="info">
           {{ basename(selectedSkill.originProject ?? '') }}
         </el-tag>
+        <el-tag v-else-if="selectedPluginSkill" size="small" type="info">
+          {{ selectedPluginSkill.plugin }}
+        </el-tag>
       </div>
+      <!-- Standalone skill: browse its own directory -->
       <FileExplorer
+        v-if="selectedSkill"
         :root-label="selectedSkill.name"
         :list-fn="(sp: string) => api.listSkillFiles(selectedSkill!.name, skillScope(selectedSkill!), sp, skillProject(selectedSkill!), tool)"
         :read-fn="(sp: string) => api.readSkillFile(selectedSkill!.name, skillScope(selectedSkill!), sp, skillProject(selectedSkill!), tool)"
+      />
+      <!-- Plugin-provided skill: browse inside the plugin's install dir -->
+      <FileExplorer
+        v-else-if="selectedPluginSkill"
+        :root-label="selectedPluginSkill.name"
+        :list-fn="(sp: string) => api.listPluginFiles(selectedPluginSkill!.plugin, pluginSkillSubpath(sp), projectPath, tool)"
+        :read-fn="(sp: string) => api.readPluginFile(selectedPluginSkill!.plugin, pluginSkillSubpath(sp), projectPath, tool)"
       />
     </div>
   </div>
@@ -363,6 +442,11 @@ function closeDetail() {
 }
 .group-head {
   margin-bottom: 8px;
+}
+.group-head-plugin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .group-title {
   margin: 0;

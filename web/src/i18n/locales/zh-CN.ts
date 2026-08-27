@@ -210,6 +210,8 @@ export default {
 	'settings.skipAutoPermission': '跳过自动权限提示',
 	'settings.skipWorkflow': '跳过工作流用量警告',
 	'skill.groupGlobal': '用户技能',
+	'skill.groupPlugin': '插件技能',
+	'skill.pluginDisabled': '插件已禁用',
 	'skill.promote': '提升为全局',
 	'skill.promoteConfirm': '将该项目技能复制到全局技能目录？',
 	'skill.promoting': '提升中…',

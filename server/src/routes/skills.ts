@@ -5,11 +5,22 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { globalSkillsDir, projectSkillsDir } from '../paths.js';
 import { profileOf } from '../profiles.js';
+import { listPluginSkillGroups } from '../adapters/plugin.js';
 import { getFs, getHostCtx } from '../hosts/context.js';
 import { sendRemote } from '../remote/runner.js';
 import type { StatResult } from '../fs-backend/types.js';
 
 export const skills = new Hono();
+
+/** GET /api/skills/plugin-skills?project=&tool= — skills grouped by providing plugin. */
+skills.get('/plugin-skills', async (c) => {
+	const project = c.req.query('project') ?? null;
+	const tool = c.req.query('tool');
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'skills.pluginSkills', { project, tool });
+	}
+	return c.json(await listPluginSkillGroups(profileOf(tool ?? 'claude'), project));
+});
 
 /** Reject names containing path separators or traversal (project path is NOT name-checked). */
 function isValidName(name: string): boolean {

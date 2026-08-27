@@ -34,6 +34,7 @@ import { listMcpTools } from '../mcp-tools.js';
 import { readUser, writeText } from '../settings.js';
 import { getFs } from '../hosts/context.js';
 import { globalSkillsDir, projectSkillsDir } from '../paths.js';
+import { listPluginSkillGroups } from '../adapters/plugin.js';
 import type { Scope, Status, ToolKind } from '../model.js';
 import type { StatResult } from '../fs-backend/types.js';
 import type { PluginDetail } from '../model.js';
@@ -314,6 +315,8 @@ const COMMANDS: Record<string, (args: Args) => Promise<RemoteResult>> = {
 	},
 
 	// ---- skill file browser + promote/delete (mirror of routes/skills.ts) ----
+	'skills.pluginSkills': async (a) =>
+		ok(await listPluginSkillGroups(profileOf(str(a.tool, 'claude')), strOrNull(a.project))),
 	'skills.files': async (a) => {
 		const base = a.scope === 'project' && a.project ? projectSkillsDir(str(a.project), profileOf(str(a.tool, 'claude'))) : globalSkillsDir(profileOf(str(a.tool, 'claude')));
 		const skillDir = path.join(base, str(a.name));

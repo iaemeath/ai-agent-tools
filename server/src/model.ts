@@ -67,6 +67,19 @@ export interface PluginDetail {
 	components: PluginComponent[];
 }
 
+/**
+ * Skills provided by one installed plugin — the Skills page's "from plugins"
+ * section. Read-only: a plugin skill's on/off is governed at the PLUGIN level
+ * (enabledPlugins), never per-skill.
+ */
+export interface PluginSkillGroup {
+	/** Plugin full name (name@marketplace). */
+	plugin: string;
+	/** Plugin-level effective status — a disabled plugin's skills do not load. */
+	effective: Status;
+	skills: { name: string; description: string | null }[];
+}
+
 export interface ProjectInfo {
 	path: string;
 	encoded: string;
