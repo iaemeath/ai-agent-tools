@@ -10,6 +10,7 @@ export default {
 	'nav.agents': '子代理',
 	'nav.commands': '命令',
 	'nav.plugins': '插件',
+	'nav.groupTools': 'Tools',
 	'nav.settings': '设置',
 	'header.refresh': '刷新数据',
 	'header.toggleTheme': '切换主题',

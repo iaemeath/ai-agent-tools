@@ -10,6 +10,7 @@ export default {
 	'nav.agents': 'Agents',
 	'nav.commands': 'Commands',
 	'nav.plugins': 'Plugins',
+	'nav.groupTools': 'Tools',
 	'nav.settings': 'Settings',
 	'header.refresh': 'Refresh data',
 	'header.toggleTheme': 'Toggle theme',

@@ -5,23 +5,37 @@ import { useI18n } from 'vue-i18n';
 import {
   FolderOpen, ScrollText, Sparkles, Library, Plug, Settings, Scale, Terminal, Bot, Webhook, Server,
 } from 'lucide-vue-next';
+import { useTool } from '../stores/tool';
+import type { ToolId } from '../types/tool';
 
 const { t } = useI18n();
 const route = useRoute();
+const { tool } = useTool();
 
-interface NavItem { index: string; labelKey: string; icon: any; }
+interface NavItem { index: string; labelKey: string; icon: any; /** When set, show only for these tools (capability gap, e.g. rules is Claude-only). */ onlyTools?: ToolId[]; }
 
-const navItems = computed<NavItem[]>(() => [
+/** Filter nav items by the current tool's capabilities. */
+function visible(item: NavItem): boolean {
+	return !item.onlyTools || item.onlyTools.includes(tool.value);
+}
+
+/** Group 1 — workspace context: hosts, projects, instructions, rules. */
+const navMain = computed<NavItem[]>(() => [
+	{ index: '/hosts', labelKey: 'nav.hosts', icon: Server },
 	{ index: '/projects', labelKey: 'nav.projects', icon: FolderOpen },
 	{ index: '/instructions', labelKey: 'nav.instructions', icon: ScrollText },
-	{ index: '/rules', labelKey: 'nav.rules', icon: Scale },
+	// Rules are Claude Code only — ZCode has no rules mechanism (profile.rules undefined).
+	{ index: '/rules', labelKey: 'nav.rules', icon: Scale, onlyTools: ['claude'] },
+]);
+
+/** Group 2 — "Tools": everything the agent runtime loads. */
+const navTools = computed<NavItem[]>(() => [
 	{ index: '/plugins', labelKey: 'nav.plugins', icon: Plug },
 	{ index: '/skills', labelKey: 'nav.skills', icon: Sparkles },
-	{ index: '/commands', labelKey: 'nav.commands', icon: Terminal },
+	{ index: '/mcps', labelKey: 'nav.mcps', icon: Library },
 	{ index: '/agents', labelKey: 'nav.agents', icon: Bot },
 	{ index: '/hooks', labelKey: 'nav.hooks', icon: Webhook },
-	{ index: '/mcps', labelKey: 'nav.mcps', icon: Library },
-	{ index: '/hosts', labelKey: 'nav.hosts', icon: Server },
+	{ index: '/commands', labelKey: 'nav.commands', icon: Terminal },
 ]);
 
 const activeIndex = computed(() => '/' + (route.path.split('/')[1] ?? ''));
@@ -38,10 +52,16 @@ const activeIndex = computed(() => '/' + (route.path.split('/')[1] ?? ''));
     </div>
 
     <el-menu :default-active="activeIndex" router class="sidebar-menu">
-      <el-menu-item v-for="item in navItems" :key="item.index" :index="item.index">
+      <el-menu-item v-for="item in navMain.filter(visible)" :key="item.index" :index="item.index">
         <el-icon><component :is="item.icon" /></el-icon>
         <span>{{ t(item.labelKey) }}</span>
       </el-menu-item>
+      <el-menu-item-group :title="t('nav.groupTools')">
+        <el-menu-item v-for="item in navTools.filter(visible)" :key="item.index" :index="item.index">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ t(item.labelKey) }}</span>
+        </el-menu-item>
+      </el-menu-item-group>
     </el-menu>
 
     <div class="settings-entry">

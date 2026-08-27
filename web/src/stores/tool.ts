@@ -10,11 +10,11 @@ import { ref } from 'vue';
 import type { ToolId } from '../types/tool';
 
 export const TOOL_OPTIONS: { value: ToolId; label: string }[] = [
-	{ value: 'claude', label: 'Claude Code' },
 	{ value: 'zcode', label: 'ZCode' },
+	{ value: 'claude', label: 'Claude Code' },
 ];
 
-const tool = ref<ToolId>('claude');
+const tool = ref<ToolId>('zcode');
 
 export function useTool() {
 	function setTool(next: ToolId) {
