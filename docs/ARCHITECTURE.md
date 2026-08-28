@@ -131,8 +131,21 @@ server/src/                      Hono API (tsx, :8787)
     runner.ts                    local side: esbuild bundle, hash-cached upload, base64-argv,
                                   temp-file pass-through, sendRemote
   adapters/                      ToolAdapter interface + skill / plugin adapters
+  caselog/                       ★ personal review workbench (docs/caselog/ v3.3) — self-contained
+                                 module (own types, own data at ~/.knowledge) so it can be lifted
+                                 out wholesale; never imported by tool-config code
+    pull.ts                      incremental row extraction (session/message/part by time_updated
+                                 watermark) — shared by the local sync AND the remote mirror
+    raw-store.ts                 ~/.knowledge/raw/<host>.sqlite mirrors + reading (parse via the
+                                 shared transcript-parser)
+    sync.ts                      local pull (direct sqlite) + remote pull (execRemote 'caselog.pull');
+                                 first fill floored at 90 days
+    kb.ts                        knowledge.db (scenarios / scenario_sessions / review_log) + notes/
+                                 MD store + Obsidian export (CASELOG_OBSIDIAN_DIR)
   mutations/jsonKey.ts           leaf primitive: settings[key][name] by encoding
-  routes/                        one file per resource + hosts + settings (remote-split logic)
+  routes/                        one file per resource + hosts + settings + caselog (remote-split
+                                 logic; caselog routes are deliberately NOT host-scoped — its data
+                                 lives on the server machine, SSH hosts are data sources)
 web/src/                         Vue 3 SPA (Vite dev on :5173, /api proxied to :8787)
   stores/tool.ts                 ★ global tool selector (Claude ⇄ ZCode), shared by header + views
   stores/host.ts                 ★ global host selector ('local' ⇄ remote) — injects X-Host, reloads
