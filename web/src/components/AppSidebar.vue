@@ -23,7 +23,6 @@ function visible(item: NavItem): boolean {
 const navMain = computed<NavItem[]>(() => [
 	{ index: '/hosts', labelKey: 'nav.hosts', icon: Server },
 	{ index: '/projects', labelKey: 'nav.projects', icon: FolderOpen },
-	{ index: '/caselog', labelKey: 'nav.caselog', icon: NotebookPen },
 	{ index: '/instructions', labelKey: 'nav.instructions', icon: ScrollText },
 	// Rules are Claude Code only — ZCode has no rules mechanism (profile.rules undefined).
 	{ index: '/rules', labelKey: 'nav.rules', icon: Scale, onlyTools: ['claude'] },
@@ -37,6 +36,11 @@ const navTools = computed<NavItem[]>(() => [
 	{ index: '/agents', labelKey: 'nav.agents', icon: Bot },
 	{ index: '/hooks', labelKey: 'nav.hooks', icon: Webhook },
 	{ index: '/commands', labelKey: 'nav.commands', icon: Terminal },
+]);
+
+/** Group 3 — review workbench: caselog (multi-device session review). */
+const navReview = computed<NavItem[]>(() => [
+	{ index: '/caselog', labelKey: 'nav.caselog', icon: NotebookPen },
 ]);
 
 const activeIndex = computed(() => '/' + (route.path.split('/')[1] ?? ''));
@@ -53,12 +57,20 @@ const activeIndex = computed(() => '/' + (route.path.split('/')[1] ?? ''));
     </div>
 
     <el-menu :default-active="activeIndex" router class="sidebar-menu">
-      <el-menu-item v-for="item in navMain.filter(visible)" :key="item.index" :index="item.index">
-        <el-icon><component :is="item.icon" /></el-icon>
-        <span>{{ t(item.labelKey) }}</span>
-      </el-menu-item>
+      <el-menu-item-group :title="t('nav.groupWorkspace')">
+        <el-menu-item v-for="item in navMain.filter(visible)" :key="item.index" :index="item.index">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ t(item.labelKey) }}</span>
+        </el-menu-item>
+      </el-menu-item-group>
       <el-menu-item-group :title="t('nav.groupTools')">
         <el-menu-item v-for="item in navTools.filter(visible)" :key="item.index" :index="item.index">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ t(item.labelKey) }}</span>
+        </el-menu-item>
+      </el-menu-item-group>
+      <el-menu-item-group :title="t('nav.groupReview')">
+        <el-menu-item v-for="item in navReview.filter(visible)" :key="item.index" :index="item.index">
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ t(item.labelKey) }}</span>
         </el-menu-item>
