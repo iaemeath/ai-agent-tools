@@ -15,6 +15,7 @@ const routes: RouteRecordRaw[] = [
 	{ path: '/settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
 	{ path: '/hosts', name: 'hosts', component: () => import('../views/HostsView.vue') },
 	{ path: '/caselog', name: 'caselog', component: () => import('../views/CaselogView.vue') },
+	{ path: '/caselog/scenarios', name: 'caselog-scenarios', component: () => import('../views/ScenariosView.vue') },
 ];
 
 export const router = createRouter({

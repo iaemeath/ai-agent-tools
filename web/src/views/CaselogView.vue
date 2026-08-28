@@ -17,21 +17,6 @@ import type { CaselogFlow, CaselogHostStat, CaselogSessionRead, CaselogSessionSu
 const { t } = useI18n();
 const view = ref<'data' | 'read'>('data');
 
-// Fullscreen for the whole app. State is driven by the fullscreenchange event (the
-// request itself can reject, e.g. inside an iframe without allow="fullscreen").
-const isFullscreen = ref(false);
-function onFsChange(): void {
-	isFullscreen.value = document.fullscreenElement !== null;
-}
-function toggleFullscreen(): void {
-	if (document.fullscreenElement) {
-		void document.exitFullscreen().catch(() => { /* already exited */ });
-	} else {
-		document.documentElement.requestFullscreen()
-			.catch((e: unknown) => console.error('[caselog] requestFullscreen failed:', e));
-	}
-}
-
 // ══════════════════ data tab (sync overview) ══════════════════
 
 const stats = ref<CaselogHostStat[]>([]);
@@ -272,10 +257,42 @@ async function saveScenario(): Promise<void> {
 
 // Note capture (bottom-right editor): input area seeded with an excerpt of the
 // current session; whatever the user leaves here is written to ~/.knowledge/notes.
+// The LIST tab shows what's already been captured; clicking a file loads it back
+// into the editor (name + content) for further editing / re-capture.
+const noteTab = ref<'capture' | 'list'>('capture');
+const noteList = ref<{ name: string; size: number; mtime: string }[]>([]);
+const noteListLoading = ref(false);
 const capName = ref('');
 const capContent = ref('');
 const capMsg = ref('');
 const capSaving = ref(false);
+
+async function loadNoteList(): Promise<void> {
+	noteListLoading.value = true;
+	try {
+		noteList.value = await api.caselogNotes();
+	} catch {
+		noteList.value = [];
+	} finally {
+		noteListLoading.value = false;
+	}
+}
+
+function onNoteTab(tab: 'capture' | 'list'): void {
+	if (tab === 'list') void loadNoteList();
+}
+
+async function openCaptured(name: string): Promise<void> {
+	try {
+		const r = await api.caselogReadNote(name);
+		capName.value = r.name.replace(/\.md$/i, '');
+		capContent.value = r.raw;
+		capMsg.value = '';
+		noteTab.value = 'capture';
+	} catch (e) {
+		capMsg.value = (e as Error).message;
+	}
+}
 
 async function captureNote(): Promise<void> {
 	if (!reading.value) return;
@@ -296,14 +313,11 @@ async function captureNote(): Promise<void> {
 }
 
 onMounted(async () => {
-	isFullscreen.value = document.fullscreenElement !== null;
-	document.addEventListener('fullscreenchange', onFsChange);
 	await loadStats();
 	await loadSessions();
 });
 
 onUnmounted(() => {
-	document.removeEventListener('fullscreenchange', onFsChange);
 	document.body.classList.remove('caselog-immerse');
 });
 </script>
@@ -383,24 +397,15 @@ onUnmounted(() => {
 									<el-tag v-if="reading.main" size="small">{{ t('session.main') }} {{ reading.main.turns.length }} {{ t('session.turnUnit') }}</el-tag>
 									<el-tag v-if="reading.subagents.length" size="small" type="warning">{{ t('session.subagents') }} {{ reading.subagents.length }}</el-tag>
 									<span class="reader-spacer" />
-									<el-button size="small" :type="editing ? 'primary' : 'default'" plain @click="toggleEditing()">
-										<el-icon><PenLine /></el-icon>&nbsp;{{ t('caselog.edit') }}
-									</el-button>
-									<el-button size="small" :type="immersive ? 'primary' : 'default'" plain @click="toggleImmersive()">
-										<el-icon><component :is="immersive ? Minimize2 : Maximize2" /></el-icon>&nbsp;{{ t('caselog.fullscreen') }}
-									</el-button>
 								</div>
 							</div>
 							<template v-if="reading.main">
 								<template v-for="(item, i) in timeline.items" :key="i">
 									<div v-if="item.kind === 'turn'" class="turn-wrap" :class="{ picked: selectedTurns.has(item.seq) }">
-										<el-checkbox
-											v-if="editing"
-											:model-value="selectedTurns.has(item.seq)"
-											class="turn-pick"
-											@change="toggleTurn(item.seq)"
-										/>
-										<div class="turn-seq">{{ item.seq }}</div>
+										<div v-if="editing" class="turn-pick" :class="{ on: selectedTurns.has(item.seq) }" :title="`${t('caselog.fTurns')} ${item.seq}`" @click="toggleTurn(item.seq)">
+											<span class="tp-seq">{{ item.seq }}</span>
+											<el-checkbox :model-value="selectedTurns.has(item.seq)" class="tp-box" />
+										</div>
 										<SessionTurn :turn="item.turn" />
 									</div>
 									<div v-else class="agent-inline">
@@ -449,24 +454,44 @@ onUnmounted(() => {
 						</div>
 					</div>
 					<div class="edit-card note-card">
-						<div class="edit-card-head">
-							<el-icon><FileText /></el-icon>
-							<span>{{ t('caselog.notePanel') }}</span>
-							<span class="sc-foot-spacer" />
-							<el-input v-model="capName" size="small" :placeholder="`note-${new Date().toISOString().slice(0, 10)}`" class="note-name-input" />
-							<el-button size="small" type="primary" plain :loading="capSaving" @click="captureNote()">{{ t('caselog.capture') }}</el-button>
+						<div class="note-head">
+							<button type="button" class="note-tab" :class="{ on: noteTab === 'capture' }" @click="noteTab = 'capture'; onNoteTab('capture')">{{ t('caselog.notePanel') }}</button>
+							<button type="button" class="note-tab" :class="{ on: noteTab === 'list' }" @click="noteTab = 'list'; onNoteTab('list')">{{ t('caselog.noteTabList') }}</button>
+							<template v-if="noteTab === 'capture'">
+								<span class="note-head-spacer" />
+								<el-input v-model="capName" size="small" :placeholder="`note-${new Date().toISOString().slice(0, 10)}`" class="note-name-input" />
+								<el-button size="small" type="primary" plain :loading="capSaving" @click="captureNote()">{{ t('caselog.capture') }}</el-button>
+							</template>
 						</div>
-						<el-input v-model="capContent" type="textarea" resize="none" :placeholder="t('caselog.noteInputHint')" class="note-input" />
-						<div v-if="capMsg" class="sc-msg">{{ capMsg }}</div>
+						<template v-if="noteTab === 'capture'">
+							<el-input v-model="capContent" type="textarea" resize="none" :placeholder="t('caselog.noteInputHint')" class="note-input" />
+							<div v-if="capMsg" class="sc-msg">{{ capMsg }}</div>
+						</template>
+						<template v-else>
+							<div v-if="noteListLoading" class="state">{{ t('common.loading') }}</div>
+							<div v-else-if="noteList.length === 0" class="state">{{ t('caselog.noteListEmpty') }}</div>
+							<div v-else class="note-list">
+								<div v-for="n in noteList" :key="n.name" class="note-row" @click="openCaptured(n.name)">
+									<FileText :size="13" class="note-row-ico" />
+									<span class="note-row-name" :title="n.name">{{ n.name }}</span>
+									<span class="note-row-date">{{ n.mtime.slice(0, 10) }}</span>
+								</div>
+							</div>
+						</template>
 					</div>
 				</aside>
 			</div>
 		</div>
 
-		<!-- fullscreen toggle, pinned top-right of the page -->
-		<el-button class="cl-fullscreen" size="small" text @click="toggleFullscreen()">
-			<el-icon><component :is="isFullscreen ? Minimize2 : Maximize2" /></el-icon>
-		</el-button>
+		<!-- edit / immersive-fullscreen toggle, pinned top-right (reading view only) -->
+		<div v-if="view === 'read'" class="mode-toggles">
+			<el-button size="small" :type="editing ? 'primary' : 'default'" plain @click="toggleEditing()">
+				<el-icon><PenLine /></el-icon>&nbsp;{{ t('caselog.edit') }}
+			</el-button>
+			<el-button size="small" :type="immersive ? 'primary' : 'default'" plain @click="toggleImmersive()">
+				<el-icon><component :is="immersive ? Minimize2 : Maximize2" /></el-icon>&nbsp;{{ t('caselog.fullscreen') }}
+			</el-button>
+		</div>
 	</div>
 </template>
 
@@ -479,7 +504,10 @@ onUnmounted(() => {
 	display: flex;
 	flex-direction: column;
 }
-.cl-fullscreen { position: absolute; top: 4px; right: 0; z-index: 5; }
+.mode-toggles {
+	position: absolute; top: 6px; right: 16px; z-index: 5;
+	display: flex; gap: 8px;
+}
 .read-wrap {
 	flex: 1 1 auto; min-height: 0;
 	display: flex; flex-direction: column;
@@ -564,9 +592,28 @@ onUnmounted(() => {
 .sc-foot-spacer { flex: 1 1 auto; }
 .sc-msg { font-size: 11px; color: var(--el-color-success); }
 .turns-picked { font-size: 11px; font-weight: normal; color: var(--el-color-primary); }
-.note-name-input { flex: 0 0 180px; }
+.note-name-input { flex: 1 1 160px; max-width: 220px; }
 .note-input { flex: 1 1 auto; min-height: 0; }
 .note-input :deep(textarea) { height: 100%; }
+.note-head {
+	display: flex; align-items: center; gap: 6px;
+	border-bottom: 1px solid var(--el-border-color-lighter); padding-bottom: 6px;
+}
+.note-head-spacer { flex: 1 1 auto; }
+.note-tab {
+	border: none; background: transparent; cursor: pointer;
+	font-size: 12px; color: var(--el-text-color-secondary); padding: 2px 8px; border-radius: 4px;
+}
+.note-tab.on { color: var(--el-color-primary); background: var(--el-color-primary-light-9); font-weight: 600; }
+.note-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.note-row {
+	display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 6px;
+	cursor: pointer; font-size: 12px;
+}
+.note-row:hover { background: var(--el-fill-color-lighter); }
+.note-row-ico { color: var(--el-text-color-secondary); flex-shrink: 0; }
+.note-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-row-date { flex-shrink: 0; font-size: 10px; color: var(--el-text-color-secondary); }
 
 /* ---- turn picking (edit mode checkboxes in the reader) ---- */
 .turn-wrap { position: relative; margin-bottom: 14px; }
@@ -575,15 +622,18 @@ onUnmounted(() => {
 	outline-offset: 2px;
 	border-radius: 8px;
 }
-.turn-seq {
-	position: absolute; top: 8px; left: -22px; z-index: 1;
-	font-size: 10px; color: var(--el-text-color-secondary);
-}
 .turn-pick {
 	position: absolute; top: -10px; right: 10px; z-index: 2;
-	height: 18px;
-	background: var(--el-bg-color); border-radius: 4px; padding: 0 2px;
+	display: flex; align-items: center; gap: 2px; height: 20px;
+	padding: 0 4px 0 6px; cursor: pointer; user-select: none;
+	background: var(--el-bg-color); border: 1px solid var(--el-border-color-lighter);
+	border-radius: 4px;
 }
+.turn-pick.on { border-color: var(--el-color-primary); }
+.tp-seq { font-size: 10px; color: var(--el-text-color-secondary); line-height: 1; }
+.turn-pick.on .tp-seq { color: var(--el-color-primary); font-weight: 600; }
+.tp-box { height: 14px; }
+.tp-box :deep(.el-checkbox__inner) { width: 12px; height: 12px; }
 .list-pane {
 	flex: 0 0 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 8px;
 	background: var(--el-bg-color); border: 1px solid var(--el-border-color-lighter); border-radius: 8px;

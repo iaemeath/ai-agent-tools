@@ -30,6 +30,7 @@ const titleKey = computed(() => {
 		mcps: 'page.mcps.title',
 		settings: 'page.settings.title',
 		hosts: 'page.hosts.title',
+		caselog: 'page.caselog.title',
 	};
 	const seg = route.path.split('/')[1];
 	return map[seg] ?? 'page.placeholder.title';
@@ -47,6 +48,7 @@ const subtitleKey = computed(() => {
 		mcps: 'page.mcps.subtitle',
 		settings: 'page.settings.subtitle',
 		hosts: 'page.hosts.subtitle',
+		caselog: 'page.caselog.subtitle',
 	};
 	const seg = route.path.split('/')[1];
 	return map[seg] ?? '';

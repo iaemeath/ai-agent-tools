@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
-  FolderOpen, ScrollText, Sparkles, Library, Plug, Settings, Scale, Terminal, Bot, Webhook, Server, NotebookPen,
+  FolderOpen, ScrollText, Sparkles, Library, Plug, Settings, Scale, Terminal, Bot, Webhook, Server, BookCheck, NotebookPen,
 } from 'lucide-vue-next';
 import { useTool } from '../stores/tool';
 import type { ToolId } from '../types/tool';
@@ -38,12 +38,14 @@ const navTools = computed<NavItem[]>(() => [
 	{ index: '/commands', labelKey: 'nav.commands', icon: Terminal },
 ]);
 
-/** Group 3 — review workbench: caselog (multi-device session review). */
+/** Group 3 — review workbench: caselog (multi-device session review) + scenarios. */
 const navReview = computed<NavItem[]>(() => [
 	{ index: '/caselog', labelKey: 'nav.caselog', icon: NotebookPen },
+	{ index: '/caselog/scenarios', labelKey: 'nav.caselogScenarios', icon: BookCheck },
 ]);
 
-const activeIndex = computed(() => '/' + (route.path.split('/')[1] ?? ''));
+// Full path (not first segment) so /caselog and /caselog/scenarios highlight separately.
+const activeIndex = computed(() => route.path);
 </script>
 
 <template>
