@@ -6,7 +6,7 @@
 // not 'local', so all resource requests transparently hit the selected SSH host. Host-
 // management methods pass { injectHost: false } because they operate on the LOCAL registry.
 
-import type { AgentInfo, CaselogNote, CaselogScenario, CaselogSessionRead, CaselogSessionSummary, CaselogSyncResult, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, PluginSkillGroup, ProjectInfo, RuleInfo, Scope, SessionRead, SessionSummary, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
+import type { AgentInfo, CaselogHostStat, CaselogNote, CaselogScenario, CaselogSessionRead, CaselogSessionSummary, CaselogSyncResult, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, PluginSkillGroup, ProjectInfo, RuleInfo, Scope, SessionRead, SessionSummary, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
 import { currentHost } from '../stores/host';
 
 interface HostOpts {
@@ -168,8 +168,15 @@ export const api = {
 		getJson<{ hosts: string[] }>('/api/caselog/hosts', { injectHost: false }),
 	caselogSync: (host?: string) =>
 		postJson<{ results: CaselogSyncResult[] }>('/api/caselog/sync', { host: host ?? 'all' }, { injectHost: false }),
-	caselogSessions: (host?: string) =>
-		getJson<CaselogSessionSummary[]>(`/api/caselog/sessions${host ? `?host=${encodeURIComponent(host)}` : ''}`, { injectHost: false }),
+	caselogStats: () =>
+		getJson<CaselogHostStat[]>('/api/caselog/stats', { injectHost: false }),
+	caselogSessions: (host?: string, project?: string) => {
+		const q = new URLSearchParams();
+		if (host) q.set('host', host);
+		if (project) q.set('project', project);
+		const qs = q.toString();
+		return getJson<CaselogSessionSummary[]>(`/api/caselog/sessions${qs ? `?${qs}` : ''}`, { injectHost: false });
+	},
 	caselogReadSession: (host: string, id: string) =>
 		getJson<CaselogSessionRead>(`/api/caselog/sessions/${encodeURIComponent(id)}?host=${encodeURIComponent(host)}`, { injectHost: false }),
 	caselogScenarios: () =>

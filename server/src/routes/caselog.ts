@@ -5,7 +5,7 @@
 
 import { Hono } from 'hono';
 import { listHosts } from '../hosts/registry.js';
-import { isValidHostId, listRawSessions, mirroredHosts, readRawSession } from '../caselog/raw-store.js';
+import { isValidHostId, hostStats, listRawSessions, mirroredHosts, readRawSession } from '../caselog/raw-store.js';
 import { syncAll } from '../caselog/sync.js';
 import { deleteNote, exportNotes, isValidNoteName, listNotes, readNote, saveNote, saveScenario, softDeleteScenario, listScenarios, type ScenarioInput } from '../caselog/kb.js';
 
@@ -26,11 +26,15 @@ caselog.post('/sync', async (c) => {
 	return c.json({ results: await syncAll(host) });
 });
 
-/** GET /api/caselog/sessions?host= — sessions across mirrors (all hosts when omitted). */
+/** GET /api/caselog/stats — data-tab sync overview: host → project → counts (+today). */
+caselog.get('/stats', (c) => c.json(hostStats()));
+
+/** GET /api/caselog/sessions?host=&project= — sessions across mirrors (all hosts when omitted). */
 caselog.get('/sessions', (c) => {
 	const host = c.req.query('host') || undefined;
+	const project = c.req.query('project') || undefined;
 	if (host && !isValidHostId(host)) return c.json({ error: 'invalid host id' }, 400);
-	return c.json(listRawSessions(host));
+	return c.json(listRawSessions(host, project));
 });
 
 /** GET /api/caselog/sessions/:id?host= — full session read from a mirror. */

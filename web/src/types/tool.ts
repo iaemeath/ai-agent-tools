@@ -195,6 +195,7 @@ export interface CaselogSessionSummary {
 	title: string | null;
 	task_type: string | null;
 	parent_id: string | null;
+	project: string | null;
 	time_created: number | null;
 	time_updated: number | null;
 	hasTranscript: boolean;
@@ -213,9 +214,22 @@ export interface CaselogFlow {
 /** Full caselog session read (mirrors CaselogSessionRead). */
 export interface CaselogSessionRead {
 	host: string;
-	session: { id: string; title: string | null; task_type: string | null; parent_id: string | null; time_created: number | null; time_updated: number | null };
+	session: { id: string; title: string | null; task_type: string | null; parent_id: string | null; project: string | null; time_created: number | null; time_updated: number | null };
 	main: CaselogFlow | null;
 	subagents: CaselogFlow[];
+}
+
+/** Data-tab sync overview: unique session = host-project-session. */
+export interface CaselogProjectStat {
+	project: string;
+	total: number;
+	today: number;
+}
+export interface CaselogHostStat {
+	host: string;
+	projects: CaselogProjectStat[];
+	total: number;
+	today: number;
 }
 
 export interface CaselogSyncResult {

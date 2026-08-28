@@ -1,25 +1,84 @@
 <script setup lang="ts">
-// Caselog view — the personal review workbench (docs/caselog v3.3). Three tabs:
-//   阅读 reading: host filter + sync + session list → SessionTurn timeline with
-//     interleaved subagents (same interleave as SessionsView) → 记情景 / 记笔记 actions
-//   情景 scenarios: knowledge.db scenario cards (delete = soft)
-//   笔记 notes: MD capture channel — editor + export to the Obsidian vault dir
+// Caselog view — the personal review workbench (docs/caselog v3.3). No tabs; two
+// views switched by state:
+//   数据 data (default): sync overview — host → project → session counts, today's
+//     new as a red badge; unique session = host-project-session (also the sync unit).
+//   阅读 read: entered by clicking a host-project card; left pane is that
+//     host-project's session history → SessionTurn timeline → 记情景 action.
 // caselog data ALWAYS lives on the machine running the server; API calls never
 // inject X-Host.
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Bot, BookCheck, FileText, MessageSquareText, RefreshCw } from 'lucide-vue-next';
+import { ArrowLeft, BookCheck, Bot, Database, FileText, Maximize2, MessageSquareText, Minimize2, PenLine, RefreshCw } from 'lucide-vue-next';
 import { api } from '../api';
 import SessionTurn from '../components/SessionTurn.vue';
-import type { CaselogFlow, CaselogNote, CaselogScenario, CaselogSessionRead, CaselogSessionSummary, TranscriptTurn } from '../types/tool';
+import type { CaselogFlow, CaselogHostStat, CaselogSessionRead, CaselogSessionSummary, TranscriptTurn } from '../types/tool';
 
 const { t } = useI18n();
-const tab = ref<'read' | 'scenarios' | 'notes'>('read');
+const view = ref<'data' | 'read'>('data');
 
-// ══════════════════ reading tab ══════════════════
+// Fullscreen for the whole app. State is driven by the fullscreenchange event (the
+// request itself can reject, e.g. inside an iframe without allow="fullscreen").
+const isFullscreen = ref(false);
+function onFsChange(): void {
+	isFullscreen.value = document.fullscreenElement !== null;
+}
+function toggleFullscreen(): void {
+	if (document.fullscreenElement) {
+		void document.exitFullscreen().catch(() => { /* already exited */ });
+	} else {
+		document.documentElement.requestFullscreen()
+			.catch((e: unknown) => console.error('[caselog] requestFullscreen failed:', e));
+	}
+}
 
-const hosts = ref<string[]>([]);
-const hostFilter = ref<string>('');   // '' = all hosts
+// ══════════════════ data tab (sync overview) ══════════════════
+
+const stats = ref<CaselogHostStat[]>([]);
+const statsLoading = ref(false);
+
+async function loadStats(): Promise<void> {
+	statsLoading.value = true;
+	try {
+		stats.value = await api.caselogStats();
+	} catch {
+		stats.value = [];
+	} finally {
+		statsLoading.value = false;
+	}
+}
+
+/** Jump from a data-tab project card into the reading tab scoped to that host-project. */
+function openHostProject(host: string, project: string): void {
+	hostFilter.value = host;
+	projectFilter.value = project;
+	view.value = 'read';
+	void loadSessions();
+}
+
+/** Back to the data overview (refresh stats so today's badges are current). */
+function backToData(): void {
+	view.value = 'data';
+	void loadStats();
+}
+
+/** True when the session was created today (local time) — drives the "new" badge. */
+function isToday(ms: number | null | undefined): boolean {
+	if (typeof ms !== 'number' || ms <= 0) return false;
+	const d = new Date(ms);
+	const n = new Date();
+	return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+}
+
+/** Last path segment of a zcode project directory (handles both / and \). */
+function basename(p: string): string {
+	return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
+}
+
+// ══════════════════ reading view ══════════════════
+
+const hostFilter = ref<string>('');   // set when entering from the data view
+const projectFilter = ref<string>(''); // set when entering from the data view
 const sessions = ref<CaselogSessionSummary[]>([]);
 const reading = ref<CaselogSessionRead | null>(null);
 const currentHost = ref('');
@@ -30,16 +89,10 @@ const syncing = ref(false);
 const syncMsg = ref('');
 const openAgents = ref<string[]>([]);
 
-async function loadHosts(): Promise<void> {
-	try {
-		hosts.value = (await api.caselogHosts()).hosts;
-	} catch { hosts.value = ['local']; }
-}
-
 async function loadSessions(): Promise<void> {
 	listLoading.value = true;
 	try {
-		sessions.value = await api.caselogSessions(hostFilter.value || undefined);
+		sessions.value = await api.caselogSessions(hostFilter.value || undefined, projectFilter.value || undefined);
 	} catch {
 		sessions.value = [];
 	} finally {
@@ -47,14 +100,16 @@ async function loadSessions(): Promise<void> {
 	}
 }
 
-async function sync(): Promise<void> {
+/** Sync one host / the current filter / everything ('all' from the data view). */
+async function sync(hostArg?: string): Promise<void> {
 	syncing.value = true;
 	syncMsg.value = '';
 	try {
-		const r = await api.caselogSync(hostFilter.value || undefined);
+		const host = hostArg ?? (hostFilter.value || undefined);
+		const r = await api.caselogSync(host);
 		syncMsg.value = r.results.map((x) => `${x.host}: ${x.ok ? `+${x.sessions}` : x.error}`).join('  ·  ');
-		await loadHosts();
 		await loadSessions();
+		await loadStats();
 	} catch (e) {
 		syncMsg.value = (e as Error).message;
 	} finally {
@@ -68,8 +123,12 @@ async function openSession(host: string, id: string): Promise<void> {
 	readLoading.value = true;
 	reading.value = null;
 	openAgents.value = [];
+	selectedTurns.value = new Set();
+	capMsg.value = '';
 	try {
 		reading.value = await api.caselogReadSession(host, id);
+		const first = reading.value?.main?.turns[0];
+		capContent.value = first?.user.slice(0, 400) ?? '';
 	} finally {
 		readLoading.value = false;
 	}
@@ -82,8 +141,8 @@ function fmtDate(ms: number | null | undefined): string {
 }
 
 // interleave subagent flows at their spawn position (same rule as SessionsView)
-interface TimelineTurn { kind: 'turn'; turn: TranscriptTurn; }
-interface TimelineAgent { kind: 'agent'; flow: CaselogFlow; }
+interface TimelineTurn { kind: 'turn'; turn: TranscriptTurn; seq: number }
+interface TimelineAgent { kind: 'agent'; flow: CaselogFlow }
 const timeline = computed<{ items: (TimelineTurn | TimelineAgent)[]; orphans: CaselogFlow[] }>(() => {
 	const main = reading.value?.main;
 	const agents = [...(reading.value?.subagents ?? [])].sort((a, b) => (a.startedAt ?? '').localeCompare(b.startedAt ?? ''));
@@ -92,7 +151,7 @@ const timeline = computed<{ items: (TimelineTurn | TimelineAgent)[]; orphans: Ca
 	const items: (TimelineTurn | TimelineAgent)[] = [];
 	let ai = 0;
 	turns.forEach((turn, i) => {
-		items.push({ kind: 'turn', turn });
+		items.push({ kind: 'turn', turn, seq: i + 1 });
 		const nextTs = turns[i + 1]?.ts ?? null;
 		while (ai < agents.length && agents[ai]!.startedAt) {
 			const st = agents[ai]!.startedAt!;
@@ -105,141 +164,195 @@ const timeline = computed<{ items: (TimelineTurn | TimelineAgent)[]; orphans: Ca
 	return { items, orphans: agents.slice(ai) };
 });
 
-// ══════════════════ scenario dialog ══════════════════
+// ── turn selection (edit mode): tick turns in the reader, range string derives ──
+const selectedTurns = ref<Set<number>>(new Set());
 
-const scVisible = ref(false);
-const scSaving = ref(false);
-const scForm = ref({ title: '', keywords: '', content: '', category: '', seqFrom: 1, seqTo: 1 });
-
-function openScenarioDialog(): void {
-	const n = reading.value?.main?.turns.length ?? 0;
-	scForm.value = { title: '', keywords: '', content: '', category: '', seqFrom: 1, seqTo: Math.max(1, n) };
-	scVisible.value = true;
+function toggleTurn(seq: number): void {
+	const next = new Set(selectedTurns.value);
+	if (!next.delete(seq)) next.add(seq);
+	selectedTurns.value = next;
 }
 
+/** Collapse {1,2,3,7} → "1-3,7" (stored in scenario_sessions.seq_range). */
+function formatRanges(sel: Set<number>): string {
+	const nums = [...sel].sort((a, b) => a - b);
+	const parts: string[] = [];
+	let i = 0;
+	while (i < nums.length) {
+		let j = i;
+		while (j + 1 < nums.length && nums[j + 1] === nums[j]! + 1) j += 1;
+		parts.push(i === j ? String(nums[i]) : `${nums[i]}-${nums[j]}`);
+		i = j + 1;
+	}
+	return parts.join(',');
+}
+
+const seqRangeLabel = computed(() => {
+	if (selectedTurns.value.size === 0) return '';
+	return t('caselog.turnsPicked', { ranges: formatRanges(selectedTurns.value) });
+});
+
+// ══════════════════ edit pane + immersive fullscreen ══════════════════
+
+// EDIT: splits the reading area — reader on the left, scenario editor top-right,
+// note-capture bottom-right. Shell chrome untouched.
+const editing = ref(false);
+
+function toggleEditing(): void {
+	editing.value = !editing.value;
+	if (editing.value) {
+		scForm.value = { title: '', keywords: '', content: '', category: '' };
+		selectedTurns.value = new Set();
+		const n = reading.value?.main?.turns.length ?? 0;
+		rangeFrom.value = 1;
+		rangeTo.value = Math.max(1, n);
+	}
+}
+
+// toolbar range-pick: add [rangeFrom..rangeTo] to the selection (merges with hand-picked)
+const rangeFrom = ref(1);
+const rangeTo = ref(1);
+
+function pickRange(): void {
+	const n = reading.value?.main?.turns.length ?? 0;
+	const from = Math.max(1, Math.min(rangeFrom.value, rangeTo.value, n));
+	const to = Math.min(n, Math.max(rangeFrom.value, rangeTo.value));
+	const next = new Set(selectedTurns.value);
+	for (let i = from; i <= to; i++) next.add(i);
+	selectedTurns.value = next;
+}
+
+function pickAll(): void {
+	const n = reading.value?.main?.turns.length ?? 0;
+	selectedTurns.value = new Set(Array.from({ length: n }, (_, i) => i + 1));
+}
+
+function pickNone(): void {
+	selectedTurns.value = new Set();
+}
+
+// IMMERSIVE FULLSCREEN: hides the app shell (sidebar + header via body.caselog-immerse
+// in App.vue) and the session list, so the reader takes the whole viewport.
+const immersive = ref(false);
+
+function toggleImmersive(): void {
+	immersive.value = !immersive.value;
+	document.body.classList.toggle('caselog-immerse', immersive.value);
+}
+
+const scSaving = ref(false);
+const scMsg = ref('');
+const scForm = ref({ title: '', keywords: '', content: '', category: '' });
+
 async function saveScenario(): Promise<void> {
-	if (!scForm.value.title.trim()) return;
+	if (!scForm.value.title.trim() || !currentId.value) return;
 	scSaving.value = true;
+	scMsg.value = '';
 	try {
+		const n = reading.value?.main?.turns.length ?? 0;
+		const range = selectedTurns.value.size > 0 ? formatRanges(selectedTurns.value) : `1-${n}`;
 		await api.caselogSaveScenario({
 			...scForm.value,
 			pointers: [{
 				host: currentHost.value,
 				sessionId: currentId.value,
 				agentId: '',
-				seqRange: `${scForm.value.seqFrom}-${scForm.value.seqTo}`,
+				seqRange: range,
 			}],
 		});
-		scVisible.value = false;
-		tab.value = 'scenarios';
-		await loadScenarios();
+		scMsg.value = t('caselog.scSaved');
+		scForm.value = { ...scForm.value, title: '', keywords: '', content: '' };
+		selectedTurns.value = new Set();
+	} catch (e) {
+		scMsg.value = (e as Error).message;
 	} finally {
 		scSaving.value = false;
 	}
 }
 
-const scenarios = ref<CaselogScenario[]>([]);
-async function loadScenarios(): Promise<void> {
-	try { scenarios.value = await api.caselogScenarios(); } catch { scenarios.value = []; }
-}
-async function removeScenario(id: string): Promise<void> {
-	await api.caselogDeleteScenario(id);
-	await loadScenarios();
-}
+// Note capture (bottom-right editor): input area seeded with an excerpt of the
+// current session; whatever the user leaves here is written to ~/.knowledge/notes.
+const capName = ref('');
+const capContent = ref('');
+const capMsg = ref('');
+const capSaving = ref(false);
 
-// ══════════════════ notes tab ══════════════════
-
-const notes = ref<CaselogNote[]>([]);
-const noteName = ref('');
-const noteContent = ref('');
-const noteDirty = ref(false);
-const noteMsg = ref('');
-
-async function loadNotes(): Promise<void> {
-	try { notes.value = await api.caselogNotes(); } catch { notes.value = []; }
-}
-
-async function openNote(name: string): Promise<void> {
-	if (noteDirty.value && !confirm(t('caselog.noteDirtyConfirm'))) return;
+async function captureNote(): Promise<void> {
+	if (!reading.value) return;
+	capSaving.value = true;
+	capMsg.value = '';
 	try {
-		const r = await api.caselogReadNote(name);
-		noteName.value = r.name;
-		noteContent.value = r.raw;
-		noteDirty.value = false;
-		noteMsg.value = '';
-	} catch { /* ignore */ }
-}
-
-function newNote(): void {
-	noteName.value = `note-${new Date().toISOString().slice(0, 10)}.md`;
-	noteContent.value = `# ${t('caselog.untitledNote')}\n\n`;
-	noteDirty.value = false;
-}
-
-/** Seed the note editor from the session being read (capture channel → Obsidian). */
-function captureToNote(): void {
-	const head = reading.value?.session.title || currentId.value;
-	const first = reading.value?.main?.turns[0];
-	noteName.value = `note-${new Date().toISOString().slice(0, 10)}.md`;
-	noteContent.value = `# ${head}\n\n> ${t('caselog.source')}: ${currentHost.value} / ${currentId.value}\n\n${first?.user.slice(0, 400) ?? ''}\n`;
-	tab.value = 'notes';
-	noteDirty.value = true;
-	noteMsg.value = '';
-}
-
-async function saveNote(): Promise<void> {
-	if (!noteName.value) return;
-	try {
-		await api.caselogSaveNote(noteName.value, noteContent.value);
-		noteDirty.value = false;
-		noteMsg.value = t('caselog.noteSaved');
-		await loadNotes();
+		const base = capName.value.trim() || `note-${new Date().toISOString().slice(0, 10)}`;
+		const name = base.toLowerCase().endsWith('.md') ? base : `${base}.md`;
+		const head = reading.value.session.title || currentId.value;
+		const content = `# ${head}\n\n> ${t('caselog.source')}: ${currentHost.value} / ${currentId.value}\n\n${capContent.value}\n`;
+		await api.caselogSaveNote(name, content);
+		capMsg.value = t('caselog.noteSaved');
 	} catch (e) {
-		noteMsg.value = (e as Error).message;
+		capMsg.value = (e as Error).message;
+	} finally {
+		capSaving.value = false;
 	}
-}
-
-async function exportNote(): Promise<void> {
-	try {
-		const r = await api.caselogExportNotes(noteName.value || undefined);
-		noteMsg.value = r.copied.length ? t('caselog.exported', { n: r.copied.length }) : t('caselog.noVault');
-	} catch (e) {
-		noteMsg.value = (e as Error).message;
-	}
-}
-
-async function removeNote(name: string): Promise<void> {
-	await api.caselogDeleteNote(name);
-	if (noteName.value === name) { noteName.value = ''; noteContent.value = ''; }
-	await loadNotes();
 }
 
 onMounted(async () => {
-	await loadHosts();
+	isFullscreen.value = document.fullscreenElement !== null;
+	document.addEventListener('fullscreenchange', onFsChange);
+	await loadStats();
 	await loadSessions();
-	await loadScenarios();
-	await loadNotes();
+});
+
+onUnmounted(() => {
+	document.removeEventListener('fullscreenchange', onFsChange);
+	document.body.classList.remove('caselog-immerse');
 });
 </script>
 
 <template>
 	<div class="caselog-view">
-		<el-tabs v-model="tab" class="cl-tabs">
-			<!-- ═══ 阅读 ═══ -->
-			<el-tab-pane name="read">
-				<template #label><el-icon><MessageSquareText /></el-icon>&nbsp;{{ t('caselog.tabRead') }}</template>
-				<div class="read-split">
-					<aside class="list-pane">
-						<div class="list-tools">
-							<el-select v-model="hostFilter" size="small" style="width: 130px" @change="loadSessions">
-								<el-option :label="t('caselog.allHosts')" value="" />
-								<el-option v-for="h in hosts" :key="h" :label="h" :value="h" />
-							</el-select>
-							<el-button size="small" :loading="syncing" @click="sync()">
-								<el-icon v-if="!syncing"><RefreshCw /></el-icon>&nbsp;{{ t('caselog.sync') }}
-							</el-button>
+		<!-- ═══ 数据（默认视图）═══ -->
+		<div v-if="view === 'data'" class="pane-pad">
+			<div class="stats-tools">
+				<el-button size="small" :loading="syncing" @click="sync('all')">
+					<el-icon v-if="!syncing"><RefreshCw /></el-icon>&nbsp;{{ t('caselog.syncAll') }}
+				</el-button>
+				<span class="stats-total">{{ t('caselog.statsTotal', { hosts: stats.length, sessions: stats.reduce((n, h) => n + h.total, 0) }) }}</span>
+			</div>
+			<div v-if="syncMsg" class="sync-msg">{{ syncMsg }}</div>
+			<div v-if="statsLoading" class="state">{{ t('common.loading') }}</div>
+			<div v-else-if="stats.length === 0" class="state">{{ t('caselog.emptyStats') }}</div>
+			<section v-for="h in stats" v-else :key="h.host" class="group">
+				<div class="group-head">
+					<h2 class="group-title">{{ h.host }} · {{ t('caselog.sessionsCount', { n: h.total }) }}</h2>
+					<el-tag v-if="h.today" size="small" type="danger" effect="dark">+{{ h.today }}</el-tag>
+				</div>
+				<div class="card-grid">
+					<div
+						v-for="p in h.projects" :key="p.project" class="proj-card"
+						@click="openHostProject(h.host, p.project)"
+					>
+						<div class="proj-card-head">
+							<span class="proj-card-name">{{ basename(p.project) }}</span>
+							<el-tag v-if="p.today" size="small" type="danger" effect="dark">+{{ p.today }}</el-tag>
 						</div>
-						<div v-if="syncMsg" class="sync-msg">{{ syncMsg }}</div>
+						<div class="proj-card-path" :title="p.project">{{ p.project }}</div>
+						<div class="proj-card-meta">{{ t('caselog.sessionsCount', { n: p.total }) }}</div>
+					</div>
+				</div>
+			</section>
+		</div>
+
+		<!-- ═══ 阅读（从数据卡片进入）═══ -->
+		<div v-else class="read-wrap">
+			<div class="read-topbar" v-show="!immersive">
+				<el-button size="small" text @click="backToData()">
+					<el-icon><ArrowLeft /></el-icon>&nbsp;{{ t('caselog.backToData') }}
+				</el-button>
+				<Database :size="13" class="read-top-ico" />
+				<span class="read-top-proj" :title="projectFilter">{{ basename(projectFilter) }}</span>
+			</div>
+			<div class="read-split">
+					<aside v-show="!immersive" class="list-pane">
 						<div v-if="listLoading" class="state">{{ t('common.loading') }}</div>
 						<div v-else-if="sessions.length === 0" class="state">{{ t('caselog.emptySessions') }}</div>
 						<template v-else>
@@ -248,6 +361,7 @@ onMounted(async () => {
 								:class="{ active: s.id === currentId, dead: !s.hasTranscript }"
 								@click="s.hasTranscript && openSession(s.host, s.id)"
 							>
+								<el-tag v-if="isToday(s.time_created)" size="small" type="danger" effect="dark" class="sess-badge">{{ t('caselog.newBadge') }}</el-tag>
 								<el-icon class="sess-ico"><MessageSquareText /></el-icon>
 								<div class="sess-main">
 									<div class="sess-title">{{ s.title || t('session.untitled') }}</div>
@@ -269,17 +383,26 @@ onMounted(async () => {
 									<el-tag v-if="reading.main" size="small">{{ t('session.main') }} {{ reading.main.turns.length }} {{ t('session.turnUnit') }}</el-tag>
 									<el-tag v-if="reading.subagents.length" size="small" type="warning">{{ t('session.subagents') }} {{ reading.subagents.length }}</el-tag>
 									<span class="reader-spacer" />
-									<el-button size="small" type="primary" plain @click="openScenarioDialog()">
-										<el-icon><BookCheck /></el-icon>&nbsp;{{ t('caselog.toScenario') }}
+									<el-button size="small" :type="editing ? 'primary' : 'default'" plain @click="toggleEditing()">
+										<el-icon><PenLine /></el-icon>&nbsp;{{ t('caselog.edit') }}
 									</el-button>
-									<el-button size="small" plain @click="captureToNote()">
-										<el-icon><FileText /></el-icon>&nbsp;{{ t('caselog.toNote') }}
+									<el-button size="small" :type="immersive ? 'primary' : 'default'" plain @click="toggleImmersive()">
+										<el-icon><component :is="immersive ? Minimize2 : Maximize2" /></el-icon>&nbsp;{{ t('caselog.fullscreen') }}
 									</el-button>
 								</div>
 							</div>
 							<template v-if="reading.main">
 								<template v-for="(item, i) in timeline.items" :key="i">
-									<SessionTurn v-if="item.kind === 'turn'" :turn="item.turn" />
+									<div v-if="item.kind === 'turn'" class="turn-wrap" :class="{ picked: selectedTurns.has(item.seq) }">
+										<el-checkbox
+											v-if="editing"
+											:model-value="selectedTurns.has(item.seq)"
+											class="turn-pick"
+											@change="toggleTurn(item.seq)"
+										/>
+										<div class="turn-seq">{{ item.seq }}</div>
+										<SessionTurn :turn="item.turn" />
+									</div>
 									<div v-else class="agent-inline">
 										<button class="agent-head" type="button" @click="openAgents.includes(item.flow.id) ? openAgents.splice(openAgents.indexOf(item.flow.id), 1) : openAgents.push(item.flow.id)">
 											<el-icon><Bot /></el-icon>
@@ -295,115 +418,185 @@ onMounted(async () => {
 							</template>
 							<div v-else class="state">{{ t('session.noMain') }}</div>
 						</template>
-					</section>
-				</div>
-			</el-tab-pane>
+				</section>
 
-			<!-- ═══ 情景 ═══ -->
-			<el-tab-pane name="scenarios">
-				<template #label><el-icon><BookCheck /></el-icon>&nbsp;{{ t('caselog.tabScenarios') }}</template>
-				<div class="pane-pad">
-					<div v-if="scenarios.length === 0" class="state">{{ t('caselog.emptyScenarios') }}</div>
-					<el-card v-for="s in scenarios" :key="s.id" class="sc-card" shadow="never">
-						<div class="sc-head">
-							<span class="sc-title">{{ s.title }}</span>
-							<span class="sc-meta">
-								{{ s.createdAt.slice(0, 10) }}
-								<template v-if="s.editedCount"> · {{ t('caselog.edited', { n: s.editedCount }) }}</template>
-								<el-popconfirm :title="t('caselog.deleteConfirm')" @confirm="removeScenario(s.id)">
-									<template #reference><el-button size="small" text type="danger">{{ t('common.delete') }}</el-button></template>
-								</el-popconfirm>
-							</span>
+				<!-- ═══ 编辑面板（编辑模式）：右上情景编辑框 + 右下笔记输入库 ═══ -->
+				<aside v-if="editing" class="edit-pane">
+					<div class="edit-card sc-card">
+						<div class="sc-toolbar">
+							<el-input-number v-model="rangeFrom" :min="1" size="small" controls-position="right" class="tb-num" />
+							<span class="tb-dash">—</span>
+							<el-input-number v-model="rangeTo" :min="1" size="small" controls-position="right" class="tb-num" />
+							<el-button size="small" @click="pickRange()">{{ t('caselog.pickRange') }}</el-button>
+							<el-button size="small" @click="pickAll()">{{ t('caselog.pickAll') }}</el-button>
+							<el-button size="small" @click="pickNone()">{{ t('caselog.pickNone') }}</el-button>
 						</div>
-						<div v-if="s.keywords" class="sc-keywords">{{ s.keywords }}</div>
-						<div class="sc-content">{{ s.content }}</div>
-						<div v-for="(p, pi) in s.pointers" :key="pi" class="sc-ptr" @click="openSession(p.host, p.sessionId); tab = 'read'">
-							{{ t('caselog.source') }}: {{ p.host }} / {{ p.sessionId.slice(0, 24) }}… [{{ p.seqRange }}]
+						<div class="edit-card-head">
+							<el-icon><BookCheck /></el-icon>
+							<span>{{ t('caselog.scPanel') }}</span>
+							<span class="sc-foot-spacer" />
+							<span class="turns-picked" :title="seqRangeLabel">{{ seqRangeLabel || t('caselog.turnsNone') }}</span>
 						</div>
-					</el-card>
-				</div>
-			</el-tab-pane>
+						<el-input v-model="scForm.title" :placeholder="t('caselog.fTitleHint')" class="sc-field" />
+						<el-input v-model="scForm.keywords" :placeholder="t('caselog.fKeywordsHint')" size="small" class="sc-field" />
+						<el-input v-model="scForm.content" type="textarea" :rows="5" resize="none" :placeholder="t('caselog.fContentHint')" class="sc-content-field" />
+						<div class="sc-foot">
+							<span v-if="scMsg" class="sc-msg">{{ scMsg }}</span>
+							<span class="sc-foot-spacer" />
+							<el-button size="small" type="primary" :loading="scSaving" :disabled="!scForm.title.trim()" @click="saveScenario()">
+								{{ t('common.save') }}
+							</el-button>
+						</div>
+					</div>
+					<div class="edit-card note-card">
+						<div class="edit-card-head">
+							<el-icon><FileText /></el-icon>
+							<span>{{ t('caselog.notePanel') }}</span>
+							<span class="sc-foot-spacer" />
+							<el-input v-model="capName" size="small" :placeholder="`note-${new Date().toISOString().slice(0, 10)}`" class="note-name-input" />
+							<el-button size="small" type="primary" plain :loading="capSaving" @click="captureNote()">{{ t('caselog.capture') }}</el-button>
+						</div>
+						<el-input v-model="capContent" type="textarea" resize="none" :placeholder="t('caselog.noteInputHint')" class="note-input" />
+						<div v-if="capMsg" class="sc-msg">{{ capMsg }}</div>
+					</div>
+				</aside>
+			</div>
+		</div>
 
-			<!-- ═══ 笔记 ═══ -->
-			<el-tab-pane name="notes">
-				<template #label><el-icon><FileText /></el-icon>&nbsp;{{ t('caselog.tabNotes') }}</template>
-				<div class="notes-split">
-					<aside class="notes-list">
-						<el-button size="small" style="width: 100%" @click="newNote()">{{ t('caselog.newNote') }}</el-button>
-						<div
-							v-for="n in notes" :key="n.name" class="note-row"
-							:class="{ active: n.name === noteName }"
-							@click="openNote(n.name)"
-						>
-							<FileText :size="14" style="flex-shrink: 0" />
-							<span class="note-name">{{ n.name }}</span>
-							<el-button size="small" text type="danger" class="note-del" @click.stop="removeNote(n.name)">✕</el-button>
-						</div>
-					</aside>
-					<section class="notes-editor">
-						<div class="notes-tools" v-if="noteName">
-							<span class="note-name-cur">{{ noteName }}<span v-if="noteDirty"> *</span></span>
-							<el-button size="small" type="primary" @click="saveNote()">{{ t('common.save') }}</el-button>
-							<el-button size="small" @click="exportNote()">{{ t('caselog.exportObsidian') }}</el-button>
-						</div>
-						<div v-if="noteMsg" class="sync-msg">{{ noteMsg }}</div>
-						<textarea v-if="noteName" v-model="noteContent" class="note-ta" @input="noteDirty = true" />
-						<div v-else class="state">{{ t('caselog.pickNote') }}</div>
-					</section>
-				</div>
-			</el-tab-pane>
-		</el-tabs>
-
-		<!-- scenario dialog: human draft → save (AI-post polish lands later, as candidates only) -->
-		<el-dialog v-model="scVisible" :title="t('caselog.scenarioTitle')" width="640px">
-			<el-form label-width="90px">
-				<el-form-item :label="t('caselog.fTitle')">
-					<el-input v-model="scForm.title" :placeholder="t('caselog.fTitleHint')" />
-				</el-form-item>
-				<el-form-item :label="t('caselog.fKeywords')">
-					<el-input v-model="scForm.keywords" :placeholder="t('caselog.fKeywordsHint')" />
-				</el-form-item>
-				<el-form-item :label="t('caselog.fTurns')">
-					<el-input-number v-model="scForm.seqFrom" :min="1" size="small" /> —
-					<el-input-number v-model="scForm.seqTo" :min="scForm.seqFrom" size="small" />
-				</el-form-item>
-				<el-form-item :label="t('caselog.fContent')">
-					<el-input v-model="scForm.content" type="textarea" :rows="8" :placeholder="t('caselog.fContentHint')" />
-				</el-form-item>
-			</el-form>
-			<template #footer>
-				<el-button @click="scVisible = false">{{ t('common.cancel') }}</el-button>
-				<el-button type="primary" :loading="scSaving" :disabled="!scForm.title.trim()" @click="saveScenario()">{{ t('common.save') }}</el-button>
-			</template>
-		</el-dialog>
+		<!-- fullscreen toggle, pinned top-right of the page -->
+		<el-button class="cl-fullscreen" size="small" text @click="toggleFullscreen()">
+			<el-icon><component :is="isFullscreen ? Minimize2 : Maximize2" /></el-icon>
+		</el-button>
 	</div>
 </template>
 
 <style scoped>
 .caselog-view {
+	position: relative;
 	height: calc(100vh - 64px);
 	padding: 4px 16px 0;
 	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
 }
-.cl-tabs { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.cl-tabs :deep(.el-tabs__content) { flex: 1 1 auto; min-height: 0; }
-.cl-tabs :deep(.el-tab-pane) { height: 100%; }
+.cl-fullscreen { position: absolute; top: 4px; right: 0; z-index: 5; }
+.read-wrap {
+	flex: 1 1 auto; min-height: 0;
+	display: flex; flex-direction: column;
+}
+.read-topbar {
+	display: flex; align-items: center; gap: 6px;
+	padding: 2px 0 8px;
+}
+.read-top-ico { color: var(--el-text-color-secondary); flex-shrink: 0; }
+.read-top-proj {
+	font-size: 13px; font-weight: 600;
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .state { color: var(--el-text-color-secondary); font-size: 13px; padding: 16px; }
 .pane-pad { overflow-y: auto; height: 100%; padding: 4px 8px 24px; }
 .sync-msg { font-size: 11px; color: var(--el-text-color-secondary); padding: 4px 10px; }
 
-.read-split { display: flex; gap: 12px; height: 100%; }
+.stats-tools { display: flex; align-items: center; gap: 10px; padding: 4px 6px 12px; }
+.stats-total { font-size: 12px; color: var(--el-text-color-secondary); }
+.group { margin-bottom: 20px; }
+.group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.group-title {
+	margin: 0;
+	font-size: 12px;
+	font-weight: normal;
+	color: var(--el-text-color-secondary);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+.card-grid {
+	display: grid;
+	gap: 12px;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.proj-card {
+	border: 1px solid var(--el-border-color-lighter);
+	border-radius: 8px;
+	padding: 12px 14px;
+	cursor: pointer;
+	background: var(--el-bg-color);
+	transition: border-color 0.15s, background 0.15s;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.proj-card:hover { border-color: var(--el-color-primary-light-5); background: var(--el-color-primary-light-9); }
+.proj-card-head { display: flex; align-items: center; gap: 8px; }
+.proj-card-name { font-size: 14px; font-weight: 600; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-card-path {
+	font-size: 11px; color: var(--el-text-color-secondary);
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.proj-card-meta { font-size: 12px; color: var(--el-text-color-secondary); }
+
+.read-split { flex: 1 1 auto; min-height: 0; display: flex; gap: 12px; }
+
+/* ---- edit pane (edit mode: right of the reader) ---- */
+.edit-pane {
+	flex: 0 0 400px; min-height: 0;
+	display: flex; flex-direction: column; gap: 12px;
+}
+.edit-card {
+	display: flex; flex-direction: column; gap: 8px; padding: 12px;
+	background: var(--el-bg-color); border: 1px solid var(--el-border-color-lighter); border-radius: 8px;
+}
+.sc-card { flex: 1 1 0; min-height: 0; }
+.note-card { flex: 1 1 0; min-height: 0; }
+.sc-toolbar {
+	display: flex; align-items: center; gap: 6px;
+	padding-bottom: 8px; border-bottom: 1px dashed var(--el-border-color-lighter);
+}
+.tb-num { flex: 0 0 74px; }
+.tb-dash { color: var(--el-text-color-secondary); }
+.edit-card-head {
+	display: flex; align-items: center; gap: 6px;
+	font-size: 12px; font-weight: 600; color: var(--el-text-color-secondary);
+}
+.sc-field { flex: 0 0 auto; }
+.sc-content-field { flex: 1 1 auto; min-height: 0; }
+.sc-content-field :deep(textarea) { height: 100%; }
+.sc-foot { display: flex; align-items: center; gap: 8px; }
+.sc-foot-spacer { flex: 1 1 auto; }
+.sc-msg { font-size: 11px; color: var(--el-color-success); }
+.turns-picked { font-size: 11px; font-weight: normal; color: var(--el-color-primary); }
+.note-name-input { flex: 0 0 180px; }
+.note-input { flex: 1 1 auto; min-height: 0; }
+.note-input :deep(textarea) { height: 100%; }
+
+/* ---- turn picking (edit mode checkboxes in the reader) ---- */
+.turn-wrap { position: relative; margin-bottom: 14px; }
+.turn-wrap.picked > :deep(.turn) {
+	outline: 2px solid var(--el-color-primary);
+	outline-offset: 2px;
+	border-radius: 8px;
+}
+.turn-seq {
+	position: absolute; top: 8px; left: -22px; z-index: 1;
+	font-size: 10px; color: var(--el-text-color-secondary);
+}
+.turn-pick {
+	position: absolute; top: -10px; right: 10px; z-index: 2;
+	height: 18px;
+	background: var(--el-bg-color); border-radius: 4px; padding: 0 2px;
+}
 .list-pane {
 	flex: 0 0 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 8px;
 	background: var(--el-bg-color); border: 1px solid var(--el-border-color-lighter); border-radius: 8px;
 }
-.list-tools { display: flex; gap: 6px; }
 .sess-row {
+	position: relative;
 	display: flex; align-items: center; gap: 10px; padding: 8px 10px;
 	border: 1px solid transparent; border-radius: 6px; cursor: pointer;
 	transition: background 0.15s, border-color 0.15s;
+}
+.sess-badge {
+	position: absolute; top: -7px; right: 8px; z-index: 1;
+	font-size: 10px; line-height: 14px; padding: 0 4px; border-radius: 4px;
 }
 .sess-row:hover { background: var(--el-fill-color-lighter); }
 .sess-row.active { border-color: var(--el-color-primary-light-5); background: var(--el-color-primary-light-9); }
@@ -422,7 +615,7 @@ onMounted(async () => {
 .reader-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
 .reader-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .reader-spacer { flex: 1 1 auto; }
-.reader-pane > :deep(.turn) { margin-bottom: 14px; }
+.reader-pane .turn-wrap > :deep(.turn) { margin-bottom: 0; }
 .agent-inline {
 	border: 1px dashed var(--el-color-warning-light-5); border-left: 3px solid var(--el-color-warning);
 	border-radius: 8px; background: var(--el-color-warning-light-9); margin-bottom: 14px;
@@ -436,36 +629,4 @@ onMounted(async () => {
 .agent-stats { flex-shrink: 0; font-size: 11px; color: var(--el-text-color-secondary); }
 .proc-arrow { color: var(--el-text-color-secondary); flex-shrink: 0; }
 .agent-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
-
-.sc-card { margin-bottom: 10px; }
-.sc-head { display: flex; align-items: baseline; gap: 10px; }
-.sc-title { font-weight: 600; font-size: 14px; flex: 1 1 auto; }
-.sc-meta { font-size: 11px; color: var(--el-text-color-secondary); flex-shrink: 0; }
-.sc-keywords { font-size: 11px; color: var(--el-text-color-secondary); margin: 4px 0; }
-.sc-content { font-size: 13px; white-space: pre-wrap; }
-.sc-ptr { font-size: 11px; color: var(--el-color-primary); margin-top: 6px; cursor: pointer; }
-
-.notes-split { display: flex; gap: 12px; height: 100%; }
-.notes-list {
-	flex: 0 0 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 8px;
-	background: var(--el-bg-color); border: 1px solid var(--el-border-color-lighter); border-radius: 8px;
-}
-.note-row {
-	display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; cursor: pointer;
-	font-size: 12px; color: var(--el-text-color-regular);
-}
-.note-row:hover { background: var(--el-fill-color-lighter); }
-.note-row.active { background: var(--el-color-primary-light-9); }
-.note-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.note-del { opacity: 0; }
-.note-row:hover .note-del { opacity: 1; }
-.notes-editor { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-.notes-tools { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; }
-.note-name-cur { flex: 1 1 auto; font-size: 13px; font-weight: 500; }
-.note-ta {
-	flex: 1 1 auto; resize: none; border: 1px solid var(--el-border-color-lighter); border-radius: 8px;
-	padding: 12px; font-family: Consolas, Monaco, monospace; font-size: 13px; line-height: 1.7;
-	background: var(--el-bg-color); color: var(--el-text-color-primary); outline: none;
-}
-.note-ta:focus { border-color: var(--el-color-primary-light-5); }
 </style>

@@ -45,7 +45,7 @@ export const FILL_SINCE_MS = 90 * 24 * 3600 * 1000;
 export function pullChunk(db: DatabaseSync, watermark: number, limit = PULL_SESSION_LIMIT, sinceMs = 0): PullChunk {
 	const wm0 = Math.max(watermark, sinceMs);
 	const sessions = db.prepare(
-		`SELECT id, title, task_type, parent_id, time_created, time_updated
+		`SELECT id, title, task_type, parent_id, time_created, time_updated, directory AS project
 		FROM session WHERE time_updated > ? ORDER BY time_updated LIMIT ?`,
 	).all(wm0, limit) as unknown as RawSessionRow[];
 

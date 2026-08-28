@@ -4,7 +4,7 @@
 
 import type { TranscriptTurn } from '../transcript-parser.js';
 
-/** One session row as stored in every raw/<host>.sqlite mirror. */
+/** One session row as stored in every raw/<host>.sqlite mirror (project = zcode directory). */
 export interface RawSessionRow {
 	id: string;
 	title: string | null;
@@ -12,12 +12,27 @@ export interface RawSessionRow {
 	parent_id: string | null;
 	time_created: number | null;
 	time_updated: number | null;
+	project: string | null;
 }
 
 /** Session listing entry across the raw mirrors (host-tagged). */
 export interface RawSessionSummary extends RawSessionRow {
 	host: string;
 	hasTranscript: boolean;
+}
+
+/** Data-tab sync overview: per-host project counts (unique session = host-project-session). */
+export interface RawProjectStat {
+	project: string;
+	total: number;
+	/** Sessions created since local midnight today (the red badge number). */
+	today: number;
+}
+export interface RawHostStat {
+	host: string;
+	projects: RawProjectStat[];
+	total: number;
+	today: number;
 }
 
 /** One parsed conversation flow (main or subagent) inside a caselog session read. */

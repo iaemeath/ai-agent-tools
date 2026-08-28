@@ -42,4 +42,9 @@ body,
   padding: 0;
   background: var(--el-bg-color-page);
 }
+/* immersive caselog edit mode: hide the shell chrome, content takes the full viewport */
+body.caselog-immerse .app-aside,
+body.caselog-immerse .app-header {
+  display: none;
+}
 </style>
