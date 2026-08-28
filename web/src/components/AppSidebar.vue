@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
-  FolderOpen, ScrollText, Sparkles, Library, Plug, Settings, Scale, Terminal, Bot, Webhook, Server,
+  FolderOpen, ScrollText, Sparkles, Library, Plug, Settings, Scale, Terminal, Bot, Webhook, Server, NotebookPen,
 } from 'lucide-vue-next';
 import { useTool } from '../stores/tool';
 import type { ToolId } from '../types/tool';
@@ -23,6 +23,7 @@ function visible(item: NavItem): boolean {
 const navMain = computed<NavItem[]>(() => [
 	{ index: '/hosts', labelKey: 'nav.hosts', icon: Server },
 	{ index: '/projects', labelKey: 'nav.projects', icon: FolderOpen },
+	{ index: '/caselog', labelKey: 'nav.caselog', icon: NotebookPen },
 	{ index: '/instructions', labelKey: 'nav.instructions', icon: ScrollText },
 	// Rules are Claude Code only — ZCode has no rules mechanism (profile.rules undefined).
 	{ index: '/rules', labelKey: 'nav.rules', icon: Scale, onlyTools: ['claude'] },

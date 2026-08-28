@@ -14,6 +14,7 @@ const routes: RouteRecordRaw[] = [
 	{ path: '/mcps', name: 'mcps', component: () => import('../views/MCPsView.vue') },
 	{ path: '/settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
 	{ path: '/hosts', name: 'hosts', component: () => import('../views/HostsView.vue') },
+	{ path: '/caselog', name: 'caselog', component: () => import('../views/CaselogView.vue') },
 ];
 
 export const router = createRouter({

@@ -185,3 +185,62 @@ export interface McpServer {
 	enabled?: boolean;
 	timeoutMs?: number;
 }
+
+// ---- caselog (personal review workbench; mirrors server/src/caselog/types.ts) ----
+
+/** Session row in a raw mirror, host-tagged (see CaselogSessionSummary). */
+export interface CaselogSessionSummary {
+	host: string;
+	id: string;
+	title: string | null;
+	task_type: string | null;
+	parent_id: string | null;
+	time_created: number | null;
+	time_updated: number | null;
+	hasTranscript: boolean;
+}
+
+/** One parsed conversation flow (main or subagent). */
+export interface CaselogFlow {
+	id: string;
+	kind: 'main' | 'subagent';
+	description: string;
+	startedAt: string | null;
+	turns: TranscriptTurn[];
+	stats: { firstTs: string | null; lastTs: string | null; toolCalls: number };
+}
+
+/** Full caselog session read (mirrors CaselogSessionRead). */
+export interface CaselogSessionRead {
+	host: string;
+	session: { id: string; title: string | null; task_type: string | null; parent_id: string | null; time_created: number | null; time_updated: number | null };
+	main: CaselogFlow | null;
+	subagents: CaselogFlow[];
+}
+
+export interface CaselogSyncResult {
+	host: string;
+	ok: boolean;
+	sessions: number;
+	error?: string;
+}
+
+export interface CaselogScenario {
+	id: string;
+	title: string;
+	keywords: string;
+	content: string;
+	category: string;
+	source: string;
+	editedCount: number;
+	editedAt: string | null;
+	createdAt: string;
+	updatedAt: string;
+	pointers: { host: string; sessionId: string; agentId: string; seqRange: string; notedAt: string }[];
+}
+
+export interface CaselogNote {
+	name: string;
+	size: number;
+	mtime: string;
+}

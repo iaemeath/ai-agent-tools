@@ -6,7 +6,7 @@
 // not 'local', so all resource requests transparently hit the selected SSH host. Host-
 // management methods pass { injectHost: false } because they operate on the LOCAL registry.
 
-import type { AgentInfo, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, PluginSkillGroup, ProjectInfo, RuleInfo, Scope, SessionRead, SessionSummary, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
+import type { AgentInfo, CaselogNote, CaselogScenario, CaselogSessionRead, CaselogSessionSummary, CaselogSyncResult, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, PluginSkillGroup, ProjectInfo, RuleInfo, Scope, SessionRead, SessionSummary, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
 import { currentHost } from '../stores/host';
 
 interface HostOpts {
@@ -38,6 +38,16 @@ async function postJson<T>(url: string, body: unknown, opts: HostOpts = {}): Pro
 
 async function del<T>(url: string, opts: HostOpts = {}): Promise<T> {
 	const res = await fetch(url, { method: 'DELETE', headers: hostHeaders(opts) });
+	if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+	return res.json() as Promise<T>;
+}
+
+async function putJson<T>(url: string, body: unknown, opts: HostOpts = {}): Promise<T> {
+	const res = await fetch(url, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', ...hostHeaders(opts) },
+		body: JSON.stringify(body),
+	});
 	if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
 	return res.json() as Promise<T>;
 }
@@ -152,6 +162,32 @@ export const api = {
 		del<{ ok: true }>(`/api/hosts/${encodeURIComponent(id)}`, { injectHost: false }),
 	disconnectHost: (id: string) =>
 		postJson<{ ok: true }>(`/api/hosts/${encodeURIComponent(id)}/disconnect`, {}, { injectHost: false }),
+
+	// ---- caselog (personal review workbench; ALWAYS local data — never inject X-Host) ----
+	caselogHosts: () =>
+		getJson<{ hosts: string[] }>('/api/caselog/hosts', { injectHost: false }),
+	caselogSync: (host?: string) =>
+		postJson<{ results: CaselogSyncResult[] }>('/api/caselog/sync', { host: host ?? 'all' }, { injectHost: false }),
+	caselogSessions: (host?: string) =>
+		getJson<CaselogSessionSummary[]>(`/api/caselog/sessions${host ? `?host=${encodeURIComponent(host)}` : ''}`, { injectHost: false }),
+	caselogReadSession: (host: string, id: string) =>
+		getJson<CaselogSessionRead>(`/api/caselog/sessions/${encodeURIComponent(id)}?host=${encodeURIComponent(host)}`, { injectHost: false }),
+	caselogScenarios: () =>
+		getJson<CaselogScenario[]>('/api/caselog/scenarios', { injectHost: false }),
+	caselogSaveScenario: (body: { title: string; keywords: string; content: string; category: string; pointers: { host: string; sessionId: string; agentId: string; seqRange: string }[] }) =>
+		postJson<CaselogScenario>('/api/caselog/scenarios', body, { injectHost: false }),
+	caselogDeleteScenario: (id: string) =>
+		del<{ ok: true }>(`/api/caselog/scenarios/${encodeURIComponent(id)}`, { injectHost: false }),
+	caselogNotes: () =>
+		getJson<CaselogNote[]>('/api/caselog/notes', { injectHost: false }),
+	caselogReadNote: (name: string) =>
+		getJson<{ name: string; raw: string }>(`/api/caselog/notes/${encodeURIComponent(name)}`, { injectHost: false }),
+	caselogSaveNote: (name: string, content: string) =>
+		putJson<{ ok: true }>(`/api/caselog/notes/${encodeURIComponent(name)}`, { content }, { injectHost: false }),
+	caselogDeleteNote: (name: string) =>
+		del<{ ok: true }>(`/api/caselog/notes/${encodeURIComponent(name)}`, { injectHost: false }),
+	caselogExportNotes: (name?: string) =>
+		postJson<{ copied: string[] }>('/api/caselog/notes/export', { name: name ?? null }, { injectHost: false }),
 };
 
 // ---- Host types (mirror the server's safeView) ----
