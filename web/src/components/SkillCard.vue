@@ -10,6 +10,8 @@ const props = defineProps<{
 	promoting?: boolean;
 	/** True while a delete request for this card is in flight. */
 	deleting?: boolean;
+	/** Skill-tool invocation count from transcripts; undefined = stats unavailable (hide badge). */
+	usage?: number;
 }>();
 
 const emit = defineEmits<{
@@ -42,7 +44,18 @@ function stop(e: Event) {
 
 <template>
   <el-card class="skill-card" :class="{ 'skill-card--project': isProject }" shadow="hover" body-style="padding: 14px;" @click="emit('detail')">
-    <div class="card-name">{{ skill.name }}</div>
+    <div class="card-name-row">
+      <div class="card-name">{{ skill.name }}</div>
+      <el-tag
+        v-if="usage !== undefined"
+        size="small"
+        :type="usage === 0 ? 'info' : 'success'"
+        effect="plain"
+        class="usage-tag"
+      >
+        {{ usage === 0 ? t('skill.zeroUsage') : t('skill.usageCount', { n: usage }) }}
+      </el-tag>
+    </div>
     <div class="card-desc">{{ skill.description ?? '—' }}</div>
 
     <div class="card-foot">
@@ -88,12 +101,21 @@ function stop(e: Event) {
 .skill-card--project {
   border-color: var(--el-color-primary-light-5);
 }
+.card-name-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
 .card-name {
-  font-size: 14px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+	font-size: 14px;
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.usage-tag {
+	flex-shrink: 0;
 }
 .card-desc {
   font-size: 12px;

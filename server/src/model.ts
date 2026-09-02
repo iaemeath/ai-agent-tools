@@ -80,6 +80,21 @@ export interface PluginSkillGroup {
 	skills: { name: string; description: string | null }[];
 }
 
+/**
+ * Skill invocation counts across session transcripts — the Skills page's usage
+ * badges + zero-load filter. Read-only aggregate.
+ */
+export interface SkillUsage {
+	/** False when the tool's transcript layout is not modeled (Claude Code) — the UI hides badges. */
+	supported: boolean;
+	/** Transcript files actually scanned. */
+	filesScanned: number;
+	/** Sum of all Skill-tool invocations found. */
+	totalCalls: number;
+	/** Invocation count per key: 'plugin:skill' qualified name, or bare skill name. */
+	counts: Record<string, number>;
+}
+
 export interface ProjectInfo {
 	path: string;
 	encoded: string;

@@ -6,7 +6,7 @@
 // not 'local', so all resource requests transparently hit the selected SSH host. Host-
 // management methods pass { injectHost: false } because they operate on the LOCAL registry.
 
-import type { AgentInfo, CaselogHostStat, CaselogNote, CaselogScenario, CaselogSessionRead, CaselogSessionSummary, CaselogSyncResult, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, PluginSkillGroup, ProjectInfo, RuleInfo, Scope, SessionRead, SessionSummary, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
+import type { AgentInfo, CaselogHostStat, CaselogNote, CaselogScenario, CaselogSessionRead, CaselogSessionSummary, CaselogSyncResult, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, PluginSkillGroup, ProjectInfo, RuleInfo, Scope, SessionRead, SessionSummary, SkillUsage, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
 import { currentHost } from '../stores/host';
 
 interface HostOpts {
@@ -82,6 +82,8 @@ export const api = {
 		getJson<SessionRead>(`/api/sessions/${encodeURIComponent(id)}${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	getPluginSkills: (project: string | null, tool?: ToolId) =>
 		getJson<PluginSkillGroup[]>(`/api/skills/plugin-skills?project=${encodeURIComponent(project ?? 'null')}${toolQ(tool)}`),
+	getSkillUsage: (tool?: ToolId) =>
+		getJson<SkillUsage>(`/api/skills/usage${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`),
 	promoteSkill: (name: string, project: string, tool?: ToolId) =>
 		postJson<{ ok: true }>('/api/skills/promote', { name, project, tool }),
 	deleteSkill: (p: { name: string; scope: 'user' | 'project'; project?: string; tool?: ToolId }) =>

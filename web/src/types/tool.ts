@@ -62,6 +62,14 @@ export interface PluginSkillGroup {
 	effective: Status;
 	skills: { name: string; description: string | null }[];
 }
+
+/** Skill invocation counts across session transcripts (Skills page usage badges). */
+export interface SkillUsage {
+	supported: boolean;
+	filesScanned: number;
+	totalCalls: number;
+	counts: Record<string, number>;
+}
 export interface ProjectInfo {
 	path: string;
 	encoded: string;

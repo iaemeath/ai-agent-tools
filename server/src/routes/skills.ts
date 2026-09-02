@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import { globalSkillsDir, projectSkillsDir } from '../paths.js';
 import { profileOf } from '../profiles.js';
 import { listPluginSkillGroups } from '../adapters/plugin.js';
+import { readSkillUsage } from '../skill-usage-reader.js';
 import { getFs, getHostCtx } from '../hosts/context.js';
 import { sendRemote } from '../remote/runner.js';
 import type { StatResult } from '../fs-backend/types.js';
@@ -20,6 +21,15 @@ skills.get('/plugin-skills', async (c) => {
 		return sendRemote(c, 'skills.pluginSkills', { project, tool });
 	}
 	return c.json(await listPluginSkillGroups(profileOf(tool ?? 'claude'), project));
+});
+
+/** GET /api/skills/usage?tool= — Skill invocation counts across transcripts (zcode-only). */
+skills.get('/usage', async (c) => {
+	const tool = c.req.query('tool');
+	if (getHostCtx().isRemote) {
+		return sendRemote(c, 'skills.usage', { tool });
+	}
+	return c.json(await readSkillUsage(profileOf(tool ?? 'claude')));
 });
 
 /** Reject names containing path separators or traversal (project path is NOT name-checked). */

@@ -9,7 +9,7 @@ import PluginSkillCard from '../components/PluginSkillCard.vue';
 import FileExplorer from '../components/FileExplorer.vue';
 import { useTool } from '../stores/tool';
 import { useDragOrder } from '../composables/useDragOrder';
-import type { PluginSkillGroup, ProjectInfo, Scope, Status, ToolInstance, ToolOverview } from '../types/tool';
+import type { PluginSkillGroup, ProjectInfo, Scope, SkillUsage, Status, ToolInstance, ToolOverview } from '../types/tool';
 
 const { t } = useI18n();
 const { tool } = useTool();
@@ -21,6 +21,8 @@ const { dragPath, dragOverPath } = drag;
 const projects = ref<ProjectInfo[]>([]);
 const overview = ref<ToolOverview | null>(null);
 const pluginGroups = ref<PluginSkillGroup[]>([]);
+const usage = ref<SkillUsage | null>(null);
+const onlyZero = ref(false);
 const errorMsg = ref<string | null>(null);
 const loading = ref(true);
 
@@ -92,17 +94,47 @@ async function loadProjects() {
 	}
 }
 
+/**
+ * Load skill usage stats (global aggregate — independent of the selected project;
+ * reloaded only on mount / tool switch). Failure just hides the badges.
+ */
+async function loadUsage() {
+	try {
+		usage.value = await api.getSkillUsage(tool.value);
+	} catch {
+		usage.value = null;
+	}
+}
+
+const usageSupported = computed(() => usage.value?.supported === true);
+
+/** Invocation count for a standalone skill; undefined when stats unavailable. */
+function skillUse(name: string): number | undefined {
+	if (!usageSupported.value) return undefined;
+	return usage.value!.counts[name] ?? 0;
+}
+
+/** Invocation count for a plugin skill: qualified 'plugin:skill' hits + bare-name hits. */
+function pluginSkillUse(plugin: string, name: string): number | undefined {
+	if (!usageSupported.value) return undefined;
+	const short = plugin.split('@')[0];
+	return (usage.value!.counts[`${short}:${name}`] ?? 0) + (usage.value!.counts[name] ?? 0);
+}
+
 /** Tool switched from the header — reset all view state and reload. */
 async function onToolChange() {
 	selected.value = null;
 	search.value = '';
 	overview.value = null;
 	pluginGroups.value = [];
+	usage.value = null;
+	onlyZero.value = false;
 	selectedSkill.value = null;
 	selectedPluginSkill.value = null;
 	loading.value = true;
 	await loadProjects();
 	await reload();
+	void loadUsage();
 }
 
 onMounted(async () => {
@@ -111,6 +143,7 @@ onMounted(async () => {
 	await reload();
 	window.addEventListener('ai-agent-tools:reload', reload);
 	window.addEventListener('ai-agent-tools:tool-change', onToolChange);
+	void loadUsage();
 });
 onUnmounted(() => {
 	window.removeEventListener('ai-agent-tools:reload', reload);
@@ -121,11 +154,10 @@ const allSkills = computed(() => overview.value?.items.filter((i) => i.kind === 
 
 const skills = computed(() => {
 	const q = search.value.trim().toLowerCase();
-	if (!q) return allSkills.value;
 	return allSkills.value.filter(
 		(s) =>
-			s.name.toLowerCase().includes(q) ||
-			(s.description ?? '').toLowerCase().includes(q),
+			(!q || s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q))
+			&& (!onlyZero.value || skillUse(s.name) === 0),
 	);
 });
 
@@ -147,22 +179,24 @@ const projectGroups = computed<[string, ToolInstance[]][]>(() => {
 		.sort((a, b) => a[0].localeCompare(b[0]));
 });
 
-// Plugin-provided skills, filtered by the same search box (plugin name counts as a hit).
+// Plugin-provided skills, filtered by the same search box (plugin name counts as a hit)
+// and the zero-usage toggle.
 const filteredPluginGroups = computed<PluginSkillGroup[]>(() => {
 	const q = search.value.trim().toLowerCase();
 	return pluginGroups.value
 		.map((g) => {
-			if (!q) return g;
-			const hitPlugin = g.plugin.toLowerCase().includes(q);
-			const skills = hitPlugin ? g.skills : g.skills.filter(
-				(s) => s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q),
-			);
-			return { ...g, skills };
+			let list = g.skills;
+			if (q && !g.plugin.toLowerCase().includes(q)) {
+				list = list.filter((s) => s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q));
+			}
+			if (onlyZero.value) list = list.filter((s) => pluginSkillUse(g.plugin, s.name) === 0);
+			return { ...g, skills: list };
 		})
 		.filter((g) => g.skills.length > 0);
 });
 
-/** Drop wrapper: supplies the group's current name[] order to the composable. */function groupCurrentIds(groupKey: string): string[] {
+/** Drop wrapper: supplies the group's current name[] order to the composable. */
+function groupCurrentIds(groupKey: string): string[] {
 	if (groupKey === 'global') return globalSkills.value.map((s) => s.name);
 	const proj = groupKey.slice('project:'.length);
 	const g = projectGroups.value.find(([p]) => p === proj);
@@ -284,6 +318,13 @@ function closeDetail() {
           <span v-if="opt.sublabel" class="opt-sub">{{ opt.sublabel }}</span>
         </el-option>
       </el-select>
+      <el-checkbox
+        v-if="usageSupported"
+        v-model="onlyZero"
+        class="zero-toggle"
+      >
+        {{ t('skill.filterZero') }}
+      </el-checkbox>
     </div>
 
     <div v-if="loading" class="state">{{ t('common.loading') }}</div>
@@ -311,6 +352,7 @@ function closeDetail() {
             <SkillCard
               :skill="t_"
               :deleting="deleting === t_.name"
+              :usage="skillUse(t_.name)"
               @toggle="(s) => toggleScope(t_, s)"
               @delete="removeSkill(t_)"
               @detail="showDetail(t_)"
@@ -340,6 +382,7 @@ function closeDetail() {
               :skill="t_"
               :promoting="promoting === t_.name"
               :deleting="deleting === t_.name"
+              :usage="skillUse(t_.name)"
               @toggle="(s) => toggleScope(t_, s)"
               @promote="promote(t_)"
               @delete="removeSkill(t_)"
@@ -364,6 +407,7 @@ function closeDetail() {
             :name="s.name"
             :description="s.description"
             :disabled="g.effective === 'disabled'"
+            :usage="pluginSkillUse(g.plugin, s.name)"
             @detail="showPluginDetail(g, s.name)"
           />
         </div>
@@ -419,6 +463,10 @@ function closeDetail() {
 }
 .scope-select {
   flex: 0 0 220px;
+}
+.zero-toggle {
+  flex-shrink: 0;
+  margin-right: 8px;
 }
 .opt-sub {
   float: right;

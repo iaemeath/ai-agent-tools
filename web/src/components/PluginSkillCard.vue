@@ -10,6 +10,8 @@ const props = defineProps<{
 	description: string | null;
 	/** True when the providing plugin is disabled — the skill will not load. */
 	disabled?: boolean;
+	/** Skill-tool invocation count from transcripts; undefined = stats unavailable (hide badge). */
+	usage?: number;
 }>();
 
 const emit = defineEmits<{
@@ -21,7 +23,17 @@ const { t } = useI18n();
 
 <template>
   <el-card class="plugin-skill-card" :class="{ 'plugin-skill-card--off': props.disabled }" shadow="hover" body-style="padding: 14px;" @click="emit('detail')">
-    <div class="card-name">{{ props.name }}</div>
+    <div class="card-name-row">
+      <div class="card-name">{{ props.name }}</div>
+      <el-tag
+        v-if="usage !== undefined"
+        size="small"
+        :type="usage === 0 ? 'info' : 'success'"
+        effect="plain"
+      >
+        {{ usage === 0 ? t('skill.zeroUsage') : t('skill.usageCount', { n: usage }) }}
+      </el-tag>
+    </div>
     <div class="card-desc">{{ props.description ?? '—' }}</div>
     <div class="card-foot">
       <el-tag v-if="props.disabled" size="small" type="info" effect="plain">{{ t('skill.pluginDisabled') }}</el-tag>
@@ -39,6 +51,12 @@ const { t } = useI18n();
 }
 .plugin-skill-card--off {
 	opacity: 0.6;
+}
+.card-name-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
 }
 .card-name {
 	font-size: 14px;
