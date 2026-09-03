@@ -46,18 +46,37 @@ function assetKeyOf(urlPath: string): string {
 	return urlPath.replace(/^\/+/, '').replace(/\?.*$/, '');
 }
 
-/** The SEA API, present only inside a single-executable build (probed lazily). */
+/**
+ * The SEA API, present only inside a single-executable build (probed lazily).
+ * Node ≤22 exposed getAssetKeys() for enumeration; Node 24 removed it, leaving
+ * only isSea/getAsset/getRawAsset — so asset presence is probed per key instead
+ * (getAsset throws on a missing key; see tryAsset).
+ */
 interface SeaModule {
-	getAssetKeys(): string[];
+	isSea?(): boolean;
+	getAssetKeys?(): string[];
 	getAsset(key: string): ArrayBuffer;
 }
 
-/** Probe for the node:sea module — resolves inside a SEA exe, null everywhere else. */
+/** Probe for the node:sea module — resolves ONLY inside a SEA exe, null everywhere else. */
 function seaModule(): SeaModule | null {
 	if (typeof require !== 'function') return null; // ESM/tsx runtime
 	try {
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		return require('node:sea') as SeaModule;
+		const m = require('node:sea') as SeaModule;
+		// Node ≥23: require succeeds even in plain node — trust the isSea() flag.
+		if (typeof m.isSea === 'function') return m.isSea() ? m : null;
+		// Node 22 legacy: no isSea, but the module only loads inside a SEA build.
+		return typeof m.getAssetKeys === 'function' ? m : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Read one SEA asset; null when the key is not embedded (getAsset throws). */
+function tryAsset(sea: SeaModule, key: string): Buffer | null {
+	try {
+		return Buffer.from(sea.getAsset(key));
 	} catch {
 		return null;
 	}
@@ -74,16 +93,16 @@ export function isSeaExe(): boolean {
  */
 export function serveWebDist(app: Hono, distDir: string): void {
 	// ---- Source 1: SEA-embedded assets (single-exe build) ----
+	// No key enumeration (Node 24 dropped getAssetKeys) — index.html doubles as
+	// the "assets are embedded" probe, and per-file presence goes through tryAsset.
 	const sea = seaModule();
 	if (sea) {
-		const keys = new Set(sea.getAssetKeys().filter((k) => k.startsWith('web/')));
-		if (keys.size > 0) {
+		const index = tryAsset(sea, 'web/index.html');
+		if (index !== null) {
 			registerStatic(app, {
-				has: (p) => keys.has(`web/${assetKeyOf(p)}`),
-				read: (p) => Buffer.from(sea.getAsset(`web/${assetKeyOf(p)}`)),
-				indexHtml: () => (keys.has('web/index.html')
-					? Buffer.from(sea.getAsset('web/index.html')).toString('utf8')
-					: ''),
+				has: (p) => p !== '/' && tryAsset(sea, `web/${assetKeyOf(p)}`) !== null,
+				read: (p) => tryAsset(sea, `web/${assetKeyOf(p)}`)!,
+				indexHtml: () => index.toString('utf8'),
 				source: 'sea-assets',
 			});
 			extractRemoteBundle(sea);
@@ -117,8 +136,8 @@ export function serveWebDist(app: Hono, distDir: string): void {
  */
 function extractRemoteBundle(sea: SeaModule): void {
 	try {
-		if (!sea.getAssetKeys().includes('ai-agent-remote.mjs')) return;
-		const code = Buffer.from(sea.getAsset('ai-agent-remote.mjs'));
+		const code = tryAsset(sea, 'ai-agent-remote.mjs');
+		if (!code) return;
 		const tmp = path.join(os.tmpdir(), `ai-agent-remote-${process.pid}.mjs`);
 		fs.writeFileSync(tmp, code);
 		process.env['AI_AGENT_REMOTE_BUNDLE'] = tmp;
