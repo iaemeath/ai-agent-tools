@@ -16,7 +16,10 @@ export interface ScenarioInput {
 	keywords: string;
 	content: string;
 	category: string;
-	pointers: Omit<ScenarioPointer, 'notedAt'>[];
+	/** Replace the provenance rows when provided. When omitted (edit that only touches
+	 * text) the existing pointers are KEPT — an R7 rewrite must not wipe "the facts
+	 * at the time". New records pass an array (possibly empty). */
+	pointers?: Omit<ScenarioPointer, 'notedAt'>[];
 }
 
 function kbPath(): string {
@@ -63,17 +66,25 @@ export function saveScenario(input: ScenarioInput, id?: string): Scenario {
 					'UPDATE scenarios SET title=?, keywords=?, content=?, category=?, ' +
 					'edited_count=edited_count+1, edited_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL',
 				).run(input.title, input.keywords, input.content, input.category, now, now, id);
-				db.prepare('DELETE FROM scenario_sessions WHERE scenario_id = ?').run(id);
+				// provenance rows stay untouched unless the caller explicitly replaces them
+				if (Array.isArray(input.pointers)) {
+					db.prepare('DELETE FROM scenario_sessions WHERE scenario_id = ?').run(id);
+					const upP = db.prepare(
+						'INSERT INTO scenario_sessions(scenario_id, host, session_id, agent_id, seq_range, noted_at) VALUES(?,?,?,?,?,?)');
+					for (const p of input.pointers) {
+						upP.run(id, p.host, p.sessionId, p.agentId, p.seqRange, now);
+					}
+				}
 			} else {
 				db.prepare(
 					'INSERT INTO scenarios(id, uuid, title, keywords, content, category, source, created_at, updated_at) ' +
 					'VALUES(?,?,?,?,?,?,?, ?, ?)',
 				).run(sid, crypto.randomUUID(), input.title, input.keywords, input.content, input.category, 'manual', now, now);
-			}
-			const upP = db.prepare(
-				'INSERT INTO scenario_sessions(scenario_id, host, session_id, agent_id, seq_range, noted_at) VALUES(?,?,?,?,?,?)');
-			for (const p of input.pointers) {
-				upP.run(sid, p.host, p.sessionId, p.agentId, p.seqRange, now);
+				const upP = db.prepare(
+					'INSERT INTO scenario_sessions(scenario_id, host, session_id, agent_id, seq_range, noted_at) VALUES(?,?,?,?,?,?)');
+				for (const p of input.pointers ?? []) {
+					upP.run(sid, p.host, p.sessionId, p.agentId, p.seqRange, now);
+				}
 			}
 			db.prepare('COMMIT').run();
 		} catch (e) {

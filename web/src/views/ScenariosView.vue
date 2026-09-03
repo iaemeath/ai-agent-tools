@@ -4,7 +4,8 @@
 // skills view) — no dialog. Source pointers are listed for provenance (R4).
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ArrowLeft, BookCheck } from 'lucide-vue-next';
+import { ArrowLeft, BookCheck, PenLine } from 'lucide-vue-next';
+import { ElMessage } from 'element-plus';
 import { api } from '../api';
 import type { CaselogScenario } from '../types/tool';
 
@@ -13,6 +14,39 @@ const { t } = useI18n();
 const scenarios = ref<CaselogScenario[]>([]);
 const loading = ref(true);
 const detail = ref<CaselogScenario | null>(null);
+
+// R7 inline edit: rewrite the record; each save bumps edited_count server-side and
+// keeps the provenance rows untouched.
+const editing = ref(false);
+const saving = ref(false);
+const editForm = ref({ title: '', keywords: '', content: '', category: '' });
+
+function startEdit(): void {
+	if (!detail.value) return;
+	editForm.value = {
+		title: detail.value.title,
+		keywords: detail.value.keywords,
+		content: detail.value.content,
+		category: detail.value.category,
+	};
+	editing.value = true;
+}
+
+async function saveEdit(): Promise<void> {
+	if (!detail.value || !editForm.value.title.trim()) return;
+	saving.value = true;
+	try {
+		const saved = await api.caselogUpdateScenario(detail.value.id, editForm.value);
+		detail.value = saved;
+		scenarios.value = scenarios.value.map((s) => (s.id === saved.id ? saved : s));
+		editing.value = false;
+		ElMessage.success(t('caselog.scSaved'));
+	} catch (e) {
+		ElMessage.error((e as Error).message);
+	} finally {
+		saving.value = false;
+	}
+}
 
 async function load(): Promise<void> {
 	loading.value = true;
@@ -55,18 +89,17 @@ onMounted(load);
 					<h2 class="group-title">{{ day }} · {{ t('sc.count', { n: list.length }) }}</h2>
 				</div>
 				<div class="card-grid">
-					<div v-for="s in list" :key="s.id" class="sc-card" @click="detail = s">
-						<div class="sc-card-head">
-							<span class="sc-card-title">{{ s.title }}</span>
-							<span v-if="s.editedCount" class="sc-edited">{{ t('caselog.edited', { n: s.editedCount }) }}</span>
-						</div>
-						<div v-if="s.keywords" class="sc-card-kw">{{ s.keywords }}</div>
-						<div class="sc-card-body">{{ excerpt(s.content) }}</div>
-						<div class="sc-card-meta">
-							<el-icon :size="12"><BookCheck /></el-icon>
-							{{ t('sc.pointers', { n: s.pointers.length }) }}
-						</div>
+				<div v-for="s in list" :key="s.id" class="sc-card" @click="detail = s">
+					<div class="sc-card-head">
+						<span class="sc-card-title">{{ s.title }}</span>
 					</div>
+					<div v-if="s.keywords" class="sc-card-kw">{{ s.keywords }}</div>
+					<div class="sc-card-body">{{ excerpt(s.content) }}</div>
+					<div class="sc-card-meta">
+						<el-icon :size="12"><BookCheck /></el-icon>
+						{{ t('sc.pointers', { n: s.pointers.length }) }}
+					</div>
+				</div>
 				</div>
 			</section>
 		</template>
@@ -74,11 +107,17 @@ onMounted(load);
 		<!-- ═══ detail (inline, replaces the card area) ═══ -->
 		<div v-else class="detail-panel">
 			<div class="detail-toolbar">
-				<el-button text :icon="ArrowLeft" @click="detail = null">{{ t('sc.backToList') }}</el-button>
+				<el-button text :icon="ArrowLeft" @click="detail = null; editing = false">{{ t('sc.backToList') }}</el-button>
 				<span class="dt-title">{{ detail.title }}</span>
-				<span class="dt-sub">{{ detail.createdAt.slice(0, 10) }}<template v-if="detail.editedCount"> · {{ t('caselog.edited', { n: detail.editedCount }) }}</template></span>
+				<span class="dt-sub">{{ detail.createdAt.slice(0, 10) }}</span>
+
+				<span class="dt-spacer" />
+				<el-button v-if="!editing" size="small" plain @click="startEdit()">
+					<el-icon><PenLine /></el-icon>&nbsp;{{ t('caselog.edit') }}
+				</el-button>
 			</div>
-			<div class="detail-body">
+			<!-- read view -->
+			<div v-if="!editing" class="detail-body">
 				<div v-if="detail.keywords" class="dt-kw">{{ detail.keywords }}</div>
 				<div class="dt-content">{{ detail.content }}</div>
 				<div class="dt-pointers">
@@ -86,6 +125,18 @@ onMounted(load);
 					<div v-for="(p, i) in detail.pointers" :key="i" class="dt-pointer">
 						{{ p.host }} / {{ p.sessionId }} <span class="dt-range">[{{ p.seqRange }}]</span>
 					</div>
+				</div>
+			</div>
+			<!-- edit view (R7 rewrite): text fields only — provenance rows are kept server-side -->
+			<div v-else class="detail-body">
+				<el-input v-model="editForm.title" :placeholder="t('caselog.fTitleHint')" class="ef-field" />
+				<el-input v-model="editForm.keywords" size="small" :placeholder="t('caselog.fKeywordsHint')" class="ef-field" />
+				<el-input v-model="editForm.content" type="textarea" :rows="12" resize="none" :placeholder="t('caselog.fContentHint')" class="ef-field" />
+				<div class="ef-foot">
+					<span class="dt-hint">{{ t('sc.editHint') }}</span>
+					<span class="ef-spacer" />
+					<el-button size="small" @click="editing = false">{{ t('common.cancel') }}</el-button>
+					<el-button size="small" type="primary" :loading="saving" :disabled="!editForm.title.trim()" @click="saveEdit()">{{ t('common.save') }}</el-button>
 				</div>
 			</div>
 		</div>
@@ -143,6 +194,11 @@ onMounted(load);
 	display: flex; align-items: center; gap: 10px;
 	padding: 0 0 12px;
 }
+.dt-spacer { flex: 1 1 auto; }
+.dt-hint { font-size: 11px; color: var(--el-text-color-secondary); }
+.ef-field { margin-bottom: 10px; }
+.ef-foot { display: flex; align-items: center; gap: 8px; }
+.ef-spacer { flex: 1 1 auto; }
 .dt-title { font-size: 15px; font-weight: 600; }
 .dt-sub { font-size: 11px; color: var(--el-text-color-secondary); }
 .dt-kw { font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 10px; }

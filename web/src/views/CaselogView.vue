@@ -9,7 +9,7 @@
 // inject X-Host.
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { ArrowLeft, BookCheck, Bot, Database, FileText, Maximize2, MessageSquareText, Minimize2, PenLine, RefreshCw } from 'lucide-vue-next';
+import { ArrowLeft, BookCheck, Bot, Database, FileText, Maximize2, MessageSquareText, Minimize2, PenLine, RefreshCw, Sparkles } from 'lucide-vue-next';
 import { api } from '../api';
 import SessionTurn from '../components/SessionTurn.vue';
 import type { CaselogFlow, CaselogHostStat, CaselogSessionRead, CaselogSessionSummary, TranscriptTurn } from '../types/tool';
@@ -312,6 +312,75 @@ async function captureNote(): Promise<void> {
 	}
 }
 
+// ── AI post-polish (R5): proofread the human draft against the ticked turns.
+// The candidate is rendered beside the draft; only fields the user explicitly
+// adopts are merged into the form, and saving stays a separate manual action.
+const polishing = ref(false);
+const polishMsg = ref('');
+const candidate = ref<{ title: string; keywords: string; content: string } | null>(null);
+
+/** Session excerpt for AI polish: the WHOLE main conversation, normalized turns.
+ * Not filtered by the ticked turns — the ticks define the scenario pointer (R4),
+ * the AI sees full context for better gap-filling. Prompt-cache friendly: the
+ * session is append-only, so its text is a stable prefix across re-polishes.
+ * Long sessions fold: middle turns keep only the head of the user input. */
+const CONTEXT_FOLD_CHARS = 24000;
+function buildContext(): string {
+	const turns = reading.value?.main?.turns ?? [];
+	const full = turns
+		.map((turn, i) => [
+			`— 轮次 ${i + 1} —`,
+			`用户：${turn.user}`,
+			turn.response ? `助手：${turn.response}` : '',
+		].filter(Boolean).join('\n'))
+		.join('\n\n');
+	if (full.length <= CONTEXT_FOLD_CHARS) return full;
+	// fold: keep every turn but shrink middle ones to the user input's head
+	const folded = turns
+		.map((turn, i) => {
+			const head = `— 轮次 ${i + 1} —\n用户：${turn.user.slice(0, 80)}`;
+			const isFirstOrLast = i === 0 || i === turns.length - 1;
+			return isFirstOrLast
+				? `${head}\n助手：${turn.response ?? ''}`
+				: `${head}…（折叠）`;
+		})
+		.join('\n\n');
+	return folded.length < full.length ? folded : full.slice(0, CONTEXT_FOLD_CHARS) + '\n…（截断）';
+}
+
+async function runPolish(): Promise<void> {
+	if (!scForm.value.title.trim() && !scForm.value.content.trim()) return;
+	polishing.value = true;
+	polishMsg.value = '';
+	candidate.value = null;
+	try {
+		const r = await api.caselogPolish(
+			{ title: scForm.value.title, keywords: scForm.value.keywords, content: scForm.value.content },
+			buildContext(),
+		);
+		candidate.value = r.candidate;
+	} catch (e) {
+		polishMsg.value = (e as Error).message;
+	} finally {
+		polishing.value = false;
+	}
+}
+
+function adoptCandidate(field: 'title' | 'keywords' | 'content'): void {
+	if (!candidate.value) return;
+	scForm.value[field] = candidate.value[field];
+}
+
+function adoptAll(): void {
+	if (!candidate.value) return;
+	scForm.value = { ...scForm.value, ...candidate.value };
+	candidate.value = null;
+}
+
+function discardCandidate(): void {
+	candidate.value = null;
+}
+
 onMounted(async () => {
 	await loadStats();
 	await loadSessions();
@@ -447,10 +516,40 @@ onUnmounted(() => {
 						<el-input v-model="scForm.content" type="textarea" :rows="5" resize="none" :placeholder="t('caselog.fContentHint')" class="sc-content-field" />
 						<div class="sc-foot">
 							<span v-if="scMsg" class="sc-msg">{{ scMsg }}</span>
+							<span v-else-if="polishMsg" class="polish-msg">{{ polishMsg }}</span>
 							<span class="sc-foot-spacer" />
+							<el-button
+								size="small" :loading="polishing"
+								:disabled="!scForm.title.trim() && !scForm.content.trim()"
+								@click="runPolish()"
+							>
+								<el-icon v-if="!polishing"><Sparkles /></el-icon>&nbsp;{{ t('caselog.polish') }}
+							</el-button>
 							<el-button size="small" type="primary" :loading="scSaving" :disabled="!scForm.title.trim()" @click="saveScenario()">
 								{{ t('common.save') }}
 							</el-button>
+						</div>
+						<div v-if="candidate" class="candidate">
+							<div class="cand-head">
+								<el-icon><Sparkles /></el-icon>
+								<span>{{ t('caselog.candTitle') }}</span>
+								<span class="sc-foot-spacer" />
+								<el-button size="small" type="primary" plain @click="adoptAll()">{{ t('caselog.adoptAll') }}</el-button>
+								<el-button size="small" text @click="discardCandidate()">{{ t('caselog.discard') }}</el-button>
+							</div>
+							<div class="cand-row" @click="adoptCandidate('title')">
+								<span class="cand-label">{{ t('caselog.fTitle') }}</span>
+								<span class="cand-text">{{ candidate.title }}</span>
+							</div>
+							<div class="cand-row" @click="adoptCandidate('keywords')">
+								<span class="cand-label">{{ t('caselog.fKeywords') }}</span>
+								<span class="cand-text">{{ candidate.keywords || '—' }}</span>
+							</div>
+							<div class="cand-row" @click="adoptCandidate('content')">
+								<span class="cand-label">{{ t('caselog.fContent') }}</span>
+								<span class="cand-text">{{ candidate.content }}</span>
+							</div>
+							<div class="cand-hint">{{ t('caselog.candHint') }}</div>
 						</div>
 					</div>
 					<div class="edit-card note-card">
@@ -591,6 +690,26 @@ onUnmounted(() => {
 .sc-foot { display: flex; align-items: center; gap: 8px; }
 .sc-foot-spacer { flex: 1 1 auto; }
 .sc-msg { font-size: 11px; color: var(--el-color-success); }
+.polish-msg { font-size: 11px; color: var(--el-color-danger); }
+.candidate {
+	border: 1px dashed var(--el-color-primary-light-5);
+	border-radius: 8px;
+	padding: 8px 10px;
+	display: flex; flex-direction: column; gap: 6px;
+	background: var(--el-color-primary-light-9);
+}
+.cand-head {
+	display: flex; align-items: center; gap: 6px;
+	font-size: 12px; font-weight: 600; color: var(--el-color-primary);
+}
+.cand-row {
+	display: flex; gap: 8px; cursor: pointer; padding: 4px 6px; border-radius: 6px;
+	align-items: baseline;
+}
+.cand-row:hover { background: var(--el-bg-color); }
+.cand-label { flex-shrink: 0; font-size: 11px; color: var(--el-text-color-secondary); width: 40px; }
+.cand-text { font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.cand-hint { font-size: 10px; color: var(--el-text-color-secondary); }
 .turns-picked { font-size: 11px; font-weight: normal; color: var(--el-color-primary); }
 .note-name-input { flex: 1 1 160px; max-width: 220px; }
 .note-input { flex: 1 1 auto; min-height: 0; }

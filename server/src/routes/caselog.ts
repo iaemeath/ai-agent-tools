@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { listHosts } from '../hosts/registry.js';
 import { isValidHostId, hostStats, listRawSessions, mirroredHosts, readRawSession } from '../caselog/raw-store.js';
 import { syncAll } from '../caselog/sync.js';
+import { llmConfigured, polishDraft, type PolishDraft } from '../caselog/llm.js';
 import { deleteNote, exportNotes, isValidNoteName, listNotes, readNote, saveNote, saveScenario, softDeleteScenario, listScenarios, type ScenarioInput } from '../caselog/kb.js';
 
 export const caselog = new Hono();
@@ -75,7 +76,8 @@ caselog.patch('/scenarios/:id', async (c) => {
 		keywords: String(body['keywords'] ?? ''),
 		content: String(body['content'] ?? ''),
 		category: String(body['category'] ?? ''),
-		pointers: Array.isArray(body['pointers']) ? body['pointers'] : [],
+		// omitted → keep existing provenance rows (kb.saveScenario)
+		pointers: Array.isArray(body['pointers']) ? body['pointers'] : undefined,
 	}, c.req.param('id'));
 	if (!saved) return c.json({ error: 'scenario not found' }, 404);
 	return c.json(saved);
@@ -83,6 +85,28 @@ caselog.patch('/scenarios/:id', async (c) => {
 
 caselog.delete('/scenarios/:id', (c) => {
 	return softDeleteScenario(c.req.param('id')) ? c.json({ ok: true }) : c.json({ error: 'scenario not found' }, 404);
+});
+
+// ------------------------------------------------ llm post-polish (R5: candidates only)
+
+/** POST /api/caselog/llm/polish {draft, context} — proofread a human draft against the
+ * ticked session excerpt. Returns a CANDIDATE; merging and saving stay on the client. */
+caselog.post('/llm/polish', async (c) => {
+	const body = await c.req.json().catch(() => null) as { draft?: PolishDraft; context?: string } | null;
+	const draft = body?.draft;
+	if (!draft || typeof draft.title !== 'string' || typeof draft.content !== 'string') {
+		return c.json({ error: 'draft (title/content) is required — write your draft first' }, 400);
+	}
+	if (!llmConfigured()) {
+		return c.json({ error: 'llm not configured (CASELOG_LLM_BASE_URL / CASELOG_LLM_MODEL)' }, 400);
+	}
+	const result = await polishDraft(
+		{ title: draft.title, keywords: String(draft.keywords ?? ''), content: draft.content },
+		String(body?.context ?? ''),
+	);
+	if (!result.configured) return c.json({ error: result.error }, 400);
+	if (result.error) return c.json({ error: result.error }, 502);
+	return c.json({ candidate: result.candidate });
 });
 
 // ------------------------------------------------ notes (capture channel → Obsidian)

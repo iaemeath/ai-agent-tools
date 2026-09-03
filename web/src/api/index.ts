@@ -52,6 +52,16 @@ async function putJson<T>(url: string, body: unknown, opts: HostOpts = {}): Prom
 	return res.json() as Promise<T>;
 }
 
+async function patchJson<T>(url: string, body: unknown, opts: HostOpts = {}): Promise<T> {
+	const res = await fetch(url, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json', ...hostHeaders(opts) },
+		body: JSON.stringify(body),
+	});
+	if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+	return res.json() as Promise<T>;
+}
+
 /** Build a query string suffix for the given tool (omitted for the default 'claude'). */
 function toolQ(tool: ToolId | undefined): string {
 	return tool && tool !== 'claude' ? `&tool=${tool}` : '';
@@ -185,6 +195,10 @@ export const api = {
 		getJson<CaselogScenario[]>('/api/caselog/scenarios', { injectHost: false }),
 	caselogSaveScenario: (body: { title: string; keywords: string; content: string; category: string; pointers: { host: string; sessionId: string; agentId: string; seqRange: string }[] }) =>
 		postJson<CaselogScenario>('/api/caselog/scenarios', body, { injectHost: false }),
+	caselogUpdateScenario: (id: string, body: { title: string; keywords: string; content: string; category: string }) =>
+		patchJson<CaselogScenario>(`/api/caselog/scenarios/${encodeURIComponent(id)}`, body, { injectHost: false }),
+	caselogPolish: (draft: { title: string; keywords: string; content: string }, context: string) =>
+		postJson<{ candidate: { title: string; keywords: string; content: string } }>('/api/caselog/llm/polish', { draft, context }, { injectHost: false }),
 	caselogDeleteScenario: (id: string) =>
 		del<{ ok: true }>(`/api/caselog/scenarios/${encodeURIComponent(id)}`, { injectHost: false }),
 	caselogNotes: () =>
