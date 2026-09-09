@@ -16,6 +16,11 @@ export default defineConfig({
         target: `http://localhost:${apiPort}`,
         changeOrigin: true,
       },
+      // 脚本自带页面的静态伺服（与 server 的 /scripts-pages 路由对齐）
+      '/scripts-pages': {
+        target: `http://localhost:${apiPort}`,
+        changeOrigin: true,
+      },
     },
   },
   build: {

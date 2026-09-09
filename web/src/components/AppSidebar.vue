@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
-  FolderOpen, ScrollText, Sparkles, Library, Plug, Settings, Scale, Terminal, Bot, Webhook, Server, BookCheck, NotebookPen,
+  FolderOpen, ScrollText, Sparkles, Library, Plug, Settings, Scale, Terminal, Bot, Webhook, Server, BookCheck, NotebookPen, SquareTerminal,
 } from 'lucide-vue-next';
 import { useTool } from '../stores/tool';
 import type { ToolId } from '../types/tool';
@@ -44,8 +44,14 @@ const navReview = computed<NavItem[]>(() => [
 	{ index: '/caselog/scenarios', labelKey: 'nav.caselogScenarios', icon: BookCheck },
 ]);
 
+/** Group 4 — scripts: local tool scripts as cards (start/stop/logs/pages). */
+const navScripts = computed<NavItem[]>(() => [
+	{ index: '/scripts', labelKey: 'nav.scripts', icon: SquareTerminal },
+]);
+
 // Full path (not first segment) so /caselog and /caselog/scenarios highlight separately.
-const activeIndex = computed(() => route.path);
+// /scripts/* collapses onto /scripts so the group item stays highlighted in detail mode.
+const activeIndex = computed(() => (route.path.startsWith('/scripts') ? '/scripts' : route.path));
 </script>
 
 <template>
@@ -73,6 +79,12 @@ const activeIndex = computed(() => route.path);
       </el-menu-item-group>
       <el-menu-item-group :title="t('nav.groupReview')">
         <el-menu-item v-for="item in navReview.filter(visible)" :key="item.index" :index="item.index">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ t(item.labelKey) }}</span>
+        </el-menu-item>
+      </el-menu-item-group>
+      <el-menu-item-group :title="t('nav.groupScripts')">
+        <el-menu-item v-for="item in navScripts.filter(visible)" :key="item.index" :index="item.index">
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ t(item.labelKey) }}</span>
         </el-menu-item>
