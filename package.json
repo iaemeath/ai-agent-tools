@@ -1,9 +1,9 @@
 {
-  "name": "ai-agent-tools",
+  "name": "ai-tools",
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Manage AI coding-agent config across tools (Claude Code, ZCode) — skills, plugins, projects, instructions, rules, commands, agents, hooks, MCP, settings (Config-as-SSOT). Node + Hono + Vue 3 + Element Plus.",
+  "description": "Personal AI toolbox: manage AI coding-agent configs (Claude Code, ZCode — Config-as-SSOT), review AI sessions (caselog), and run AI-written scripts (script cards). Node + Hono + Vue 3 + Element Plus.",
   "workspaces": [
     "server",
     "web"

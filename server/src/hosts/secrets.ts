@@ -2,7 +2,7 @@
 //
 // Machine-bound AES-256-GCM. The key is derived from the OS hostname + a fixed app
 // salt. This is NOT a strong secret against a determined local admin (they can recompute
-// the key), but it ensures a copied ~/.ai-agent-tools/hosts.json is unreadable on a
+// the key), but it ensures a copied ~/.ai-tools/hosts.json is unreadable on a
 // different machine — which is the realistic threat model for a single-user config tool.
 // For higher assurance, swap machineKey() for an OS keychain (DPAPI / libsecret) later.
 

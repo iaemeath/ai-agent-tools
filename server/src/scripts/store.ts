@@ -1,10 +1,11 @@
 // Scripts store — 一脚本一目录（scripts/<id>/ + script.json），目录即卡片。
 // 单入口：manifest.entry 声明唯一可执行文件+默认参数（无 entry = 纯页面脚本）。
-// 存储根：CCC_SCRIPTS_DIR 环境变量覆盖，默认 ~/.ai-agent-tools/scripts（exe 打包后仍落在用户目录）。
+// 存储根：CCC_SCRIPTS_DIR 环境变量覆盖，默认 <dataRoot>/scripts 即 ~/.ai-tools/scripts
+// （exe 打包后仍落在用户目录）。
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { dataRoot } from '../data-dir.js';
 
 /** 唯一执行入口：文件按扩展名路由运行时（.py → python，.js/.mjs → node），新建时自动取第一个可执行文件。 */
 export interface ScriptEntrySpec {
@@ -39,7 +40,7 @@ export interface ScriptManifest {
 }
 
 export function scriptsRoot(): string {
-	return process.env.CCC_SCRIPTS_DIR || path.join(os.homedir(), '.ai-agent-tools', 'scripts');
+	return process.env.CCC_SCRIPTS_DIR || path.join(dataRoot(), 'scripts');
 }
 
 export function scriptDir(id: string): string {

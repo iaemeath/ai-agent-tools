@@ -1,14 +1,15 @@
 // Host registry — the persisted list of configured remote SSH hosts.
 //
-// Stored at ~/.ai-agent-tools/hosts.json. This is the MAIN machine's own bookkeeping file,
-// NOT a remote config — so it uses node:fs/promises directly (never the FsBackend/SSH path),
-// and is therefore unaffected by which host a request is operating on.
+// Stored at <dataRoot>/hosts.json (i.e. ~/.ai-tools/hosts.json). This is the MAIN machine's
+// own bookkeeping file, NOT a remote config — so it uses node:fs/promises directly (never
+// the FsBackend/SSH path), and is therefore unaffected by which host a request is operating on.
 // A legacy ~/.ccc-ui/hosts.json (pre-rename) is migrated once on first read.
 
 import os from 'node:os';
 import path from 'node:path';
 import fsp from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { dataRoot } from '../data-dir.js';
 
 /** One configured remote SSH host. Secrets are stored encrypted (see secrets.ts). */
 export interface HostRecord {
@@ -27,7 +28,7 @@ export interface HostRecord {
 	createdAt: string;
 }
 
-const HOSTS_DIR = path.join(os.homedir(), '.ai-agent-tools');
+const HOSTS_DIR = dataRoot();
 const HOSTS_FILE = path.join(HOSTS_DIR, 'hosts.json');
 const LEGACY_HOSTS_FILE = path.join(os.homedir(), '.ccc-ui', 'hosts.json');
 

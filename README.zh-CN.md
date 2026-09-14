@@ -1,6 +1,6 @@
-# ai-agent-tools
+# ai-tools
 
-**一个 Web UI 管理所有 AI 编码代理的配置 —— Claude Code、ZCode,以及更多。**
+**一个 Web UI 管理一切 AI 相关工具 —— 编码代理配置、会话复盘、AI 编写的脚本。**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=nodedotjs&logoColor=white)

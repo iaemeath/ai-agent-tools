@@ -1,6 +1,6 @@
-# ai-agent-tools
+# ai-tools
 
-**One web UI for all your AI coding-agent configs — Claude Code, ZCode, and beyond.**
+**One web UI for all things AI — coding-agent configs, session review, and AI-written scripts.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 ![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=nodedotjs&logoColor=white)

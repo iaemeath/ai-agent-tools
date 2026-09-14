@@ -1,6 +1,6 @@
 // caselog routes — the personal review workbench (reading layer / scenarios / notes).
 // Deliberately NOT host-scoped like the tool-config routes: caselog data lives on THIS
-// machine (~/.knowledge) regardless of the X-Host header, and the SSH hosts are data
+// machine (~/.ai-tools/caselog) regardless of the X-Host header, and the SSH hosts are data
 // SOURCES (via sync), not targets. See docs/caselog/case-log-v2-design v3.3.md.
 
 import { Hono } from 'hono';

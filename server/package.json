@@ -1,5 +1,5 @@
 {
-  "name": "@ai-agent-tools/server",
+  "name": "@ai-tools/server",
   "version": "0.3.0",
   "private": true,
   "type": "module",

@@ -26,7 +26,7 @@ case-log 独立仓库（D:\cly\case-log）已废弃，功能作为 ai-agent-tool
 
 **模块边界（拆除成本控制线）**：
 - 代码：`server/src/caselog/`（模块内自包含，含自己的类型定义，不进 model.ts/profiles.ts/ToolProfile 体系）+ `web/src/views/CaselogView.vue` + 侧栏独立入口"复盘" + `/api/caselog/*` 路由前缀。
-- 数据：`~/.knowledge/`（knowledge.db + raw/ + notes/）与 ai-agent-tools 其余数据完全分立。
+- 数据：原 `~/.knowledge/`（knowledge.db + raw/ + notes/）与宿主其余数据分立。**2026-09-10 变更**：随宿主改名 ai-tools，数据并入统一数据目录 `~/.ai-tools/caselog/`（内部布局不变，旧目录由 data-dir.ts 一次性自动搬迁；CASELOG_KB_ROOT 仍可覆盖）。
 - 复用而不混编：import transcript-parser / SessionTurn / hosts-pool 是**依赖方向单向**（caselog → 工具设施），工具设施不得反向 import caselog。
 
 ## 3. 适配器架构（阅读层）

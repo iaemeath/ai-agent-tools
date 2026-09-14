@@ -1,4 +1,6 @@
-// caselog raw store — per-host session mirrors under ~/.knowledge/raw/<hostId>.sqlite.
+// caselog raw store — per-host session mirrors under <KB_ROOT>/raw/<hostId>.sqlite.
+// KB_ROOT defaults to <dataRoot>/caselog (i.e. ~/.ai-tools/caselog; wholesale-migrated
+// from the pre-rename ~/.knowledge by data-dir.ts), CASELOG_KB_ROOT env overrides.
 //
 // Each mirror holds a subset of the source db (session / message / part rows plus a
 // meta table for the sync watermark). Sessions are upserted whole (a session's row set
@@ -7,12 +9,12 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { parseSqliteMessages, type ParsedTranscript } from '../transcript-parser.js';
+import { dataRoot } from '../data-dir.js';
 import type { CaselogFlow, CaselogSessionRead, RawHostStat, RawProjectStat, RawSessionRow, RawSessionSummary } from './types.js';
 
-export const KB_ROOT = process.env['CASELOG_KB_ROOT'] ?? path.join(os.homedir(), '.knowledge');
+export const KB_ROOT = process.env['CASELOG_KB_ROOT'] ?? path.join(dataRoot(), 'caselog');
 
 function rawDir(): string {
 	return path.join(KB_ROOT, 'raw');

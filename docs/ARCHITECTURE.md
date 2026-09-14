@@ -123,7 +123,7 @@ server/src/                      Hono API (tsx, :8787)
   hosts/                         remote-host machinery
     context.ts / middleware.ts   host context + AsyncLocalStorage binding (X-Host header)
     pool.ts                      ssh2 connection pool (reuse / keepalive / dedupe)
-    registry.ts / secrets.ts     ~/.ai-agent-tools/hosts.json CRUD; AES-256-GCM machine-bound secrets
+    registry.ts / secrets.ts     ~/.ai-tools/hosts.json CRUD; AES-256-GCM machine-bound secrets
     ssh.ts                       SshFs — SFTP-backed FsBackend (fallback path)
   remote/                        ★ remote-exec runtime
     entry.ts                     runs on the remote: command registry mirroring route validation,

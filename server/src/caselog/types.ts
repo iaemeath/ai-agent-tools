@@ -1,5 +1,5 @@
 // caselog types — module-contained (deliberately NOT in model.ts: the caselog module
-// keeps its own boundary so it can be lifted out of ai-agent-tools wholesale; see
+// keeps its own boundary so it can be lifted out of ai-tools wholesale; see
 // docs/caselog/case-log-v2-design v3.3.md §2).
 
 import type { TranscriptTurn } from '../transcript-parser.js';

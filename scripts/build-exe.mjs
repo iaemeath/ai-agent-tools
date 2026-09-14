@@ -6,7 +6,7 @@
 //   3. esbuild server/src/remote/entry.ts → dist-exe/ai-agent-remote.mjs (runs on remote hosts)
 //   4. sea-config.json: main=server.cjs, assets = web/dist/** (keyed "web/<rel>") +
 //      ai-agent-remote.mjs                              → dist-exe/sea-prep.blob
-//   5. copy node.exe → dist-exe/ai-agent-tools.exe, postject-inject the blob
+//   5. copy node.exe → dist-exe/ai-tools.exe, postject-inject the blob
 //
 // Requirements: Node 22+ (node:sea assets), postject (devDependency).
 
@@ -86,7 +86,7 @@ run(process.execPath, ['--experimental-sea-config', path.join(distExe, 'sea-conf
 
 // 5. Copy node.exe as the exe shell and inject the blob.
 //    postject has no .bin shim in this install — invoke its CLI through node directly.
-const exeName = 'ai-agent-tools.exe';
+const exeName = 'ai-tools.exe';
 const exePath = path.join(distExe, exeName);
 fs.copyFileSync(process.execPath, exePath);
 run(process.execPath, [path.join(root, 'node_modules/postject/dist/cli.js'),
