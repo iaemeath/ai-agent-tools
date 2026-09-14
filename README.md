@@ -8,7 +8,7 @@
 
 [简体中文](./README.zh-CN.md) · [Architecture](./docs/ARCHITECTURE.md)
 
-Skills, plugins, instructions, rules, commands, agents, hooks, MCP servers, projects and settings — manage them across **user / project scopes**, across **tools**, and even **across machines over SSH**, all from one place.
+Skills, plugins, instructions, rules, commands, agents, hooks, MCP servers and projects — manage them across **user / project scopes**, across **tools**, and even **across machines over SSH** — plus a **scenario memory (caselog)** and an **AI-written scripts console**, all from one place.
 
 ![Plugins — instant toggles, per-tool marketplaces](docs/screenshots/plugins.png)
 
@@ -23,12 +23,14 @@ Skills, plugins, instructions, rules, commands, agents, hooks, MCP servers, proj
 
 | Resource | Mode | Notes |
 |---|---|---|
-| Skills | toggle · promote · delete | per-scope detail + computed effective state |
+| Skills | toggle · promote · delete | per-scope detail + computed effective state + **load-frequency badges & zero-load filter** (transcript scan; ZCode) |
 | Plugins | toggle · file browser | browse the plugin dir, preview file contents |
 | Instructions · Rules · Commands · Agents | view + **edit** | markdown editor with safe writes; Rules is Claude-only (ZCode has no rules mechanism) |
-| Hooks · Settings | read-only dashboards | merges Claude `settings.local.json`; env / permissions / marketplaces overview |
+| Hooks | read-only dashboard | merges Claude `settings.local.json` |
 | MCP | read-only + live tool probe | stdio / http / sse transports; probing runs on the selected host |
 | Projects | browse · read sessions · delete history | session stores on filesystem (Claude) or SQLite (ZCode); ZCode sessions are readable end-to-end (user turns, thinking, tool calls, responses) |
+| Scenarios (caselog) | browse · edit · LLM polish | day-grouped cards with inline detail; immersive read/edit mode; LLM polish candidates that keep the original source |
+| Scripts (AI-written) | import · create · run | single-process authority (detached resident, host-restart adoption); card detail embeds the script page |
 
 Markdown editing comes with a whitelist check, `.bak` backup and atomic write — edit confidently.
 
@@ -45,7 +47,7 @@ npm install
 npm run dev        # API on :8787, UI on :5173
 ```
 
-Production build: `npm run build && npm start`.
+Production build: `npm run build && npm start`. Single-executable build: `npm run build:exe`. App data lives under `~/.ai-tools`.
 
 ## Status
 

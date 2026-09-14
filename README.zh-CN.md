@@ -8,7 +8,7 @@
 
 [English](./README.md) · [架构详解](./docs/ARCHITECTURE.md)
 
-Skills、plugins、instructions、rules、commands、agents、hooks、MCP、projects、settings —— 跨 **user / project 作用域**、跨**工具**、甚至**跨机器(SSH)**,全部集中一处管理。
+Skills、plugins、instructions、rules、commands、agents、hooks、MCP、projects —— 跨 **user / project 作用域**、跨**工具**、甚至**跨机器(SSH)**,全部集中一处管理;另有**情景记忆(caselog)**与 **AI 脚本控制台**。
 
 ![插件页 —— 实时开关、多插件市场](docs/screenshots/plugins.png)
 
@@ -23,12 +23,14 @@ Skills、plugins、instructions、rules、commands、agents、hooks、MCP、proj
 
 | 资源 | 模式 | 备注 |
 |---|---|---|
-| Skills | 开关 · 提升 · 删除 | 各作用域明细 + 计算后的生效状态 |
+| Skills | 开关 · 提升 · 删除 | 各作用域明细 + 计算后的生效状态 + **加载频次徽标 / 零加载过滤**(转录扫描;仅 ZCode) |
 | Plugins | 开关 · 文件浏览器 | 浏览 plugin 目录、预览文件内容 |
 | Instructions · Rules · Commands · Agents | 查看 + **编辑** | markdown 编辑器,安全回写;Rules 仅 Claude(ZCode 无此机制) |
-| Hooks · Settings | 只读总览 | 合并 Claude `settings.local.json`;环境变量 / 权限 / 插件市场 |
+| Hooks | 只读总览 | 合并 Claude `settings.local.json` |
 | MCP | 只读 + 实时工具探测 | stdio / http / sse;探测在所选主机上运行 |
-| Projects | 浏览 · 删除会话历史 | 文件系统(Claude)或 SQLite(ZCode)会话存储 |
+| Projects | 浏览 · 读会话 · 删除历史 | 文件系统(Claude)或 SQLite(ZCode)会话存储;ZCode 会话可端到端阅读(用户轮次/思考/工具调用/响应) |
+| 情景(caselog) | 浏览 · 编辑 · LLM 润色 | 按日分组卡片 + 内联详情;沉浸式阅读/编辑模式;LLM 润色候选保留原文出处 |
+| 脚本(AI 编写) | 导入 · 新建 · 运行 | 单进程权威管理(detached 常驻、宿主重启接管);卡片详情页内嵌脚本页面 |
 
 Markdown 编辑带白名单校验 + `.bak` 备份 + 原子写入,放心改。
 
@@ -45,7 +47,7 @@ npm install
 npm run dev        # 后端 :8787,前端 :5173
 ```
 
-生产构建:`npm run build && npm start`。
+生产构建:`npm run build && npm start`。单文件可执行版:`npm run build:exe`。应用数据收敛于 `~/.ai-tools`。
 
 ## 状态
 
