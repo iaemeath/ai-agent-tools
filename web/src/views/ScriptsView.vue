@@ -208,18 +208,17 @@ const rootHint = computed(() => t('scripts.rootHint'));
 
 <template>
   <!-- ============ 卡片列表：启动 / 查看状态 / 关闭 ============ -->
-  <div v-if="mode === 'list'" class="scripts-view">
+  <div v-if="mode === 'list'" v-loading="loading" class="scripts-view">
     <div class="toolbar">
       <span class="hint">{{ rootHint }}</span>
       <div class="spacer" />
       <el-button type="primary" :icon="Plus" @click="router.push('/scripts/new')">{{ t('scripts.new') }}</el-button>
     </div>
 
-    <div v-if="loading" class="state">{{ t('common.loading') }}</div>
-    <div v-else-if="cards.length === 0" class="state empty">
-      {{ t('scripts.empty') }}
+    
+    <el-empty v-if="!loading && cards.length === 0" :description="t('scripts.empty')">
       <div class="empty-sub">{{ t('scripts.emptySub') }}</div>
-    </div>
+    </el-empty>
 
     <div v-else class="card-grid">
       <el-card

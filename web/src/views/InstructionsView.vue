@@ -6,6 +6,7 @@ import { ArrowLeft, EditPen } from '@element-plus/icons-vue';
 import { api } from '../api';
 import { useTool } from '../stores/tool';
 import { useDragOrder } from '../composables/useDragOrder';
+import SplitPane from '../components/SplitPane.vue';
 import MarkdownView from '../components/MarkdownView.vue';
 import type { InstructionInfo } from '../types/tool';
 
@@ -34,9 +35,8 @@ const projectEditing = ref(false);
 const projectEditRaw = ref('');
 const saving = ref(false);
 
-// Resizable splitter: left pane width in px (40% of viewport on mount).
+// Resizable split: left pane width in px (drag logic lives in SplitPane).
 const leftWidth = ref(0);
-const dragging = ref(false);
 
 async function reload() {
 	errorMsg.value = null;
@@ -150,16 +150,12 @@ onMounted(async () => {
 	drag.loadOrder();
 	leftWidth.value = Math.min(window.innerWidth * 0.7, Math.max(240, window.innerWidth * 0.4));
 	await reload();
-	window.addEventListener('ai-agent-tools:reload', reload);
-	window.addEventListener('ai-agent-tools:tool-change', reload);
-	window.addEventListener('mousemove', onDrag);
-	window.addEventListener('mouseup', stopDrag);
+	window.addEventListener('ai-tools:reload', reload);
+	window.addEventListener('ai-tools:tool-change', reload);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-agent-tools:reload', reload);
-	window.removeEventListener('ai-agent-tools:tool-change', reload);
-	window.removeEventListener('mousemove', onDrag);
-	window.removeEventListener('mouseup', stopDrag);
+	window.removeEventListener('ai-tools:reload', reload);
+	window.removeEventListener('ai-tools:tool-change', reload);
 });
 
 const projectItems = computed(() =>
@@ -177,39 +173,17 @@ function basename(p: string): string {
 function projectBasename(i: InstructionInfo): string {
 	return i.project?.split(/[\\/]/).filter(Boolean).pop() ?? basename(i.path);
 }
-
-// ---- Splitter drag ----
-// Track drag origin so width changes by mouse delta, not absolute clientX
-// (which includes the sidebar width and causes a rightward jump on grab).
-let dragStartX = 0;
-let dragStartWidth = 0;
-function startDrag(e: MouseEvent) {
-	e.preventDefault();
-	dragging.value = true;
-	dragStartX = e.clientX;
-	dragStartWidth = leftWidth.value;
-}
-function onDrag(e: MouseEvent) {
-	if (!dragging.value) return;
-	// Clamp: 240px .. 70% of viewport.
-	const min = 240;
-	const max = window.innerWidth * 0.7;
-	leftWidth.value = Math.min(max, Math.max(min, dragStartWidth + (e.clientX - dragStartX)));
-}
-function stopDrag() {
-	dragging.value = false;
-}
 </script>
 
 <template>
-  <div class="instructions-view">
-    <div v-if="loading" class="state">{{ t('common.loading') }}</div>
-    <el-alert v-else-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
-    <div v-else-if="items.length === 0" class="state">{{ t('instruction.empty') }}</div>
+  <div v-loading="loading" class="instructions-view">
+    <el-alert v-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
+    <el-empty v-else-if="!loading && items.length === 0" :description="t('instruction.empty')" />
 
-    <div v-else class="split-layout">
+    <SplitPane v-else v-model="leftWidth" :min="240" :max-ratio="0.7">
+      <template #left>
       <!-- Left: global instruction (markdown) -->
-      <div class="pane pane-left" :style="{ width: leftWidth + 'px', flexShrink: 0 }">
+      <div class="pane">
         <div class="pane-header">
           <div class="pane-header-row">
             <span class="pane-title">🌐 {{ globalItem ? basename(globalItem.path) : t('instruction.groupGlobal') }}</span>
@@ -239,13 +213,13 @@ function stopDrag() {
         </div>
       </div>
 
-      <!-- Draggable splitter -->
-      <div class="splitter" :class="{ active: dragging }" @mousedown="startDrag">
-        <div class="splitter-handle"></div>
-      </div>
+      </template>
 
       <!-- Right: project instructions -->
-      <div class="pane pane-right">
+      <template #right>
+
+      <!-- Right: project instructions -->
+      <div class="pane">
         <!-- Card grid mode -->
         <template v-if="!selectedProject">
           <div class="pane-header">
@@ -311,7 +285,8 @@ function stopDrag() {
           </div>
         </template>
       </div>
-    </div>
+      </template>
+    </SplitPane>
   </div>
 </template>
 
@@ -321,101 +296,10 @@ function stopDrag() {
   display: flex;
   flex-direction: column;
 }
-.state {
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-  padding: 16px;
-}
-
-/* ---- Split layout ---- */
-.split-layout {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  min-height: 0;
-}
-.pane {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-width: 0;
-}
-.pane-left {
-  border-right: none; /* splitter provides the visual */
-}
-.pane-right {
-  flex: 1;
-}
-.pane-header {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 16px;
-  border-bottom: var(--el-border-color-light) solid 1px;
-  flex-shrink: 0;
-}
 .pane-header-row {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-.pane-path {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pane-path.clickable {
-  cursor: pointer;
-}
-.pane-path.clickable:hover {
-  color: var(--el-color-primary);
-  text-decoration: underline;
-}
-.pane-title {
-  font-size: 14px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pane-meta {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  flex-shrink: 0;
-}
-.pane-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-
-/* ---- Splitter ---- */
-.splitter {
-  width: 5px;
-  flex-shrink: 0;
-  cursor: col-resize;
-  background: var(--el-border-color-lighter);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  transition: background 0.15s;
-}
-.splitter:hover,
-.splitter.active {
-  background: var(--el-color-primary-light-5);
-}
-.splitter-handle {
-  width: 3px;
-  height: 32px;
-  border-radius: 2px;
-  background: var(--el-border-color);
-}
-.splitter:hover .splitter-handle,
-.splitter.active .splitter-handle {
-  background: var(--el-color-primary);
 }
 
 /* ---- Project cards ---- */
@@ -455,33 +339,5 @@ function stopDrag() {
 }
 .card-meta {
   margin-top: 10px;
-}
-
-/* ---- Edit mode ---- */
-.header-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.dirty-hint {
-  font-size: 12px;
-  color: var(--el-color-warning);
-}
-.edit-mode {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-.md-textarea {
-  flex: 1;
-  min-height: 0;
-}
-.md-textarea :deep(.el-textarea__inner) {
-  height: 100%;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  resize: none;
 }
 </style>

@@ -155,7 +155,7 @@ onUnmounted(() => clearInterval(timer));
       </template>
     </div>
 
-    <div v-if="loading" class="state">{{ t('common.loading') }}</div>
+    <div v-if="loading" v-loading="true" style="min-height: 200px" />
     <div v-else-if="notFound" class="state empty">{{ t('scripts.notFound') }}</div>
     <iframe v-else-if="pageUrl" :key="iframeKey" :src="pageUrl" class="page-frame" :title="card?.name || id" />
     <div v-else class="state empty">

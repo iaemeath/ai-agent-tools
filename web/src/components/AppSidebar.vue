@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
-  FolderOpen, ScrollText, Sparkles, Library, Plug, Settings, Scale, Terminal, Bot, Webhook, Server, BookCheck, NotebookPen, SquareTerminal,
+  FolderOpen, ScrollText, Sparkles, Library, Plug, Scale, Terminal, Bot, Webhook, Server, BookCheck, NotebookPen, SquareTerminal,
 } from 'lucide-vue-next';
 import { useTool } from '../stores/tool';
 import type { ToolId } from '../types/tool';
@@ -13,6 +13,7 @@ const route = useRoute();
 const { tool } = useTool();
 
 interface NavItem { index: string; labelKey: string; icon: any; /** When set, show only for these tools (capability gap, e.g. rules is Claude-only). */ onlyTools?: ToolId[]; }
+interface NavGroup { index: string; labelKey: string; icon: any; items: NavItem[]; }
 
 /** Filter nav items by the current tool's capabilities. */
 function visible(item: NavItem): boolean {
@@ -49,9 +50,23 @@ const navScripts = computed<NavItem[]>(() => [
 	{ index: '/scripts', labelKey: 'nav.scripts', icon: SquareTerminal },
 ]);
 
+/** 一级菜单（el-sub-menu）：unique-opened 互斥，同时只展开一个。 */
+const navGroups = computed<NavGroup[]>(() => [
+	{ index: 'g-workspace', labelKey: 'nav.groupWorkspace', icon: Server, items: navMain.value },
+	{ index: 'g-tools', labelKey: 'nav.groupTools', icon: Plug, items: navTools.value },
+	{ index: 'g-review', labelKey: 'nav.groupReview', icon: NotebookPen, items: navReview.value },
+	{ index: 'g-scripts', labelKey: 'nav.groupScripts', icon: SquareTerminal, items: navScripts.value },
+]);
+
 // Full path (not first segment) so /caselog and /caselog/scenarios highlight separately.
 // /scripts/* collapses onto /scripts so the group item stays highlighted in detail mode.
 const activeIndex = computed(() => (route.path.startsWith('/scripts') ? '/scripts' : route.path));
+
+/** Open the submenu that contains the active route (first paint / direct URL entry). */
+const defaultOpeneds = computed(() => {
+	const g = navGroups.value.find((g) => g.items.some((i) => i.index === activeIndex.value));
+	return g ? [g.index] : [];
+});
 </script>
 
 <template>
@@ -64,41 +79,24 @@ const activeIndex = computed(() => (route.path.startsWith('/scripts') ? '/script
       </div>
     </div>
 
-    <el-menu :default-active="activeIndex" router class="sidebar-menu">
-      <el-menu-item-group :title="t('nav.groupWorkspace')">
-        <el-menu-item v-for="item in navMain.filter(visible)" :key="item.index" :index="item.index">
+    <el-menu
+      :default-active="activeIndex"
+      :default-openeds="defaultOpeneds"
+      unique-opened
+      router
+      class="sidebar-menu"
+    >
+      <el-sub-menu v-for="g in navGroups" :key="g.index" :index="g.index">
+        <template #title>
+          <el-icon><component :is="g.icon" /></el-icon>
+          <span>{{ t(g.labelKey) }}</span>
+        </template>
+        <el-menu-item v-for="item in g.items.filter(visible)" :key="item.index" :index="item.index">
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ t(item.labelKey) }}</span>
         </el-menu-item>
-      </el-menu-item-group>
-      <el-menu-item-group :title="t('nav.groupTools')">
-        <el-menu-item v-for="item in navTools.filter(visible)" :key="item.index" :index="item.index">
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ t(item.labelKey) }}</span>
-        </el-menu-item>
-      </el-menu-item-group>
-      <el-menu-item-group :title="t('nav.groupReview')">
-        <el-menu-item v-for="item in navReview.filter(visible)" :key="item.index" :index="item.index">
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ t(item.labelKey) }}</span>
-        </el-menu-item>
-      </el-menu-item-group>
-      <el-menu-item-group :title="t('nav.groupScripts')">
-        <el-menu-item v-for="item in navScripts.filter(visible)" :key="item.index" :index="item.index">
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ t(item.labelKey) }}</span>
-        </el-menu-item>
-      </el-menu-item-group>
+      </el-sub-menu>
     </el-menu>
-
-    <div class="settings-entry">
-      <el-menu :default-active="activeIndex === '/settings' ? '/settings' : ''" router>
-        <el-menu-item index="/settings">
-          <el-icon><Settings /></el-icon>
-          <span>{{ t('nav.settings') }}</span>
-        </el-menu-item>
-      </el-menu>
-    </div>
   </div>
 </template>
 
@@ -140,12 +138,5 @@ const activeIndex = computed(() => (route.path.startsWith('/scripts') ? '/script
   border-right: none;
   overflow-y: auto;
   padding: 12px 8px;
-}
-.settings-entry {
-  border-top: var(--el-border-color) solid 1px;
-  padding: 8px;
-}
-.settings-entry .el-menu {
-  border-right: none;
 }
 </style>

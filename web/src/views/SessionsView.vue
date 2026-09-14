@@ -66,10 +66,10 @@ async function reload() {
 
 onMounted(async () => {
 	await reload();
-	window.addEventListener('ai-agent-tools:tool-change', reload);
+	window.addEventListener('ai-tools:tool-change', reload);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-agent-tools:tool-change', reload);
+	window.removeEventListener('ai-tools:tool-change', reload);
 });
 watch(() => [project.value, sessionId.value], reload);
 
@@ -138,8 +138,8 @@ function fmtDur(flow: SessionFlow): string {
 		<div class="split">
 			<!-- ═══ LEFT: session list ═══ -->
 			<aside class="list-pane">
-				<div v-if="listLoading" class="state">{{ t('common.loading') }}</div>
-				<div v-else-if="sessions.length === 0" class="state">{{ t('session.empty') }}</div>
+				<el-empty v-if="!listLoading && sessions.length === 0" :description="t('session.empty')" />
+				<div v-else-if="listLoading" v-loading="true" style="min-height: 120px" />
 				<template v-else>
 					<div
 						v-for="s in sessions" :key="s.id" class="sess-row"
@@ -158,14 +158,14 @@ function fmtDur(flow: SessionFlow): string {
 
 			<!-- ═══ RIGHT: reading pane ═══ -->
 			<section class="reader-pane">
-				<div v-if="loading" class="state">{{ t('common.loading') }}</div>
+				<div v-if="loading" v-loading="true" style="min-height: 160px" />
 				<el-alert
 					v-else-if="errorMsg && errorMsg.startsWith('unsupported:')"
 					class="pad" type="info" :closable="false"
 					:title="t('session.unsupported')"
 				/>
 				<el-alert v-else-if="errorMsg" class="pad" type="error" :closable="false" :title="errorMsg" />
-				<div v-else-if="!sessionId" class="state">{{ t('session.pickOne') }}</div>
+				<el-empty v-else-if="!sessionId" :description="t('session.pickOne')" />
 
 				<template v-else-if="reading">
 					<div class="reader-head">
@@ -182,18 +182,19 @@ function fmtDur(flow: SessionFlow): string {
 						<template v-for="(item, i) in timeline.items" :key="i">
 							<SessionTurn v-if="item.kind === 'turn'" :turn="item.turn" />
 							<div v-else class="agent-inline">
-								<button class="agent-head" type="button" @click="openAgents.includes(item.flow.id) ? openAgents.splice(openAgents.indexOf(item.flow.id), 1) : openAgents.push(item.flow.id)">
-									<el-icon><Bot /></el-icon>
-									<span class="agent-desc" :title="item.flow.description">{{ item.flow.description || item.flow.id }}</span>
-									<span class="agent-stats">
-										{{ item.flow.turns.length }} {{ t('session.turnUnit') }} · {{ item.flow.stats.toolCalls }} {{ t('session.tools') }}
-										<template v-if="fmtDur(item.flow)"> · {{ fmtDur(item.flow) }}</template>
-									</span>
-									<span class="proc-arrow">{{ openAgents.includes(item.flow.id) ? '▾' : '▸' }}</span>
-								</button>
-								<div v-if="openAgents.includes(item.flow.id)" class="agent-body">
-									<SessionTurn v-for="(turn, ti) in item.flow.turns" :key="ti" :turn="turn" />
-								</div>
+								<el-collapse v-model="openAgents" class="agent-collapse">
+									<el-collapse-item :name="item.flow.id">
+										<template #title>
+											<el-icon class="agent-ico"><Bot /></el-icon>
+											<span class="agent-desc" :title="item.flow.description">{{ item.flow.description || item.flow.id }}</span>
+											<span class="agent-stats">
+												{{ item.flow.turns.length }} {{ t('session.turnUnit') }} · {{ item.flow.stats.toolCalls }} {{ t('session.tools') }}
+												<template v-if="fmtDur(item.flow)"> · {{ fmtDur(item.flow) }}</template>
+											</span>
+										</template>
+										<SessionTurn v-for="(turn, ti) in item.flow.turns" :key="ti" :turn="turn" />
+									</el-collapse-item>
+								</el-collapse>
 							</div>
 						</template>
 						<div v-if="reading.main.turns.length === 0" class="state">{{ t('session.noMain') }}</div>
@@ -204,15 +205,16 @@ function fmtDur(flow: SessionFlow): string {
 					<template v-if="timeline.orphans.length">
 						<div class="orphans-label">{{ t('session.unplacedAgents') }}</div>
 						<div v-for="flow in timeline.orphans" :key="flow.id" class="agent-inline">
-							<button class="agent-head" type="button" @click="openAgents.includes(flow.id) ? openAgents.splice(openAgents.indexOf(flow.id), 1) : openAgents.push(flow.id)">
-								<el-icon><Bot /></el-icon>
-								<span class="agent-desc" :title="flow.description">{{ flow.description || flow.id }}</span>
-								<span class="agent-stats">{{ flow.turns.length }} {{ t('session.turnUnit') }} · {{ flow.stats.toolCalls }} {{ t('session.tools') }}</span>
-								<span class="proc-arrow">{{ openAgents.includes(flow.id) ? '▾' : '▸' }}</span>
-							</button>
-							<div v-if="openAgents.includes(flow.id)" class="agent-body">
-								<SessionTurn v-for="(turn, ti) in flow.turns" :key="ti" :turn="turn" />
-							</div>
+							<el-collapse v-model="openAgents" class="agent-collapse">
+								<el-collapse-item :name="flow.id">
+									<template #title>
+										<el-icon class="agent-ico"><Bot /></el-icon>
+										<span class="agent-desc" :title="flow.description">{{ flow.description || flow.id }}</span>
+										<span class="agent-stats">{{ flow.turns.length }} {{ t('session.turnUnit') }} · {{ flow.stats.toolCalls }} {{ t('session.tools') }}</span>
+									</template>
+									<SessionTurn v-for="(turn, ti) in flow.turns" :key="ti" :turn="turn" />
+								</el-collapse-item>
+							</el-collapse>
 						</div>
 					</template>
 				</template>

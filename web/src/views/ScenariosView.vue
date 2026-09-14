@@ -82,8 +82,7 @@ onMounted(load);
 	<div class="scenarios-view">
 		<!-- ═══ card list ═══ -->
 		<template v-if="!detail">
-			<div v-if="loading" class="state">{{ t('common.loading') }}</div>
-			<div v-else-if="scenarios.length === 0" class="state">{{ t('sc.empty') }}</div>
+			<el-empty v-if="!loading && scenarios.length === 0" :description="t('sc.empty')" />
 			<section v-for="[day, list] in groups" v-else :key="day" class="group">
 				<div class="group-head">
 					<h2 class="group-title">{{ day }} · {{ t('sc.count', { n: list.length }) }}</h2>

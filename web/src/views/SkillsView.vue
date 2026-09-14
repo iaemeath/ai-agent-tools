@@ -141,13 +141,13 @@ onMounted(async () => {
 	drag.loadOrder();
 	await loadProjects();
 	await reload();
-	window.addEventListener('ai-agent-tools:reload', reload);
-	window.addEventListener('ai-agent-tools:tool-change', onToolChange);
+	window.addEventListener('ai-tools:reload', reload);
+	window.addEventListener('ai-tools:tool-change', onToolChange);
 	void loadUsage();
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-agent-tools:reload', reload);
-	window.removeEventListener('ai-agent-tools:tool-change', onToolChange);
+	window.removeEventListener('ai-tools:reload', reload);
+	window.removeEventListener('ai-tools:tool-change', onToolChange);
 });
 
 const allSkills = computed(() => overview.value?.items.filter((i) => i.kind === 'skill') ?? []);
@@ -291,7 +291,7 @@ function closeDetail() {
 </script>
 
 <template>
-  <div class="skills-view">
+  <div v-loading="loading" class="skills-view">
     <!-- Toolbar: search + scope — only in list mode (hidden in detail) -->
     <div v-if="!inDetail" class="toolbar">
       <el-input
@@ -327,12 +327,11 @@ function closeDetail() {
       </el-checkbox>
     </div>
 
-    <div v-if="loading" class="state">{{ t('common.loading') }}</div>
-    <el-alert v-else-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
+    <el-alert v-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
 
     <!-- List mode -->
     <template v-else-if="!inDetail">
-      <div v-if="skills.length === 0 && filteredPluginGroups.length === 0" class="state">{{ t('skill.empty') }}</div>
+      <el-empty v-if="!loading && skills.length === 0 && filteredPluginGroups.length === 0" :description="t('skill.empty')" />
       <section v-if="globalSkills.length" class="group">
         <div class="group-head">
           <h2 class="group-title">{{ t('skill.groupGlobal') }}</h2>

@@ -6,6 +6,7 @@ import { FolderOpened, EditPen } from '@element-plus/icons-vue';
 import { api } from '../api';
 import { useTool } from '../stores/tool';
 import { useDragOrder } from '../composables/useDragOrder';
+import SplitPane from '../components/SplitPane.vue';
 import MarkdownView from '../components/MarkdownView.vue';
 import type { CommandInfo } from '../types/tool';
 
@@ -25,9 +26,8 @@ const editing = ref(false);
 const editRaw = ref('');
 const saving = ref(false);
 
-// Resizable splitter: left pane width in px.
+// Resizable split: left pane width in px (drag logic lives in SplitPane).
 const leftWidth = ref(0);
-const dragging = ref(false);
 
 // Drag-to-reorder — logic lives in the reusable composable; this view only
 // supplies the resource key ('commands-order') and page-specific grouping data.
@@ -116,16 +116,12 @@ onMounted(async () => {
 	leftWidth.value = Math.min(window.innerWidth * 0.4, Math.max(260, window.innerWidth * 0.3));
 	drag.loadOrder();
 	await reload();
-	window.addEventListener('ai-agent-tools:reload', reload);
-	window.addEventListener('ai-agent-tools:tool-change', reload);
-	window.addEventListener('mousemove', onDrag);
-	window.addEventListener('mouseup', stopDrag);
+	window.addEventListener('ai-tools:reload', reload);
+	window.addEventListener('ai-tools:tool-change', reload);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-agent-tools:reload', reload);
-	window.removeEventListener('ai-agent-tools:tool-change', reload);
-	window.removeEventListener('mousemove', onDrag);
-	window.removeEventListener('mouseup', stopDrag);
+	window.removeEventListener('ai-tools:reload', reload);
+	window.removeEventListener('ai-tools:tool-change', reload);
 });
 
 // ---- Grouping (sorted by saved drag order) ----
@@ -150,35 +146,17 @@ function projectBasename(p: string): string {
 	return p.split(/[\\/]/).filter(Boolean).pop() ?? p;
 }
 
-// ---- Splitter drag (delta mode — avoids sidebar-offset jump) ----
-let dragStartX = 0;
-let dragStartWidth = 0;
-function startDrag(e: MouseEvent) {
-	e.preventDefault();
-	dragging.value = true;
-	dragStartX = e.clientX;
-	dragStartWidth = leftWidth.value;
-}
-function onDrag(e: MouseEvent) {
-	if (!dragging.value) return;
-	const min = 240;
-	const max = window.innerWidth * 0.6;
-	leftWidth.value = Math.min(max, Math.max(min, dragStartWidth + (e.clientX - dragStartX)));
-}
-function stopDrag() {
-	dragging.value = false;
-}
 </script>
 
 <template>
-  <div class="commands-view">
-    <div v-if="loading" class="state">{{ t('common.loading') }}</div>
-    <el-alert v-else-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
-    <div v-else-if="items.length === 0" class="state empty-state">{{ t('command.empty') }}</div>
+  <div v-loading="loading" class="commands-view">
+    <el-alert v-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
+    <el-empty v-else-if="!loading && items.length === 0" :description="t('command.empty')" />
 
-    <div v-else class="split-layout">
+    <SplitPane v-else v-model="leftWidth" :min="240" :max-ratio="0.6">
+      <template #left>
       <!-- Left: grouped file list (draggable cards) -->
-      <div class="pane pane-left" :style="{ width: leftWidth + 'px', flexShrink: 0 }">
+      <div class="pane">
         <div class="pane-header">
           <span class="pane-title">{{ t('nav.commands') }}</span>
           <span class="pane-meta">{{ items.length }}</span>
@@ -231,13 +209,13 @@ function stopDrag() {
         </div>
       </div>
 
-      <!-- Splitter -->
-      <div class="splitter" :class="{ active: dragging }" @mousedown="startDrag">
-        <div class="splitter-handle"></div>
-      </div>
+      </template>
 
       <!-- Right: content -->
-      <div class="pane pane-right">
+      <template #right>
+
+      <!-- Right: content -->
+      <div class="pane">
         <template v-if="selected">
           <div class="pane-header">
             <div class="pane-header-row">
@@ -258,16 +236,17 @@ function stopDrag() {
             <div class="pane-path clickable" :title="selected.path" @click="openInExplorer(selected.path)">{{ selected.path }}</div>
           </div>
           <div class="pane-body">
-            <div v-if="contentLoading" class="state">{{ t('common.loading') }}</div>
+            <div v-if="contentLoading" v-loading="true" class="state" style="min-height: 120px" />
             <div v-else-if="editing" class="edit-mode">
               <el-input type="textarea" v-model="editRaw" class="md-textarea" resize="none" />
             </div>
             <MarkdownView v-else :raw="raw" />
           </div>
         </template>
-        <div v-else class="state center">{{ t('command.noSelection') }}</div>
+        <el-empty v-else :description="t('command.noSelection')" />
       </div>
-    </div>
+      </template>
+    </SplitPane>
   </div>
 </template>
 
@@ -277,205 +256,15 @@ function stopDrag() {
   display: flex;
   flex-direction: column;
 }
-.state {
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-  padding: 16px;
-}
-.state.small {
-  padding: 8px 16px;
-  font-size: 12px;
-}
-.state.center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-}
-.empty-state {
-  padding: 40px 16px;
-  text-align: center;
-}
-
-/* ---- Split layout ---- */
-.split-layout {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  min-height: 0;
-}
-.pane {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-width: 0;
-}
-.pane-left {
-  border-right: none;
-}
-.pane-right {
-  flex: 1;
-}
-.pane-header {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 16px;
-  border-bottom: var(--el-border-color-light) solid 1px;
-  flex-shrink: 0;
-}
 .pane-header-row {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-.pane-title {
-  font-size: 14px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pane-meta {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  flex-shrink: 0;
-}
-.pane-path {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pane-path.clickable {
-  cursor: pointer;
-}
-.pane-path.clickable:hover {
-  color: var(--el-color-primary);
-  text-decoration: underline;
-}
-.pane-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-.list-body {
-  padding: 8px;
-}
-.open-btn {
-  margin-left: auto;
-}
-
-/* ---- Item cards (draggable grid items) ---- */
-.group-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 12px 8px 4px;
 }
 .card-grid {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
   padding: 4px 8px 8px;
-}
-.item-card {
-  padding: 8px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-lighter);
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
-}
-.item-card:hover {
-  background: var(--el-fill-color-light);
-}
-.item-card.selected {
-  background: var(--el-color-primary-light-9);
-}
-.item-card.dragging {
-  opacity: 0.4;
-}
-.item-card.drag-over {
-  border-color: var(--el-color-primary);
-  border-style: dashed;
-}
-.item-name {
-  font-size: 13px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.item-desc {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.item-meta {
-  font-size: 10px;
-  color: var(--el-text-color-placeholder);
-  margin-top: 2px;
-}
-
-/* ---- Splitter ---- */
-.splitter {
-  width: 5px;
-  flex-shrink: 0;
-  cursor: col-resize;
-  background: var(--el-border-color-lighter);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  transition: background 0.15s;
-}
-.splitter:hover,
-.splitter.active {
-  background: var(--el-color-primary-light-5);
-}
-.splitter-handle {
-  width: 3px;
-  height: 32px;
-  border-radius: 2px;
-  background: var(--el-border-color);
-}
-.splitter:hover .splitter-handle,
-.splitter.active .splitter-handle {
-	background: var(--el-color-primary);
-}
-
-/* ---- Edit mode ---- */
-.header-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.edit-mode {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-.dirty-hint {
-  font-size: 12px;
-  color: var(--el-color-warning);
-}
-.md-textarea {
-  flex: 1;
-  min-height: 0;
-}
-.md-textarea :deep(.el-textarea__inner) {
-  height: 100%;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  resize: none;
 }
 </style>

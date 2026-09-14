@@ -39,12 +39,12 @@ async function reload() {
 onMounted(async () => {
 	drag.loadOrder();
 	await reload();
-	window.addEventListener('ai-agent-tools:reload', reload);
-	window.addEventListener('ai-agent-tools:tool-change', reload);
+	window.addEventListener('ai-tools:reload', reload);
+	window.addEventListener('ai-tools:tool-change', reload);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-agent-tools:reload', reload);
-	window.removeEventListener('ai-agent-tools:tool-change', reload);
+	window.removeEventListener('ai-tools:reload', reload);
+	window.removeEventListener('ai-tools:tool-change', reload);
 });
 
 const filtered = computed(() => {
@@ -98,7 +98,7 @@ async function removeProject(p: ProjectInfo) {
 </script>
 
 <template>
-  <div class="projects-view">
+  <div v-loading="loading" class="projects-view">
     <!-- Toolbar: search -->
     <div class="toolbar">
       <el-input
@@ -110,9 +110,8 @@ async function removeProject(p: ProjectInfo) {
       />
     </div>
 
-    <div v-if="loading" class="state">{{ t('common.loading') }}</div>
-    <el-alert v-else-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
-    <div v-else-if="filtered.length === 0" class="state">{{ t('project.empty') }}</div>
+    <el-alert v-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
+    <el-empty v-else-if="!loading && filtered.length === 0" :description="t('project.empty')" />
 
     <div v-else class="card-grid">
       <el-card

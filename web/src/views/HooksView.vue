@@ -5,6 +5,7 @@ import { FolderOpened } from '@element-plus/icons-vue';
 import { api } from '../api';
 import { useTool } from '../stores/tool';
 import { useDragOrder } from '../composables/useDragOrder';
+import SplitPane from '../components/SplitPane.vue';
 import type { HookInfo } from '../types/tool';
 
 const { t } = useI18n();
@@ -16,9 +17,8 @@ const loading = ref(true);
 
 const selected = ref<HookInfo | null>(null);
 
-// Resizable splitter: left pane width in px.
+// Resizable split: left pane width in px (drag logic lives in SplitPane).
 const leftWidth = ref(0);
-const dragging = ref(false);
 
 // Drag-to-reorder within each event group. Logic lives in the reusable composable;
 // this view supplies the resource key ('hooks-order') and page-specific grouping.
@@ -68,16 +68,12 @@ onMounted(async () => {
 	leftWidth.value = Math.min(window.innerWidth * 0.4, Math.max(260, window.innerWidth * 0.3));
 	drag.loadOrder();
 	await reload();
-	window.addEventListener('ai-agent-tools:reload', reload);
-	window.addEventListener('ai-agent-tools:tool-change', reload);
-	window.addEventListener('mousemove', onDrag);
-	window.addEventListener('mouseup', stopDrag);
+	window.addEventListener('ai-tools:reload', reload);
+	window.addEventListener('ai-tools:tool-change', reload);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-agent-tools:reload', reload);
-	window.removeEventListener('ai-agent-tools:tool-change', reload);
-	window.removeEventListener('mousemove', onDrag);
-	window.removeEventListener('mouseup', stopDrag);
+	window.removeEventListener('ai-tools:reload', reload);
+	window.removeEventListener('ai-tools:tool-change', reload);
 });
 
 // ---- Grouping by event (each group sorted by saved drag order) ----
@@ -98,35 +94,17 @@ function scopeLabel(h: HookInfo): string {
 	return h.scope === 'global' ? t('hook.scopeGlobal') : t('hook.scopeProject');
 }
 
-// ---- Splitter drag (delta mode — avoids sidebar-offset jump) ----
-let dragStartX = 0;
-let dragStartWidth = 0;
-function startDrag(e: MouseEvent) {
-	e.preventDefault();
-	dragging.value = true;
-	dragStartX = e.clientX;
-	dragStartWidth = leftWidth.value;
-}
-function onDrag(e: MouseEvent) {
-	if (!dragging.value) return;
-	const min = 240;
-	const max = window.innerWidth * 0.6;
-	leftWidth.value = Math.min(max, Math.max(min, dragStartWidth + (e.clientX - dragStartX)));
-}
-function stopDrag() {
-	dragging.value = false;
-}
 </script>
 
 <template>
-  <div class="hooks-view">
-    <div v-if="loading" class="state">{{ t('common.loading') }}</div>
-    <el-alert v-else-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
+  <div v-loading="loading" class="hooks-view">
+    <el-alert v-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
     <div v-else-if="items.length === 0" class="state empty-state">{{ t('hook.empty') }}</div>
 
-    <div v-else class="split-layout">
+    <SplitPane v-else v-model="leftWidth" :min="240" :max-ratio="0.6">
+      <template #left>
       <!-- Left: hooks grouped by event (draggable cards) -->
-      <div class="pane pane-left" :style="{ width: leftWidth + 'px', flexShrink: 0 }">
+      <div class="pane">
         <div class="pane-header">
           <span class="pane-title">{{ t('nav.hooks') }}</span>
           <span class="pane-meta">{{ items.length }}</span>
@@ -159,13 +137,13 @@ function stopDrag() {
         </div>
       </div>
 
-      <!-- Splitter -->
-      <div class="splitter" :class="{ active: dragging }" @mousedown="startDrag">
-        <div class="splitter-handle"></div>
-      </div>
+      </template>
+
+      <!-- Right: content -->
+      <template #right>
 
       <!-- Right: structured detail (NOT markdown — hooks have fields, not file content) -->
-      <div class="pane pane-right">
+      <div class="pane">
         <template v-if="selected">
           <div class="pane-header">
             <div class="pane-header-row">
@@ -178,43 +156,21 @@ function stopDrag() {
             </div>
           </div>
           <div class="pane-body detail-body">
-            <div class="detail-row">
-              <span class="detail-label">{{ t('hook.command') }}</span>
-              <code class="detail-code">{{ selected.command }}</code>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">{{ t('hook.type') }}</span>
-              <span class="detail-value">{{ selected.type }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">{{ t('hook.timeout') }}</span>
-              <span class="detail-value">{{ selected.timeout ?? '—' }}</span>
-            </div>
-            <div v-if="selected.statusMessage" class="detail-row">
-              <span class="detail-label">{{ t('hook.statusMessage') }}</span>
-              <span class="detail-value">{{ selected.statusMessage }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">{{ t('hook.event') }}</span>
-              <span class="detail-value">{{ selected.event }}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">{{ t('hook.matcher') }}</span>
-              <code class="detail-value">{{ selected.matcher }}</code>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">{{ t('mcp.scope') }}</span>
-              <span class="detail-value">{{ scopeLabel(selected) }}<span v-if="selected.project"> · {{ selected.project }}</span></span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">{{ t('hook.sourceFile') }}</span>
-              <span class="detail-value detail-path clickable" :title="selected.sourceFile" @click="openInExplorer(selected.sourceFile)">{{ selected.sourceFile }}</span>
-            </div>
+          <el-descriptions :column="1" border size="small" class="hook-desc">
+            <el-descriptions-item label="{{ t('hook.command') }}"><code class="detail-code">{{ selected.command }}</code></el-descriptions-item>
+            <el-descriptions-item label="{{ t('hook.type') }}"><span class="detail-value">{{ selected.type }}</span></el-descriptions-item>
+            <el-descriptions-item label="{{ t('hook.timeout') }}"><span class="detail-value">{{ selected.timeout ?? '—' }}</span></el-descriptions-item>
+            <el-descriptions-item label="{{ t('hook.event') }}"><span class="detail-value">{{ selected.event }}</span></el-descriptions-item>
+            <el-descriptions-item label="{{ t('hook.matcher') }}"><code class="detail-value">{{ selected.matcher }}</code></el-descriptions-item>
+            <el-descriptions-item label="{{ t('mcp.scope') }}"><span class="detail-value">{{ scopeLabel(selected) }}<span v-if="selected.project"> · {{ selected.project }}</span></span></el-descriptions-item>
+            <el-descriptions-item label="{{ t('hook.sourceFile') }}"><span class="detail-value detail-path clickable" :title="selected.sourceFile" @click="openInExplorer(selected.sourceFile)">{{ selected.sourceFile }}</span></el-descriptions-item>
+          </el-descriptions>
           </div>
         </template>
-        <div v-else class="state center">{{ t('hook.noSelection') }}</div>
+        <el-empty v-else :description="t('hook.noSelection')" />
       </div>
-    </div>
+      </template>
+    </SplitPane>
   </div>
 </template>
 
@@ -224,97 +180,21 @@ function stopDrag() {
   display: flex;
   flex-direction: column;
 }
-.state {
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-  padding: 16px;
-}
-.state.center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-}
-.empty-state {
-  padding: 40px 16px;
-  text-align: center;
-}
-
-/* ---- Split layout ---- */
-.split-layout {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-  min-height: 0;
-}
-.pane {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-width: 0;
-}
-.pane-left {
-  border-right: none;
-}
-.pane-right {
-  flex: 1;
-}
-.pane-header {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 16px;
-  border-bottom: var(--el-border-color-light) solid 1px;
-  flex-shrink: 0;
-}
 .pane-header-row {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
-.pane-title {
-  font-size: 14px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pane-meta {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  flex-shrink: 0;
-}
 .hook-matcher-inline {
   font-family: var(--el-font-family-mono, monospace);
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }
-.pane-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-.list-body {
-  padding: 8px;
-}
 .detail-body {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-.open-btn {
-  margin-left: auto;
-}
-
-/* ---- Hook cards (draggable grid items, grouped by event) ---- */
-.group-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 12px 8px 4px;
 }
 .card-grid {
   display: grid;
@@ -422,30 +302,4 @@ function stopDrag() {
   text-decoration: underline;
 }
 
-/* ---- Splitter ---- */
-.splitter {
-  width: 5px;
-  flex-shrink: 0;
-  cursor: col-resize;
-  background: var(--el-border-color-lighter);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  transition: background 0.15s;
-}
-.splitter:hover,
-.splitter.active {
-  background: var(--el-color-primary-light-5);
-}
-.splitter-handle {
-  width: 3px;
-  height: 32px;
-  border-radius: 2px;
-  background: var(--el-border-color);
-}
-.splitter:hover .splitter-handle,
-.splitter.active .splitter-handle {
-  background: var(--el-color-primary);
-}
 </style>

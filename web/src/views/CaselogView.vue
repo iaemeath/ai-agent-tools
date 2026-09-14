@@ -456,8 +456,8 @@ onUnmounted(() => {
 					</aside>
 
 					<section class="reader-pane">
-						<div v-if="readLoading" class="state">{{ t('common.loading') }}</div>
-						<div v-else-if="!reading" class="state">{{ t('session.pickOne') }}</div>
+						<div v-if="readLoading" v-loading="true" style="min-height: 160px" />
+						<el-empty v-else-if="!reading" :description="t('session.pickOne')" />
 						<template v-else>
 							<div class="reader-head">
 								<div class="reader-title">{{ reading.session.title || reading.session.id }}</div>
@@ -478,15 +478,16 @@ onUnmounted(() => {
 										<SessionTurn :turn="item.turn" />
 									</div>
 									<div v-else class="agent-inline">
-										<button class="agent-head" type="button" @click="openAgents.includes(item.flow.id) ? openAgents.splice(openAgents.indexOf(item.flow.id), 1) : openAgents.push(item.flow.id)">
-											<el-icon><Bot /></el-icon>
-											<span class="agent-desc" :title="item.flow.description">{{ item.flow.description || item.flow.id }}</span>
-											<span class="agent-stats">{{ item.flow.turns.length }} {{ t('session.turnUnit') }} · {{ item.flow.stats.toolCalls }} {{ t('session.tools') }}</span>
-											<span class="proc-arrow">{{ openAgents.includes(item.flow.id) ? '▾' : '▸' }}</span>
-										</button>
-										<div v-if="openAgents.includes(item.flow.id)" class="agent-body">
-											<SessionTurn v-for="(turn, ti) in item.flow.turns" :key="ti" :turn="turn" />
-										</div>
+										<el-collapse v-model="openAgents" class="agent-collapse">
+											<el-collapse-item :name="item.flow.id">
+												<template #title>
+													<el-icon class="agent-ico"><Bot /></el-icon>
+													<span class="agent-desc" :title="item.flow.description">{{ item.flow.description || item.flow.id }}</span>
+													<span class="agent-stats">{{ item.flow.turns.length }} {{ t('session.turnUnit') }} · {{ item.flow.stats.toolCalls }} {{ t('session.tools') }}</span>
+												</template>
+												<SessionTurn v-for="(turn, ti) in item.flow.turns" :key="ti" :turn="turn" />
+											</el-collapse-item>
+										</el-collapse>
 									</div>
 								</template>
 							</template>
@@ -554,8 +555,15 @@ onUnmounted(() => {
 					</div>
 					<div class="edit-card note-card">
 						<div class="note-head">
-							<button type="button" class="note-tab" :class="{ on: noteTab === 'capture' }" @click="noteTab = 'capture'; onNoteTab('capture')">{{ t('caselog.notePanel') }}</button>
-							<button type="button" class="note-tab" :class="{ on: noteTab === 'list' }" @click="noteTab = 'list'; onNoteTab('list')">{{ t('caselog.noteTabList') }}</button>
+							<el-segmented
+								:model-value="noteTab"
+								:options="[
+									{ label: t('caselog.notePanel'), value: 'capture' },
+									{ label: t('caselog.noteTabList'), value: 'list' },
+								]"
+								size="small"
+								@update:model-value="(v: 'capture' | 'list') => { noteTab = v; onNoteTab(v) }"
+							/>
 							<template v-if="noteTab === 'capture'">
 								<span class="note-head-spacer" />
 								<el-input v-model="capName" size="small" :placeholder="`note-${new Date().toISOString().slice(0, 10)}`" class="note-name-input" />
@@ -567,8 +575,8 @@ onUnmounted(() => {
 							<div v-if="capMsg" class="sc-msg">{{ capMsg }}</div>
 						</template>
 						<template v-else>
-							<div v-if="noteListLoading" class="state">{{ t('common.loading') }}</div>
-							<div v-else-if="noteList.length === 0" class="state">{{ t('caselog.noteListEmpty') }}</div>
+							<el-empty v-if="!noteListLoading && noteList.length === 0" :description="t('caselog.noteListEmpty')" />
+							<div v-else-if="noteListLoading" v-loading="true" style="min-height: 80px" />
 							<div v-else class="note-list">
 								<div v-for="n in noteList" :key="n.name" class="note-row" @click="openCaptured(n.name)">
 									<FileText :size="13" class="note-row-ico" />

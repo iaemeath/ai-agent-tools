@@ -161,14 +161,13 @@ onUnmounted(() => {
     <!-- Left: directory browser -->
     <div class="fe-left" :style="{ width: leftWidth + 'px', flexShrink: 0 }">
       <!-- Breadcrumb -->
-      <div class="fe-breadcrumb">
-        <template v-for="(crumb, i) in breadcrumbs" :key="crumb.path">
-          <span v-if="i > 0" class="crumb-sep">/</span>
+      <el-breadcrumb separator="/" class="fe-breadcrumb">
+        <el-breadcrumb-item v-for="(crumb, i) in breadcrumbs" :key="crumb.path">
           <span class="crumb" :class="{ active: i === breadcrumbs.length - 1 }" @click="goToBreadcrumb(crumb.path)">
             {{ crumb.label }}
           </span>
-        </template>
-      </div>
+        </el-breadcrumb-item>
+      </el-breadcrumb>
 
       <div v-if="dirLoading" class="fe-state">{{ t('common.loading') }}</div>
       <div v-else-if="dirError" class="fe-state fe-error">{{ dirError }}</div>

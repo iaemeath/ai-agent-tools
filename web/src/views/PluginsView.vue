@@ -6,6 +6,7 @@ import { api } from '../api';
 import PluginCard from '../components/PluginCard.vue';
 import FileExplorer from '../components/FileExplorer.vue';
 import MarkdownView from '../components/MarkdownView.vue';
+import SplitPane from '../components/SplitPane.vue';
 import { useTool } from '../stores/tool';
 import { useDragOrder } from '../composables/useDragOrder';
 import type {
@@ -86,16 +87,12 @@ onMounted(async () => {
 	compDrag.loadOrder();
 	await loadProjects();
 	await reload();
-	window.addEventListener('ai-agent-tools:reload', reload);
-	window.addEventListener('ai-agent-tools:tool-change', onToolChange);
-	window.addEventListener('mousemove', onCompDrag);
-	window.addEventListener('mouseup', stopCompDrag);
+	window.addEventListener('ai-tools:reload', reload);
+	window.addEventListener('ai-tools:tool-change', onToolChange);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-agent-tools:reload', reload);
-	window.removeEventListener('ai-agent-tools:tool-change', onToolChange);
-	window.removeEventListener('mousemove', onCompDrag);
-	window.removeEventListener('mouseup', stopCompDrag);
+	window.removeEventListener('ai-tools:reload', reload);
+	window.removeEventListener('ai-tools:tool-change', onToolChange);
 });
 
 const allPlugins = computed(() => overview.value?.items.filter((i) => i.kind === 'plugin') ?? []);
@@ -258,27 +255,12 @@ function switchTab(tab: TabKind) {
 // ---- Draggable splitter for component-view left/right panes ----
 // Initial width matches the other split views: 30% of viewport, clamped [260, 40%].
 const compListWidth = ref(Math.min(window.innerWidth * 0.4, Math.max(260, window.innerWidth * 0.3)));
-const compDragging = ref(false);
 
-// Track drag origin so width changes by mouse delta, not absolute clientX
-// (which includes the sidebar width and causes a rightward jump on grab).
-let compDragStartX = 0;
-let compDragStartWidth = 0;
-function startCompDrag(e: MouseEvent) {
-	e.preventDefault();
-	compDragging.value = true;
-	compDragStartX = e.clientX;
-	compDragStartWidth = compListWidth.value;
-}
-function onCompDrag(e: MouseEvent) {
-	if (!compDragging.value) return;
-	const min = 180;
-	const max = window.innerWidth * 0.6;
-	compListWidth.value = Math.min(max, Math.max(min, compDragStartWidth + (e.clientX - compDragStartX)));
-}
-function stopCompDrag() {
-	compDragging.value = false;
-}
+/** el-segmented options for the kind switcher (disabled when the plugin lacks the kind). */
+const kindOptions = computed(() => [
+	{ label: '📁 ' + t('plugin.filesTab'), value: 'files' },
+	...KIND_TABS.map((kind) => ({ label: t(KIND_LABELS[kind]), value: kind, disabled: !availableKinds.value.has(kind) })),
+]);
 
 async function openInExplorer(p: ToolInstance) {
 	try {
@@ -319,12 +301,11 @@ async function openInExplorer(p: ToolInstance) {
       </el-select>
     </div>
 
-    <div v-if="loading" class="state">{{ t('common.loading') }}</div>
-    <el-alert v-else-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
-    <div v-else-if="plugins.length === 0" class="state">{{ t('plugin.empty') }}</div>
+    <el-alert v-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
+    <el-empty v-else-if="!loading && plugins.length === 0 && !selectedPlugin" :description="t('plugin.empty')" />
 
     <!-- List mode: card grid grouped by marketplace -->
-    <template v-else-if="!selectedPlugin">
+    <template v-else-if="!selectedPlugin" v-loading="loading">
       <section v-for="[mp, list] in marketplaceGroups" :key="mp" class="group">
         <div class="group-head">
           <h2 class="group-title">{{ t('plugin.groupMarketplace') }} — {{ mp }}</h2>
@@ -362,27 +343,19 @@ async function openInExplorer(p: ToolInstance) {
           <el-tag v-if="detailData.version" size="small" type="info">v{{ detailData.version }}</el-tag>
         </span>
 
-        <!-- Kind tab buttons (inline, after name) -->
-        <span v-if="detailData && !detailLoading" class="kind-tabs">
-          <el-button
-            size="small"
-            :type="activeTab === 'files' ? 'primary' : 'default'"
-            @click="switchTab('files')"
-          >📁 {{ t('plugin.filesTab') }}</el-button>
-          <el-button
-            v-for="kind in KIND_TABS"
-            :key="kind"
-            size="small"
-            :type="activeTab === kind ? 'primary' : 'default'"
-            :disabled="!availableKinds.has(kind)"
-            @click="switchTab(kind)"
-          >{{ t(KIND_LABELS[kind]) }}</el-button>
-        </span>
+        <!-- Kind switcher (inline, after name) -->
+        <el-segmented
+          v-if="detailData && !detailLoading"
+          :model-value="activeTab"
+          :options="kindOptions"
+          size="small"
+          @change="(v: string | number | boolean) => switchTab(v as TabKind)"
+        />
 
         <el-button v-if="detailData" text :icon="FolderOpened" size="small" class="open-btn" @click="openInExplorer(selectedPlugin!)">{{ t('plugin.openInExplorer') }}</el-button>
       </div>
 
-      <div v-if="detailLoading" class="state">{{ t('common.loading') }}</div>
+      <div v-if="detailLoading" v-loading="true" class="state" style="min-height: 120px" />
 
       <!-- Tab content: file explorer -->
       <FileExplorer
@@ -393,9 +366,16 @@ async function openInExplorer(p: ToolInstance) {
       />
 
       <!-- Tab content: component list + detail (left-right split, draggable splitter) -->
-      <div v-else-if="detailData && activeTab !== 'files'" class="component-view">
+      <SplitPane
+        v-else-if="detailData && activeTab !== 'files'"
+        v-model="compListWidth"
+        :min="180"
+        :max-ratio="0.6"
+        class="component-view"
+      >
         <!-- Left: component cards -->
-        <div class="comp-list-pane" :style="{ width: compListWidth + 'px', flexShrink: 0 }">
+        <template #left>
+        <div class="comp-list-pane">
           <div
             v-for="c in tabComponents"
             :key="c.name"
@@ -413,13 +393,10 @@ async function openInExplorer(p: ToolInstance) {
           </div>
           <div v-if="tabComponents.length === 0" class="state">{{ t('plugin.noComponents') }}</div>
         </div>
-
-        <!-- Draggable splitter -->
-        <div class="comp-splitter" :class="{ active: compDragging }" @mousedown="startCompDrag">
-          <div class="comp-splitter-handle"></div>
-        </div>
+        </template>
 
         <!-- Right: component detail -->
+        <template #right>
         <div class="comp-detail-pane">
           <div v-if="componentLoading" class="state">{{ t('common.loading') }}</div>
           <template v-else-if="selectedComponent">
@@ -438,7 +415,8 @@ async function openInExplorer(p: ToolInstance) {
           </template>
           <div v-else class="state">{{ t('plugin.selectComponentHint') }}</div>
         </div>
-      </div>
+        </template>
+      </SplitPane>
     </div>
   </div>
 </template>
@@ -538,17 +516,8 @@ async function openInExplorer(p: ToolInstance) {
   margin-left: auto;
 }
 
-/* ---- Kind tab buttons (inline in toolbar) ---- */
-.kind-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-/* ---- Component view (left list + splitter + right detail) ---- */
+/* ---- Component view (left list + splitter + right detail; skeleton in SplitPane) ---- */
 .component-view {
-  display: flex;
   flex: 1;
   min-height: 0;
 }
@@ -564,28 +533,6 @@ async function openInExplorer(p: ToolInstance) {
 }
 .comp-list-pane > .state {
   grid-column: 1 / -1;
-}
-.comp-splitter {
-  flex: 0 0 5px;
-  cursor: col-resize;
-  background: var(--el-border-color-lighter);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s;
-}
-.comp-splitter:hover,
-.comp-splitter.active {
-  background: var(--el-color-primary-light-7);
-}
-.comp-splitter-handle {
-  width: 2px;
-  height: 32px;
-  background: var(--el-border-color);
-  border-radius: 1px;
-}
-.comp-splitter.active .comp-splitter-handle {
-  background: var(--el-color-primary);
 }
 .comp-card {
   padding: 8px 10px;

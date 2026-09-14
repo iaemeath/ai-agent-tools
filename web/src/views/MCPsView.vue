@@ -56,12 +56,12 @@ async function onToolChange() {
 onMounted(async () => {
 	drag.loadOrder();
 	await reload();
-	window.addEventListener('ai-agent-tools:reload', reload);
-	window.addEventListener('ai-agent-tools:tool-change', onToolChange);
+	window.addEventListener('ai-tools:reload', reload);
+	window.addEventListener('ai-tools:tool-change', onToolChange);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-agent-tools:reload', reload);
-	window.removeEventListener('ai-agent-tools:tool-change', onToolChange);
+	window.removeEventListener('ai-tools:reload', reload);
+	window.removeEventListener('ai-tools:tool-change', onToolChange);
 });
 
 const filtered = computed(() => {
@@ -190,7 +190,7 @@ function headerEntries(s: McpServer | null): [string, string][] {
 </script>
 
 <template>
-  <div class="mcps-view">
+  <div v-loading="loading" class="mcps-view">
     <!-- Toolbar: search — only in list mode (hidden in detail) -->
     <div v-if="!selectedServer" class="toolbar">
       <el-input
@@ -202,9 +202,8 @@ function headerEntries(s: McpServer | null): [string, string][] {
       />
     </div>
 
-    <div v-if="loading" class="state">{{ t('common.loading') }}</div>
-    <el-alert v-else-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
-    <div v-else-if="servers.length === 0" class="state">{{ t('mcp.empty') }}</div>
+    <el-alert v-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
+    <el-empty v-else-if="!loading && servers.length === 0" :description="t('mcp.empty')" />
 
     <!-- List mode: card grid grouped by scope -->
     <template v-else-if="!selectedServer">
@@ -276,7 +275,7 @@ function headerEntries(s: McpServer | null): [string, string][] {
         <el-button text :icon="ArrowLeft" @click="closeDetail">{{ t('mcp.backToList') }}</el-button>
       </div>
 
-      <div v-if="detailLoading" class="state">{{ t('common.loading') }}</div>
+      <div v-if="detailLoading" v-loading="true" class="state" style="min-height: 120px" />
       <div v-else-if="detailData" class="detail-body">
         <div class="detail-row">
           <span class="detail-label">{{ t('mcp.name') }}</span>

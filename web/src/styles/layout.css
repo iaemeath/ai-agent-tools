@@ -1,0 +1,203 @@
+/* Global layout primitives — the single source for page scaffolding, so views stop
+   copy-pasting toolbar/grid/group CSS (previously duplicated in ~15 views). Spacing,
+   color and borders all come from EP (--el-*) variables; no local literals. */
+
+/* ---- page shell ---- */
+/* Standard scrollable page. Use .page--fill instead for split workbenches that
+   manage their own internal scrolling (list/detail panes). */
+.page {
+  padding: 24px;
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+.page--fill {
+  padding: 16px 24px;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* ---- toolbar row above the content (filters + primary actions) ---- */
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.page-toolbar .spacer {
+  flex: 1;
+}
+
+/* ---- card grid (Plugins/Skills/Scripts/Projects/scenario cards…) ---- */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* ---- grouped sections inside one page (group title + its grid) ---- */
+.group + .group {
+  margin-top: 24px;
+}
+.group-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--el-text-color-secondary);
+}
+
+/* ---- inline detail header row inside a panel (back + title + actions) ---- */
+.detail-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.detail-toolbar .spacer {
+  flex: 1;
+}
+
+/* ---- split workbench chrome (Agents/Rules/Commands/Hooks/Instructions shared) ---- */
+.pane-header {
+
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 16px;
+  border-bottom: var(--el-border-color-light) solid 1px;
+  flex-shrink: 0;
+}
+.pane-title {
+
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pane-meta {
+
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  flex-shrink: 0;
+}
+.pane-body {
+
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+.state {
+
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  padding: 16px;
+}
+
+
+/* ---- split workbench chrome, round 2 (Agents/Rules/Commands/Hooks/Instructions shared) ---- */
+.pane {
+
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+
+/* ---- split workbench chrome, round 3 ---- */
+/* Agents, Rules, Commands */
+.state.small {
+padding: 8px 16px; font-size: 12px;
+}
+/* Agents, Rules, Commands, Hooks */
+.state.center {
+display: flex; align-items: center; justify-content: center; height: 100%;
+}
+/* Agents, Rules, Commands, Hooks */
+.empty-state {
+padding: 40px 16px; text-align: center;
+}
+/* Agents, Rules, Commands, Instructions */
+.pane-path {
+font-size: 11px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Agents, Rules, Commands, Instructions */
+.pane-path.clickable {
+cursor: pointer;
+}
+/* Agents, Rules, Commands, Instructions */
+.pane-path.clickable:hover {
+color: var(--el-color-primary); text-decoration: underline;
+}
+/* Agents, Rules, Commands, Hooks */
+.list-body {
+padding: 8px;
+}
+/* Agents, Rules, Commands, Hooks */
+.open-btn {
+margin-left: auto;
+}
+/* Agents, Rules, Commands, Hooks */
+.group-label {
+font-size: 11px; font-weight: 600; color: var(--el-text-color-secondary); text-transform: uppercase; letter-spacing: 0.04em; padding: 12px 8px 4px;
+}
+/* Agents, Commands */
+.item-card {
+padding: 8px 10px; border-radius: 6px; cursor: pointer; background: var(--el-bg-color); border: 1px solid var(--el-border-color-lighter); transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+/* Agents, Commands */
+.item-card:hover {
+background: var(--el-fill-color-light);
+}
+/* Agents, Commands */
+.item-card.selected {
+background: var(--el-color-primary-light-9);
+}
+/* Agents, Commands */
+.item-card.dragging {
+opacity: 0.4;
+}
+/* Agents, Commands */
+.item-card.drag-over {
+border-color: var(--el-color-primary); border-style: dashed;
+}
+/* Agents, Commands */
+.item-name {
+font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Agents, Commands */
+.item-desc {
+font-size: 11px; color: var(--el-text-color-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Agents, Commands */
+.item-meta {
+font-size: 10px; color: var(--el-text-color-placeholder); margin-top: 2px;
+}
+/* Agents, Rules, Commands, Instructions */
+.header-actions {
+margin-left: auto; display: flex; align-items: center; gap: 8px;
+}
+/* Agents, Rules, Commands, Instructions */
+.edit-mode {
+display: flex; flex-direction: column; height: 100%;
+}
+/* Agents, Rules, Commands, Instructions */
+.dirty-hint {
+font-size: 12px; color: var(--el-color-warning);
+}
+/* Agents, Rules, Commands, Instructions */
+.md-textarea {
+flex: 1; min-height: 0;
+}
+/* Agents, Rules, Commands, Instructions */
+.md-textarea :deep(.el-textarea__inner) {
+height: 100%; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.6; resize: none;
+}
+
