@@ -1,5 +1,5 @@
 export default {
-	'app.name': 'AI Agent Tools',
+	'app.name': 'AI Tools',
 	'app.tagline': '',
 	'nav.projects': 'Projects',
 	'nav.instructions': 'Instructions',
@@ -15,7 +15,6 @@ export default {
 	'nav.groupReview': 'Review',
 	'nav.groupScripts': "Scripts",
 	'nav.scripts': "Scripts",
-	'nav.settings': 'Settings',
 	'scripts.runDur': "running for {d}",
 	'scripts.warnEntry': "Entry file must be one of the provided filenames",
 	'scripts.pageOnlyHint': "Page-only script, nothing to start",
@@ -41,7 +40,7 @@ export default {
 	'scripts.statusArgsOut': "Status args output",
 	'scripts.new': "New Script",
 	'scripts.back': "Back",
-	'scripts.rootHint': "Scripts root ~/.ai-agent-tools/scripts — one directory per script, drop in to register",
+	'scripts.rootHint': "Scripts root ~/.ai-tools/scripts — one directory per script, drop in to register",
 	'scripts.empty': "No script cards yet",
 	'scripts.emptySub': "Create one via \"New Script\" by pasting code; or drop a directory containing script.json into the scripts root and refresh",
 	'scripts.noDesc': "(no description)",

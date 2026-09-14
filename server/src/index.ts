@@ -1,4 +1,4 @@
-// ai-agent-tools server entry — Hono app serving /api/* and (in production) the Vue build.
+// ai-tools server entry — Hono app serving /api/* and (in production) the Vue build.
 
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
@@ -14,7 +14,6 @@ import { commands } from './routes/commands.js';
 import { agents } from './routes/agents.js';
 import { hooks } from './routes/hooks.js';
 import { mcps } from './routes/mcps.js';
-import { settings } from './routes/settings.js';
 import { skills } from './routes/skills.js';
 import { tools } from './routes/tools.js';
 import { hosts } from './routes/hosts.js';
@@ -61,7 +60,6 @@ app.route('/api/commands', commands);
 app.route('/api/agents', agents);
 app.route('/api/hooks', hooks);
 app.route('/api/mcps', mcps);
-app.route('/api/settings', settings);
 
 // Static frontend (production). In dev, Vite serves the frontend on :5173 and proxies /api here.
 // web-assets resolves files from SEA-embedded assets (single-exe builds) or the web/dist
@@ -70,7 +68,7 @@ serveWebDist(app, path.resolve(here(), '../../web/dist'));
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port }, ({ port }) => {
-	console.log(`ai-agent-tools server: http://localhost:${port}  (api at /api/*)`);
+	console.log(`ai-tools server: http://localhost:${port}  (api at /api/*)`);
 	// Desktop-app feel for the exe: once listening, open the default browser at the app.
 	// SEA builds only (dev runs use vite on :5173 and must not pop a browser); CCC_NO_OPEN=1
 	// opts out for headless/service use. NB: `start ""` — the empty title arg, else cmd

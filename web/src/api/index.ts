@@ -159,11 +159,6 @@ export const api = {
 		getJson<{ name: string; raw: string; ext: string }>(
 			`/api/plugins/${encodeURIComponent(name)}/file-content?subpath=${encodeURIComponent(subpath)}&project=${encodeURIComponent(project ?? 'null')}${toolQ(tool)}`,
 		),
-	getSettings: (tool?: ToolId) =>
-		getJson<{ sourceFile: string; values: Record<string, unknown> }>(
-			`/api/settings${tool && tool !== 'claude' ? `?tool=${tool}` : ''}`,
-		),
-
 	// ---- Host management (always LOCAL — never inject X-Host) ----
 	listHosts: () =>
 		getJson<{ hosts: HostSummary[] }>('/api/hosts', { injectHost: false }),

@@ -1,5 +1,5 @@
 export default {
-	'app.name': 'AI Agent Tools',
+	'app.name': 'AI Tools',
 	'app.tagline': '',
 	'nav.projects': '项目',
 	'nav.instructions': '指令',
@@ -15,7 +15,6 @@ export default {
 	'nav.groupReview': '复盘',
 	'nav.groupScripts': "脚本",
 	'nav.scripts': "脚本",
-	'nav.settings': '设置',
 	'scripts.runDur': "已运行 {d}",
 	'scripts.warnEntry': "入口文件必须是已填文件名之一",
 	'scripts.pageOnlyHint': "纯页面脚本，无需启停",
@@ -41,7 +40,7 @@ export default {
 	'scripts.statusArgsOut': "状态参数输出",
 	'scripts.new': "新建脚本",
 	'scripts.back': "返回",
-	'scripts.rootHint': "脚本根目录 ~/.ai-agent-tools/scripts — 一脚本一目录，放入即注册",
+	'scripts.rootHint': "脚本根目录 ~/.ai-tools/scripts — 一脚本一目录，放入即注册",
 	'scripts.empty': "还没有脚本卡片",
 	'scripts.emptySub': "点击「新建脚本」粘贴代码创建；或把含 script.json 的脚本目录放入脚本根目录后刷新",
 	'scripts.noDesc': "（无描述）",
