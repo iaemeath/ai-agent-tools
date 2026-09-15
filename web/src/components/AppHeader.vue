@@ -29,7 +29,6 @@ const PAGE_KEYS: Record<string, [string, string]> = {
 	mcps: ['page.mcps.title', 'page.mcps.subtitle'],
 	settings: ['page.settings.title', 'page.settings.subtitle'],
 	hosts: ['page.hosts.title', 'page.hosts.subtitle'],
-	caselog: ['page.caselog.title', 'page.caselog.subtitle'],
 };
 const titleKey = computed(() => PAGE_KEYS[route.path.split('/')[1]]?.[0] ?? 'page.placeholder.title');
 const subtitleKey = computed(() => PAGE_KEYS[route.path.split('/')[1]]?.[1] ?? '');

@@ -1,7 +1,6 @@
-// data-dir — the app's own data home (~/.ai-tools): scripts cards, hosts registry and
-// the caselog KB all live here. One-time per-item rename from the pre-rename locations
-// (~/.ai-agent-tools/scripts|hosts.json, ~/.knowledge) so existing installs keep their
-// data. Per-item (not whole-dir) so partially-migrated states converge. Best-effort:
+// data-dir — the app's own data home (~/.ai-tools): the hosts registry lives here.
+// One-time rename from the pre-rename location (~/.ai-agent-tools/hosts.json) so
+// existing installs keep their data. Best-effort:
 // if a move fails we just fall back to a fresh dir (same spirit as the hosts registry's
 // legacy ~/.ccc-ui migration).
 
@@ -19,11 +18,8 @@ export function dataRoot(): string {
 		try {
 			fs.mkdirSync(root, { recursive: true });
 			const home = os.homedir();
-			// scripts cards (whole scripts/ dir) + hosts registry file
-			moveLegacy(path.join(home, '.ai-agent-tools', 'scripts'), path.join(root, 'scripts'));
+			// hosts registry file
 			moveLegacy(path.join(home, '.ai-agent-tools', 'hosts.json'), path.join(root, 'hosts.json'));
-			// caselog KB keeps its internal layout (knowledge.db + raw/ + notes/) under caselog/
-			moveLegacy(path.join(home, '.knowledge'), path.join(root, 'caselog'));
 		} catch {
 			// best-effort — leave legacy dirs in place, start fresh
 		}

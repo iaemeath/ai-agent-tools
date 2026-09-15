@@ -36,7 +36,6 @@ import { getFs, getHostCtx } from '../hosts/context.js';
 import { globalSkillsDir, projectSkillsDir } from '../paths.js';
 import { listPluginSkillGroups } from '../adapters/plugin.js';
 import { readSkillUsage } from '../skill-usage-reader.js';
-import { pullChunk } from '../caselog/pull.js';
 import type { Scope, Status, ToolKind } from '../model.js';
 import type { StatResult } from '../fs-backend/types.js';
 import type { PluginDetail } from '../model.js';
@@ -314,25 +313,6 @@ const COMMANDS: Record<string, (args: Args) => Promise<RemoteResult>> = {
 		const abs = safeSubPath(root, a.subpath as string | undefined);
 		if (!abs) return err(403, 'plugin not found or path outside install dir');
 		return readPreviewFile(abs);
-	},
-
-	// ---- caselog (mirror of the local sync's direct pull; caselog/sync.ts loops this) ----
-	'caselog.pull': async (a) => {
-		const wm = Number(a.watermark) || 0;
-		const sinceMs = Number(a.sinceMs) || 0;
-		const file = path.join(getHostCtx().homeDir, '.zcode', 'cli', 'db', 'db.sqlite');
-		let src: import('node:sqlite').DatabaseSync;
-		try {
-			const { DatabaseSync } = await import('node:sqlite');
-			src = new DatabaseSync(file, { readOnly: true });
-		} catch (e) {
-			return err(500, `cannot read zcode db (${(e as Error).message})`);
-		}
-		try {
-			return ok(pullChunk(src, wm, undefined, sinceMs));
-		} finally {
-			src.close();
-		}
 	},
 
 	// ---- skill file browser + promote/delete (mirror of routes/skills.ts) ----

@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
-  FolderOpen, ScrollText, Sparkles, Library, Plug, Scale, Terminal, Bot, Webhook, Server, BookCheck, NotebookPen,
+  FolderOpen, ScrollText, Sparkles, Library, Plug, Scale, Terminal, Bot, Webhook, Server,
 } from 'lucide-vue-next';
 import { useTool } from '../stores/tool';
 import type { ToolId } from '../types/tool';
@@ -39,20 +39,12 @@ const navTools = computed<NavItem[]>(() => [
 	{ index: '/commands', labelKey: 'nav.commands', icon: Terminal },
 ]);
 
-/** Group 3 — review workbench: caselog (multi-device session review) + scenarios. */
-const navReview = computed<NavItem[]>(() => [
-	{ index: '/caselog', labelKey: 'nav.caselog', icon: NotebookPen },
-	{ index: '/caselog/scenarios', labelKey: 'nav.caselogScenarios', icon: BookCheck },
-]);
-
 /** 一级菜单（el-sub-menu）：unique-opened 互斥，同时只展开一个。 */
 const navGroups = computed<NavGroup[]>(() => [
 	{ index: 'g-workspace', labelKey: 'nav.groupWorkspace', icon: Server, items: navMain.value },
 	{ index: 'g-tools', labelKey: 'nav.groupTools', icon: Plug, items: navTools.value },
-	{ index: 'g-review', labelKey: 'nav.groupReview', icon: NotebookPen, items: navReview.value },
 ]);
 
-// Full path (not first segment) so /caselog and /caselog/scenarios highlight separately.
 const activeIndex = computed(() => route.path);
 
 /** Open the submenu that contains the active route (first paint / direct URL entry). */

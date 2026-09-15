@@ -6,7 +6,7 @@
 // not 'local', so all resource requests transparently hit the selected SSH host. Host-
 // management methods pass { injectHost: false } because they operate on the LOCAL registry.
 
-import type { AgentInfo, CaselogHostStat, CaselogNote, CaselogScenario, CaselogSessionRead, CaselogSessionSummary, CaselogSyncResult, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, PluginSkillGroup, ProjectInfo, RuleInfo, Scope, SessionRead, SessionSummary, SkillUsage, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
+import type { AgentInfo, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, PluginSkillGroup, ProjectInfo, RuleInfo, Scope, SessionRead, SessionSummary, SkillUsage, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
 import { currentHost } from '../stores/host';
 
 interface HostOpts {
@@ -169,43 +169,6 @@ export const api = {
 		del<{ ok: true }>(`/api/hosts/${encodeURIComponent(id)}`, { injectHost: false }),
 	disconnectHost: (id: string) =>
 		postJson<{ ok: true }>(`/api/hosts/${encodeURIComponent(id)}/disconnect`, {}, { injectHost: false }),
-
-	// ---- caselog (personal review workbench; ALWAYS local data — never inject X-Host) ----
-	caselogHosts: () =>
-		getJson<{ hosts: string[] }>('/api/caselog/hosts', { injectHost: false }),
-	caselogSync: (host?: string) =>
-		postJson<{ results: CaselogSyncResult[] }>('/api/caselog/sync', { host: host ?? 'all' }, { injectHost: false }),
-	caselogStats: () =>
-		getJson<CaselogHostStat[]>('/api/caselog/stats', { injectHost: false }),
-	caselogSessions: (host?: string, project?: string) => {
-		const q = new URLSearchParams();
-		if (host) q.set('host', host);
-		if (project) q.set('project', project);
-		const qs = q.toString();
-		return getJson<CaselogSessionSummary[]>(`/api/caselog/sessions${qs ? `?${qs}` : ''}`, { injectHost: false });
-	},
-	caselogReadSession: (host: string, id: string) =>
-		getJson<CaselogSessionRead>(`/api/caselog/sessions/${encodeURIComponent(id)}?host=${encodeURIComponent(host)}`, { injectHost: false }),
-	caselogScenarios: () =>
-		getJson<CaselogScenario[]>('/api/caselog/scenarios', { injectHost: false }),
-	caselogSaveScenario: (body: { title: string; keywords: string; content: string; category: string; pointers: { host: string; sessionId: string; agentId: string; seqRange: string }[] }) =>
-		postJson<CaselogScenario>('/api/caselog/scenarios', body, { injectHost: false }),
-	caselogUpdateScenario: (id: string, body: { title: string; keywords: string; content: string; category: string }) =>
-		patchJson<CaselogScenario>(`/api/caselog/scenarios/${encodeURIComponent(id)}`, body, { injectHost: false }),
-	caselogPolish: (draft: { title: string; keywords: string; content: string }, context: string) =>
-		postJson<{ candidate: { title: string; keywords: string; content: string } }>('/api/caselog/llm/polish', { draft, context }, { injectHost: false }),
-	caselogDeleteScenario: (id: string) =>
-		del<{ ok: true }>(`/api/caselog/scenarios/${encodeURIComponent(id)}`, { injectHost: false }),
-	caselogNotes: () =>
-		getJson<CaselogNote[]>('/api/caselog/notes', { injectHost: false }),
-	caselogReadNote: (name: string) =>
-		getJson<{ name: string; raw: string }>(`/api/caselog/notes/${encodeURIComponent(name)}`, { injectHost: false }),
-	caselogSaveNote: (name: string, content: string) =>
-		putJson<{ ok: true }>(`/api/caselog/notes/${encodeURIComponent(name)}`, { content }, { injectHost: false }),
-	caselogDeleteNote: (name: string) =>
-		del<{ ok: true }>(`/api/caselog/notes/${encodeURIComponent(name)}`, { injectHost: false }),
-	caselogExportNotes: (name?: string) =>
-		postJson<{ copied: string[] }>('/api/caselog/notes/export', { name: name ?? null }, { injectHost: false }),
 };
 
 // ---- Host types (mirror the server's safeView) ----

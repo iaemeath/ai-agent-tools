@@ -17,7 +17,6 @@ import { mcps } from './routes/mcps.js';
 import { skills } from './routes/skills.js';
 import { tools } from './routes/tools.js';
 import { hosts } from './routes/hosts.js';
-import { caselog } from './routes/caselog.js';
 import { hostMiddleware } from './hosts/middleware.js';
 import { serveWebDist, isSeaExe } from './web-assets.js';
 
@@ -42,7 +41,6 @@ app.get('/api/health', (c) => c.json({ ok: true }));
 app.use('/api/*', hostMiddleware);
 
 app.route('/api/hosts', hosts);
-app.route('/api/caselog', caselog);
 app.route('/api/tools', tools);
 app.route('/api/plugins', plugins);
 app.route('/api/projects', projects);
