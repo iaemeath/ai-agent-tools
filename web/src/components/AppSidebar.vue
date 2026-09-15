@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import {
-  FolderOpen, ScrollText, Sparkles, Library, Plug, Scale, Terminal, Bot, Webhook, Server, BookCheck, NotebookPen, SquareTerminal,
+  FolderOpen, ScrollText, Sparkles, Library, Plug, Scale, Terminal, Bot, Webhook, Server, BookCheck, NotebookPen,
 } from 'lucide-vue-next';
 import { useTool } from '../stores/tool';
 import type { ToolId } from '../types/tool';
@@ -45,22 +45,15 @@ const navReview = computed<NavItem[]>(() => [
 	{ index: '/caselog/scenarios', labelKey: 'nav.caselogScenarios', icon: BookCheck },
 ]);
 
-/** Group 4 — scripts: local tool scripts as cards (start/stop/logs/pages). */
-const navScripts = computed<NavItem[]>(() => [
-	{ index: '/scripts', labelKey: 'nav.scripts', icon: SquareTerminal },
-]);
-
 /** 一级菜单（el-sub-menu）：unique-opened 互斥，同时只展开一个。 */
 const navGroups = computed<NavGroup[]>(() => [
 	{ index: 'g-workspace', labelKey: 'nav.groupWorkspace', icon: Server, items: navMain.value },
 	{ index: 'g-tools', labelKey: 'nav.groupTools', icon: Plug, items: navTools.value },
 	{ index: 'g-review', labelKey: 'nav.groupReview', icon: NotebookPen, items: navReview.value },
-	{ index: 'g-scripts', labelKey: 'nav.groupScripts', icon: SquareTerminal, items: navScripts.value },
 ]);
 
 // Full path (not first segment) so /caselog and /caselog/scenarios highlight separately.
-// /scripts/* collapses onto /scripts so the group item stays highlighted in detail mode.
-const activeIndex = computed(() => (route.path.startsWith('/scripts') ? '/scripts' : route.path));
+const activeIndex = computed(() => route.path);
 
 /** Open the submenu that contains the active route (first paint / direct URL entry). */
 const defaultOpeneds = computed(() => {

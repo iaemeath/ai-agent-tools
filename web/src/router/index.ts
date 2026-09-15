@@ -15,9 +15,6 @@ const routes: RouteRecordRaw[] = [
 	{ path: '/hosts', name: 'hosts', component: () => import('../views/HostsView.vue') },
 	{ path: '/caselog', name: 'caselog', component: () => import('../views/CaselogView.vue') },
 	{ path: '/caselog/scenarios', name: 'caselog-scenarios', component: () => import('../views/ScenariosView.vue') },
-	{ path: '/scripts', name: 'scripts', component: () => import('../views/ScriptsView.vue') },
-	{ path: '/scripts/new', name: 'script-new', component: () => import('../views/ScriptsView.vue') },
-	{ path: '/scripts/:id', name: 'script-detail', component: () => import('../views/ScriptDetailView.vue') },
 ];
 
 export const router = createRouter({

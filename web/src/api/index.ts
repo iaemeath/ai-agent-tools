@@ -7,7 +7,6 @@
 // management methods pass { injectHost: false } because they operate on the LOCAL registry.
 
 import type { AgentInfo, CaselogHostStat, CaselogNote, CaselogScenario, CaselogSessionRead, CaselogSessionSummary, CaselogSyncResult, CommandInfo, HookInfo, InstructionInfo, McpServer, PluginDetail, PluginSkillGroup, ProjectInfo, RuleInfo, Scope, SessionRead, SessionSummary, SkillUsage, Status, ToolContent, ToolId, ToolOverview } from '../types/tool';
-import type { ScriptCard, ScriptCreateInput, ScriptLogResult, ScriptStatusRunResult } from '../types/script';
 import { currentHost } from '../stores/host';
 
 interface HostOpts {
@@ -207,26 +206,6 @@ export const api = {
 		del<{ ok: true }>(`/api/caselog/notes/${encodeURIComponent(name)}`, { injectHost: false }),
 	caselogExportNotes: (name?: string) =>
 		postJson<{ copied: string[] }>('/api/caselog/notes/export', { name: name ?? null }, { injectHost: false }),
-
-	// ---- scripts (local script cards; child processes run locally — never inject X-Host) ----
-	listScripts: () =>
-		getJson<ScriptCard[]>('/api/scripts', { injectHost: false }),
-	createScript: (body: ScriptCreateInput) =>
-		postJson<{ ok: true; id: string }>('/api/scripts', body, { injectHost: false }),
-	getScript: (id: string) =>
-		getJson<ScriptCard & { dir: string; files: string[] }>(`/api/scripts/${encodeURIComponent(id)}`, { injectHost: false }),
-	deleteScript: (id: string) =>
-		del<{ ok: true }>(`/api/scripts/${encodeURIComponent(id)}`, { injectHost: false }),
-	startScript: (id: string) =>
-		postJson<{ ok: true }>(`/api/scripts/${encodeURIComponent(id)}/start`, {}, { injectHost: false }),
-	runScriptStatus: (id: string) =>
-		postJson<ScriptStatusRunResult>(`/api/scripts/${encodeURIComponent(id)}/status-run`, {}, { injectHost: false }),
-	stopScript: (id: string) =>
-		postJson<{ ok: true; killed: boolean }>(`/api/scripts/${encodeURIComponent(id)}/stop`, {}, { injectHost: false }),
-	scriptLog: (id: string, since: number) =>
-		getJson<ScriptLogResult>(`/api/scripts/${encodeURIComponent(id)}/log?since=${since}`, { injectHost: false }),
-	importScript: (dir: string) =>
-		postJson<{ ok: true; id: string }>(`/api/scripts/import`, { dir }, { injectHost: false }),
 };
 
 // ---- Host types (mirror the server's safeView) ----

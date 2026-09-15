@@ -18,7 +18,6 @@ import { skills } from './routes/skills.js';
 import { tools } from './routes/tools.js';
 import { hosts } from './routes/hosts.js';
 import { caselog } from './routes/caselog.js';
-import { scripts, scriptsPages } from './routes/scripts.js';
 import { hostMiddleware } from './hosts/middleware.js';
 import { serveWebDist, isSeaExe } from './web-assets.js';
 
@@ -37,11 +36,6 @@ const app = new Hono();
 
 // API
 app.get('/api/health', (c) => c.json({ ok: true }));
-
-// Local script management + script page hosting. Registered BEFORE hostMiddleware:
-// child processes always run on the local machine, so remote-host context is meaningless here.
-app.route('/api/scripts', scripts);
-app.route('/scripts-pages', scriptsPages);
 
 // Bind per-request host context (local machine vs SSH remote) for all API routes below.
 // X-Host header or ?host= selects the target host; defaults to 'local' (zero-effect).
