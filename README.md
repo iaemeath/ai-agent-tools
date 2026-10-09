@@ -1,4 +1,4 @@
-# ai-tools
+# ai-agent-tools
 
 **One web UI for all your AI coding-agent configs — Claude Code, ZCode, and beyond.**
 
@@ -47,7 +47,7 @@ npm install
 npm run dev        # API on :8787, UI on :5173
 ```
 
-Production build: `npm run build && npm start`. Single-executable build: `npm run build:exe`. App data lives under `~/.ai-tools`.
+Production build: `npm run build && npm start`. Single-executable build: `npm run build:exe`. App data lives under `~/.ai-agent-tools`.
 
 ## Status
 

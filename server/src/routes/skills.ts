@@ -55,6 +55,8 @@ skills.post('/promote', async (c) => {
 		return sendRemote(c, 'skills.promote', { name, project, tool });
 	}
 	const profile = profileOf(tool ?? 'claude');
+	// DSH skills are read-only (loaded per preset composition) — no promote.
+	if (profile.skills.readOnly) return c.json({ error: '该工具的技能为只读' }, 400);
 
 	const src = path.join(projectSkillsDir(project, profile), name);
 	const dst = path.join(globalSkillsDir(profile), name);
@@ -103,6 +105,8 @@ skills.post('/delete', async (c) => {
 		return sendRemote(c, 'skills.delete', body);
 	}
 	const profile = profileOf(body.tool ?? 'claude');
+	// DSH skills are read-only (loaded per preset composition) — no delete.
+	if (profile.skills.readOnly) return c.json({ error: '该工具的技能为只读' }, 400);
 
 	const isProject = scope === 'project';
 	if (isProject && !project) return c.json({ error: 'project required for project scope' }, 400);

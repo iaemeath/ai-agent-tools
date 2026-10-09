@@ -14,18 +14,18 @@
 import type { JsonKeyEncoding } from './mutations/jsonKey.js';
 
 /** Supported tool identifiers. */
-export type ToolId = 'claude' | 'zcode';
+export type ToolId = 'claude' | 'zcode' | 'dsh';
 
 /**
  * Plugin component type identifiers. Structurally compatible with
  * `PluginComponent['kind']` in model.ts (declared separately here to avoid a
  * circular import: profiles → model → profiles).
  */
-export type PluginComponentKind = 'skill' | 'command' | 'agent' | 'hook' | 'mcp' | 'lsp' | 'monitor';
+export type PluginComponentKind = 'skill' | 'command' | 'agent' | 'hook' | 'mcp' | 'lsp' | 'monitor' | 'tool' | 'persona' | 'group';
 
 /** Locator for the skill resource: where skills live + how their toggle map encodes. */
 export interface SkillLocator {
-	/** Directory name under configRoot / projectPrefix (e.g. 'skills'). */
+	/** Directory name under the skills root (e.g. 'skills'). */
 	dirName: string;
 	/** Marker filename inside each skill dir (e.g. 'SKILL.md'). */
 	marker: string;
@@ -33,6 +33,12 @@ export interface SkillLocator {
 	overridesKeyPath: string[];
 	/** Value encoding for the override map. */
 	overridesEncoding: JsonKeyEncoding;
+	/** When set, the global skills dir is <home>/<homeRootRelative>/<dirName> instead of
+	 *  <configRoot>/<dirName> — DSH keeps user skills in ~/.agents/skills, outside ~/.dsh. */
+	homeRootRelative?: string[];
+	/** True = no user-level toggle mechanism (DSH skills load per preset composition).
+	 *  setStatus throws; the UI hides switch/delete/promote actions. */
+	readOnly?: boolean;
 }
 
 /** Locator for the plugin resource: manifest file + enabled-key nesting + format. */
@@ -69,7 +75,7 @@ export interface PluginLocator {
  * - sqlite: ZCode       — a SQLite DB with a `session` table carrying a real `directory` column.
  */
 export type ProjectsLocator =
-	| { source: 'fs'; dirRelative: string; encoding: 'dash' }
+	| { source: 'fs'; dirRelative: string; encoding: 'dash' | 'dsh' }
 	| { source: 'sqlite'; dbRelative: string[]; table: string; pathColumn: string; timeColumn: string };
 
 /**
@@ -83,14 +89,34 @@ export type ProjectsLocator =
  *   timestamps); turn content lives in TWO sibling stores under configRoot:
  *     - rollout/model-io-<sessionId>.jsonl  — main-session model IO (no thinking)
  *     - agents/<sessionId>/agent_<id>/transcript.jsonl — subagent runs (with thinking)
+ * - claude-jsonl: per-project dash-encoded folders under configRoot/<dirRelative>,
+ *   each holding one <session-uuid>.jsonl with the FULL interleaved transcript
+ *   (user/assistant turns, thinking, tool calls). isSidechain:true lines are
+ *   Task-subagent content embedded in the same file; ai-title lines carry the
+ *   session title (field aiTitle, last one wins).
+ * - dsh-zstd: per-project encoded folders under configRoot/<dirRelative>, each holding
+ *   session-<uuid>/session.v3.jsonl.zstd — a MULTI-FRAME zstd stream (one JSON event
+ *   per frame: {type,seq,time,data}). One-phase listing only (titles from the last
+ *   session/title event); full content parsing is a later phase.
  */
-export type TranscriptLocator = {
-	source: 'zcode-transcripts';
-	/** Path segments from configRoot to the model-io rollout dir. */
-	rolloutRelative: string[];
-	/** Path segments from configRoot to the subagent transcripts dir. */
-	agentsRelative: string[];
-};
+export type TranscriptLocator =
+	| {
+			source: 'zcode-transcripts';
+			/** Path segments from configRoot to the model-io rollout dir. */
+			rolloutRelative: string[];
+			/** Path segments from configRoot to the subagent transcripts dir. */
+			agentsRelative: string[];
+	  }
+	| {
+			source: 'claude-jsonl';
+			/** Path segment from configRoot to the session-history root (e.g. 'projects'). */
+			dirRelative: string;
+	  }
+	| {
+			source: 'dsh-zstd';
+			/** Path segment from configRoot to the per-project session root (e.g. 'sessions'). */
+			dirRelative: string;
+	  };
 
 /**
  * Locator for the MCP (Model Context Protocol) server resource.
@@ -229,6 +255,9 @@ export const PROFILES: Record<ToolId, ToolProfile> = {
 			projectDir: '.',
 			projectKeyPath: ['mcpServers'],
 		},
+		// Session transcripts: <configRoot>/projects/<dash-encoded-cwd>/<session-uuid>.jsonl
+		// — one self-contained file per session (index + turns + inline Task sidechains).
+		transcripts: { source: 'claude-jsonl', dirRelative: 'projects' },
 	},
 	zcode: {
 		id: 'zcode',
@@ -285,6 +314,48 @@ export const PROFILES: Record<ToolId, ToolProfile> = {
 			rolloutRelative: ['cli', 'rollout'],
 			agentsRelative: ['cli', 'agents'],
 		},
+	},
+
+	// DSH (DeepSeek Harness) — everything is a Cordis plugin composition; there are no
+	// standalone agents/commands/hooks/rules resources (nav hides those pages). Skills
+	// live outside the config root (~/.agents/skills) and load per preset composition
+	// (no user-level toggle → read-only). Sessions are multi-frame zstd event streams
+	// under sessions/<encoded-cwd>/session-<uuid>/ (content parsing = later phase).
+	dsh: {
+		id: 'dsh',
+		label: 'DSH',
+		configDir: '.dsh',
+		projectPrefix: '.dsh',
+		settingsFile: ['settings.yaml'],
+		projects: { source: 'fs', dirRelative: 'sessions', encoding: 'dsh' },
+		skills: {
+			dirName: 'skills',
+			marker: 'SKILL.md',
+			overridesKeyPath: ['skills'],
+			overridesEncoding: SKILL_STR,
+			homeRootRelative: ['.agents'],
+			readOnly: true,
+		},
+		// Preset compositions (.agent-presets/<id>/preset.yml) — listed as read-only
+		// "plugins" via the dsh branch in the plugin adapter; components not parsed (Phase A).
+		plugins: {
+			dirRelative: ['.agent-presets'],
+			manifestFile: 'preset.yml',
+			manifestIsArray: false,
+			manifestIdField: null,
+			enabledKeyPath: ['plugins'],
+			enabledEncoding: PLUGIN_BOOL,
+			supportedComponents: [],
+		},
+		instructions: { fileName: 'AGENTS.md' },
+		mcps: {
+			userFile: ['settings.yaml'],
+			userKeyPath: ['mcpServers'],
+			projectFile: 'settings.yaml',
+			projectDir: '.',
+			projectKeyPath: ['mcpServers'],
+		},
+		transcripts: { source: 'dsh-zstd', dirRelative: 'sessions' },
 	},
 };
 

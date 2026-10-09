@@ -1,0 +1,10 @@
+{
+	"id": "ai-agent-tools",
+	"name": "ai-agent-tools",
+	"desc": "AI 编码代理配置管理（skills/plugins/MCP/规则，Config-as-SSOT；127.0.0.1:8787）",
+	"start": "node server\\dist\\index.js",
+	"open": "explorer http://localhost:8787",
+	"check": "http://localhost:8787/api/health",
+	"order": 6,
+	"builtin": true
+}

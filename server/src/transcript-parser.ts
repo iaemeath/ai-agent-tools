@@ -19,9 +19,9 @@
 // Ported from the standalone Python ETL (case-log etl.py) whose logic was verified
 // against real transcripts — behavior is intentionally identical.
 
-/** One assistant intermediate step inside a turn: reasoning or plain text. */
+/** One assistant intermediate step inside a turn: reasoning, plain text, or a non-text marker. */
 export interface TranscriptStep {
-	type: 'thinking' | 'text';
+	type: 'thinking' | 'text' | 'compaction' | 'file';
 	text: string;
 }
 
@@ -216,6 +216,23 @@ function msgTs(md: Record<string, any>): string | null {
 	return typeof t === 'number' && t > 0 ? new Date(t).toISOString() : null;
 }
 
+/** One-line description for a compaction / file marker part (rendered as a turn separator). */
+function markerText(type: 'compaction' | 'file', pd: Record<string, any>): string {
+	if (type === 'compaction') {
+		const trigger = String(pd['trigger'] ?? 'manual');
+		const tokens = pd['preCompactTokenCount'];
+		const bits = [trigger === 'auto' ? '自动' : trigger === 'manual' ? '手动' : trigger];
+		if (typeof tokens === 'number' && tokens > 0) bits.push(`压缩前 ${tokens} tokens`);
+		return `上下文压缩（${bits.join(' · ')}）`;
+	}
+	const mime = String(pd['mime'] ?? '');
+	const img = ((pd['metadata'] ?? {}) as Record<string, any>)['image'] ?? {};
+	const dim = typeof img['width'] === 'number' && typeof img['height'] === 'number'
+		? ` · ${img['width']}×${img['height']}`
+		: '';
+	return `${mime.startsWith('image/') ? '图片' : '文件'}产物 ${mime}${dim}`;
+}
+
 /**
  * message+part rows (ordered by m.sequence, p.sequence) → turns.
  * Turn model: a real user text part opens a turn; assistant parts accumulate
@@ -318,7 +335,12 @@ export function parseSqliteMessages(rows: SqliteMessageRow[]): ParsedTranscript 
 				const name = String(pd['tool'] ?? '');
 				turn.tools.push({ name, summary: toolSummary(name, state['input']), input: toolInputDump(state['input']) });
 			}
-			// step-start / step-finish / timeline: delimiters, skipped
+		}
+		// Compaction / file markers ride on either role's messages (compaction fires
+		// mid-turn; file parts mostly ride tool-result user messages) — surface both
+		// as turn markers. step-start / step-finish / timeline: delimiters, skipped.
+		if (turn && (type === 'compaction' || type === 'file')) {
+			turn.steps.push({ type, text: markerText(type, pd) });
 		}
 	}
 	endMessage();
@@ -364,39 +386,168 @@ export function parseRollout(text: string): ParsedTranscript {
 	let firstTs: string | null = null;
 	let lastTs: string | null = null;
 
-	for (const j of jsonLines(text)) {
-		nLines += 1;
-		const ts = (j['startedAt'] ?? null) as string | null;
-		if (ts) { if (firstTs === null) firstTs = ts; lastTs = ts; }
-		const req = (j['request'] ?? {}) as Record<string, any>;
-		const users = ((req['messages'] ?? []) as Record<string, any>[]).map(realUserText).filter((u): u is string => !!u);
-		const lastUser = users.length > 0 ? users[users.length - 1] : null;
-		if (lastUser !== null && !seenUsers.has(lastUser)) {
-			seenUsers.add(lastUser);
-			cur = { ts, user: lastUser, steps: [], tools: [], response: '' };
-			turns.push(cur);
-		}
-		if (cur === null) {
-			cur = { ts, user: '', steps: [], tools: [], response: '' };
-			turns.push(cur);
-		}
-		const resp = (j['response'] ?? {}) as Record<string, any>;
-		const text2 = String(resp['text'] ?? '').trim();
-		if (text2) {
-			cur.steps.push({ type: 'text', text: text2 });
-			cur.response = text2;
-		}
-		for (const tc of ((resp['toolCalls'] ?? []) as Record<string, any>[])) {
-			cur.tools.push({
-				name: String(tc['name'] ?? ''),
-				summary: toolSummary(String(tc['name'] ?? ''), tc['input']),
-				input: toolInputDump(tc['input']),
-			});
-		}
-	}
-
 	return {
 		turns,
 		stats: { lines: nLines, firstTs, lastTs, toolCalls: turns.reduce((n, x) => n + x.tools.length, 0) },
 	};
+}
+
+
+// ------------------------------------------------ 5. Claude Code session jsonl
+//
+// ~/.claude/projects/<dash-encoded-cwd>/<session-uuid>.jsonl — one JSON object per
+// line, the whole conversation (main + inline Task subagents) in ONE file:
+//   user/assistant lines carry message.content (string or block array) and are the
+//   only turn content; system/attachment lines are notices (skipped); the rest are
+//   metadata (ai-title / last-prompt / mode / permission-mode / cost-state /
+//   file-history-* / atis-latch) — skipped except ai-title, whose `aiTitle` field
+//   (last occurrence wins) names the session.
+// Block types: assistant {thinking (text in `thinking`, NOT `text`), text, tool_use};
+// user {text, tool_result} — tool_result blocks never open or populate a turn.
+// isSidechain:true lines belong to Task-subagent runs → parsed into a separate
+// sidechain transcript (no per-agent grouping key exists in this format).
+
+/** Parsed Claude session file: main flow + merged subagent (sidechain) flow + title. */
+export interface ParsedClaudeTranscript {
+	main: ParsedTranscript;
+	sidechain: ParsedTranscript;
+	/** Last ai-title.aiTitle in the file; null when absent. */
+	title: string | null;
+}
+
+/** User-text openings that are machine injections, not real input. */
+const CLAUDE_USER_SKIP_PREFIXES = [
+	'<system-reminder>',
+	'Caveat:',
+	'This session is being continued from a previous conversation',
+	'The TodoWrite tool hasn\'t been used recently',
+];
+
+/** Per-accumulator turn builder (one instance for main, one for sidechain). */
+interface ClaudeAcc {
+	transcript: ParsedTranscript;
+	cur: TranscriptTurn | null;
+	lastUser: string;
+	firstTs: string | null;
+	lastTs: string | null;
+	nLines: number;
+}
+
+function claudeAcc(): ClaudeAcc {
+	return { transcript: { turns: [], stats: { lines: 0, firstTs: null, lastTs: null, toolCalls: 0 } }, cur: null, lastUser: '', firstTs: null, lastTs: null, nLines: 0 };
+}
+
+/** Assemble the current turn (steps de-noise + last-text-as-response), zcode-parser semantics. */
+function claudeFlush(acc: ClaudeAcc): void {
+	const cur = acc.cur;
+	if (!cur) return;
+	const steps: TranscriptStep[] = [];
+	for (const s of cur.steps) {
+		const txt = s.text.trim();
+		if (!txt) continue;
+		const prev = steps[steps.length - 1];
+		if (prev && prev.type === s.type && (txt.startsWith(prev.text) || prev.text.startsWith(txt))) {
+			prev.text = txt.length > prev.text.length ? txt : prev.text;
+		} else {
+			steps.push({ type: s.type, text: txt });
+		}
+	}
+	for (let i = steps.length - 1; i >= 0; i -= 1) {
+		if (steps[i]!.type === 'text') {
+			cur.response = steps[i]!.text;
+			steps.splice(i, 1);
+			break;
+		}
+	}
+	cur.steps = steps;
+	acc.transcript.turns.push(cur);
+	acc.cur = null;
+}
+
+/** User text from one content piece → normalized turn opener, or null to skip. */
+function claudeUserPiece(piece: string): string | null {
+	const lead = piece.trimStart();
+	if (!lead) return null;
+	if (CLAUDE_USER_SKIP_PREFIXES.some((p) => lead.startsWith(p))) return null;
+	// Slash-command wrapper: collapse the tag noise to "/name args" (real user action).
+	const cmd = /<command-name>\s*(\/[^\s<]+)\s*<\/command-name>/.exec(piece);
+	if (cmd) {
+		const args = /<command-args>\s*([\s\S]*?)\s*<\/command-args>/.exec(piece);
+		return args && args[1] ? `${cmd[1]} ${args[1]}`.trim() : cmd[1];
+	}
+	if (lead.startsWith('<local-command-stdout>') || lead.startsWith('<local-command-stderr>')) return null;
+	if (/^Called the \S+ tool with the following input/.test(lead)) return null;
+	return piece.trim();
+}
+
+/** Parse one Claude session file's content (see block comment for the line model). */
+export function parseClaudeTranscript(text: string): ParsedClaudeTranscript {
+	const main = claudeAcc();
+	const side = claudeAcc();
+	let title: string | null = null;
+
+	for (const j of jsonLines(text)) {
+		const acc = j['isSidechain'] === true ? side : main;
+		acc.nLines += 1;
+		const t = j['type'] as string | undefined;
+		const ts = (j['timestamp'] ?? null) as string | null;
+		if (ts) { if (acc.firstTs === null) acc.firstTs = ts; acc.lastTs = ts; }
+
+		if (t === 'ai-title') {
+			const v = j['aiTitle'];
+			if (typeof v === 'string' && v.trim()) title = v.trim();
+			continue;
+		}
+		if (t !== 'user' && t !== 'assistant') continue;
+		const msg = (j['message'] ?? {}) as Record<string, any>;
+		const content = msg['content'];
+
+		if (t === 'user') {
+			const pieces: string[] = [];
+			if (typeof content === 'string') pieces.push(content);
+			else if (Array.isArray(content)) {
+				for (const b of content) {
+					if (b && typeof b === 'object' && b['type'] === 'text' && typeof b['text'] === 'string') pieces.push(b['text']);
+					// tool_result blocks: delivery receipts for a previous tool_use — never content.
+				}
+			}
+			const txt = pieces.map(claudeUserPiece).filter((x): x is string => x !== null).join('\n').trim();
+			if (!txt) continue;
+			// Retry replay: same prefix-merge rule as the sqlite parser.
+			if (acc.lastUser && (txt.startsWith(acc.lastUser) || acc.lastUser.startsWith(txt))) {
+				if (txt.length > acc.lastUser.length) { acc.lastUser = txt; if (acc.cur) acc.cur.user = txt; }
+				continue;
+			}
+			acc.lastUser = txt;
+			claudeFlush(acc);
+			acc.cur = { ts, user: txt, steps: [], tools: [], response: '' };
+			continue;
+		}
+
+		// assistant — only meaningful inside an open turn.
+		const turn = acc.cur;
+		if (!turn || !Array.isArray(content)) continue;
+		for (const b of content) {
+			if (!b || typeof b !== 'object') continue;
+			if (b['type'] === 'thinking') {
+				turn.steps.push({ type: 'thinking', text: String(b['thinking'] ?? '') });
+			} else if (b['type'] === 'text') {
+				turn.steps.push({ type: 'text', text: String(b['text'] ?? '') });
+			} else if (b['type'] === 'tool_use') {
+				const name = String(b['name'] ?? '');
+				turn.tools.push({ name, summary: toolSummary(name, b['input']), input: toolInputDump(b['input']) });
+			}
+		}
+	}
+	claudeFlush(main);
+	claudeFlush(side);
+	for (const acc of [main, side]) {
+		acc.transcript.stats = {
+			lines: acc.nLines,
+			firstTs: acc.firstTs,
+			lastTs: acc.lastTs,
+			toolCalls: acc.transcript.turns.reduce((n, x) => n + x.tools.length, 0),
+		};
+	}
+	return { main: main.transcript, sidechain: side.transcript, title };
 }

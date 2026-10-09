@@ -141,13 +141,13 @@ onMounted(async () => {
 	drag.loadOrder();
 	await loadProjects();
 	await reload();
-	window.addEventListener('ai-tools:reload', reload);
-	window.addEventListener('ai-tools:tool-change', onToolChange);
+	window.addEventListener('ai-agent-tools:reload', reload);
+	window.addEventListener('ai-agent-tools:tool-change', onToolChange);
 	void loadUsage();
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-tools:reload', reload);
-	window.removeEventListener('ai-tools:tool-change', onToolChange);
+	window.removeEventListener('ai-agent-tools:reload', reload);
+	window.removeEventListener('ai-agent-tools:tool-change', onToolChange);
 });
 
 const allSkills = computed(() => overview.value?.items.filter((i) => i.kind === 'skill') ?? []);
@@ -352,8 +352,7 @@ function closeDetail() {
               :skill="t_"
               :deleting="deleting === t_.name"
               :usage="skillUse(t_.name)"
-              @toggle="(s) => toggleScope(t_, s)"
-              @delete="removeSkill(t_)"
+              :readonly="tool === 'dsh'"
               @detail="showDetail(t_)"
             />
           </div>
@@ -382,6 +381,7 @@ function closeDetail() {
               :promoting="promoting === t_.name"
               :deleting="deleting === t_.name"
               :usage="skillUse(t_.name)"
+              :readonly="tool === 'dsh'"
               @toggle="(s) => toggleScope(t_, s)"
               @promote="promote(t_)"
               @delete="removeSkill(t_)"

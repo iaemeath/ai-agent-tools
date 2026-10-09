@@ -1,4 +1,4 @@
-# ai-tools
+# ai-agent-tools
 
 **一个 Web UI 管理所有 AI 编码代理的配置 —— Claude Code、ZCode，以及更多。**
 
@@ -47,7 +47,7 @@ npm install
 npm run dev        # 后端 :8787,前端 :5173
 ```
 
-生产构建:`npm run build && npm start`。单文件可执行版:`npm run build:exe`。应用数据收敛于 `~/.ai-tools`。
+生产构建:`npm run build && npm start`。单文件可执行版:`npm run build:exe`。应用数据收敛于 `~/.ai-agent-tools`。
 
 ## 状态
 

@@ -56,12 +56,12 @@ async function onToolChange() {
 onMounted(async () => {
 	drag.loadOrder();
 	await reload();
-	window.addEventListener('ai-tools:reload', reload);
-	window.addEventListener('ai-tools:tool-change', onToolChange);
+	window.addEventListener('ai-agent-tools:reload', reload);
+	window.addEventListener('ai-agent-tools:tool-change', onToolChange);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-tools:reload', reload);
-	window.removeEventListener('ai-tools:tool-change', onToolChange);
+	window.removeEventListener('ai-agent-tools:reload', reload);
+	window.removeEventListener('ai-agent-tools:tool-change', onToolChange);
 });
 
 const filtered = computed(() => {

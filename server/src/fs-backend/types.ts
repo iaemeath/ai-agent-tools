@@ -34,6 +34,8 @@ export interface FsBackend {
 	exists(path: string): Promise<boolean>;
 	/** Read a file as utf8 text. Rejects if missing/unreadable (caller decides tolerance). */
 	readFile(path: string): Promise<string>;
+	/** Read a file as raw bytes (binary-safe: DSH session zstd). Rejects if missing. */
+	readFileBytes(path: string): Promise<Buffer>;
 	/** Write text to a path (utf8). Parent dirs must already exist. */
 	writeFile(path: string, data: string): Promise<void>;
 	/**

@@ -23,6 +23,10 @@ export class LocalFs implements FsBackend {
 		return fsp.readFile(p, 'utf8');
 	}
 
+	async readFileBytes(p: string): Promise<Buffer> {
+		return fsp.readFile(p);
+	}
+
 	async writeFile(p: string, data: string): Promise<void> {
 		await fsp.writeFile(p, data, 'utf8');
 	}

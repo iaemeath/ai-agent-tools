@@ -16,6 +16,8 @@ const props = defineProps<{
 	listFn: (subpath: string) => Promise<DirResult>;
 	/** Function to read a file (subpath relative to root). Required. */
 	readFn: (subpath: string) => Promise<FileResult>;
+	/** File (root-relative) to select on first load — preferred over the auto "first .md". */
+	initialFile?: string;
 }>();
 
 const { t } = useI18n();
@@ -49,6 +51,14 @@ async function loadDir() {
 		const res = await props.listFn(currentPath.value);
 		entries.value = res.entries;
 		if (!selectedFile.value) {
+			// Prefer the caller-requested file (e.g. the exact agent/command card that was
+			// clicked); fall back to the first .md in the directory.
+			if (props.initialFile) {
+				try {
+					await loadFile(props.initialFile);
+					return;
+				} catch { /* missing/renamed — fall through */ }
+			}
 			const firstMd = res.entries.find((e) => !e.isDir && e.name.endsWith('.md'));
 			if (firstMd) {
 				const fp = currentPath.value ? `${currentPath.value}/${firstMd.name}` : firstMd.name;
@@ -199,7 +209,9 @@ onUnmounted(() => {
       <div v-else class="fe-content">
         <div class="fe-content-header">{{ selectedFile.split('/').pop() }}</div>
         <div class="fe-content-body">
-          <MarkdownView v-if="isMarkdown" :raw="fileContent" />
+          <!-- frontmatter: skill/agent/command md — official-standard fields only
+               (name + description zones, then the body; version & co. dropped) -->
+          <MarkdownView v-if="isMarkdown" :raw="fileContent" frontmatter />
           <pre v-else class="fe-pre">{{ fileContent }}</pre>
         </div>
       </div>

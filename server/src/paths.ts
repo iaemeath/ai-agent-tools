@@ -30,8 +30,15 @@ export function projectSettings(project: string, p: ToolProfile = DEFAULT_PROFIL
 	return path.join(project, p.projectPrefix, ...p.settingsFile);
 }
 
-/** Global skills dir (e.g. ~/.claude/skills/). Dir name comes from the profile locator. */
+/**
+ * Global skills dir. Default: <configRoot>/<dirName> (e.g. ~/.claude/skills/).
+ * When the locator declares homeRootRelative (DSH: ~/.agents/skills), the dir
+ * resolves from HOME instead — the skills root sits outside the config root.
+ */
 export function globalSkillsDir(p: ToolProfile = DEFAULT_PROFILE): string {
+	if (p.skills.homeRootRelative) {
+		return path.join(homeDir(), ...p.skills.homeRootRelative, p.skills.dirName);
+	}
 	return path.join(configRoot(p), p.skills.dirName);
 }
 

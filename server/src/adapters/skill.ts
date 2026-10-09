@@ -15,6 +15,7 @@ import { readFlag, writeFlag } from '../locator.js';
 import { getFs } from '../hosts/context.js';
 import type { DirentLike } from '../fs-backend/types.js';
 import type { ToolAdapter } from './types.js';
+import { parseSkillDescription } from './plugin.js';
 
 type Json = Record<string, unknown>;
 
@@ -28,34 +29,15 @@ export function writeOverride(settings: Json, name: string, status: Status, p: T
 	writeFlag(p.skills.overridesEncoding, settings, p.skills.overridesKeyPath, name, status);
 }
 
-/** Parse a SKILL.md front-matter description: (trimmed, quotes stripped) or first non-heading line. */
+/** Official skill standard: the front-matter carries exactly TWO fields we surface —
+ *  name + description; version/maturity/license/… are intentionally NOT parsed.
+ *  name comes from the directory (the standard requires front-matter `name` to equal
+ *  it, and it is the toggle/delete/promote identity key); description is read from
+ *  SKILL.md front-matter via the shared parser (single-line, quoted, and >-/| block
+ *  scalars — 114 of 331 on-disk skills use block scalars, so the naive line regex
+ *  used to leak a literal ">-" onto the card). */
 async function parseDescription(marker: string): Promise<string | null> {
-	let raw: string;
-	try {
-		raw = await getFs().readFile(marker);
-	} catch {
-		return null;
-	}
-	if (!raw.startsWith('---')) return firstNonHeadingLine(raw);
-	// Front matter: scan lines after the opening --- until the closing --- line.
-	for (const line of raw.split('\n').slice(1)) {
-		if (line.trim() === '---') break;
-		const m = line.match(/^description:\s*(.*)$/);
-		if (m) {
-			// trim_matches('"'): strip leading/trailing " chars only.
-			const cleaned = m[1].trim().replace(/^"+|"+$/g, '');
-			if (cleaned !== '') return cleaned;
-		}
-	}
-	return null;
-}
-
-function firstNonHeadingLine(raw: string): string | null {
-	for (const line of raw.split('\n')) {
-		if (line === '' || line.startsWith('#')) continue;
-		return line;
-	}
-	return null;
+	return (await parseSkillDescription(marker)) ?? null;
 }
 
 export class SkillAdapter implements ToolAdapter {
@@ -151,6 +133,7 @@ export class SkillAdapter implements ToolAdapter {
 
 	async setStatus(name: string, scope: Scope, status: Status, _ctx: ScopeCtx): Promise<void> {
 		const p = this.profile;
+		if (p.skills.readOnly) throw new Error('该工具的技能为只读（无用户级开关机制）');
 		if (scope.level === 'user') {
 			const s = await readUser(p);
 			writeOverride(s, name, status, p);

@@ -1,5 +1,5 @@
-// data-dir — the app's own data home (~/.ai-tools): the hosts registry lives here.
-// One-time rename from the pre-rename location (~/.ai-agent-tools/hosts.json) so
+// data-dir — the app's own data home (~/.ai-agent-tools): the hosts registry lives here.
+// One-time rename from the previous location (~/.ai-tools/hosts.json) so
 // existing installs keep their data. Best-effort:
 // if a move fails we just fall back to a fresh dir (same spirit as the hosts registry's
 // legacy ~/.ccc-ui migration).
@@ -10,16 +10,16 @@ import path from 'node:path';
 
 let migrated = false;
 
-/** The app's data root: ~/.ai-tools. Performs legacy-dir migration on first call. */
+/** The app's data root: ~/.ai-agent-tools. Performs legacy-dir migration on first call. */
 export function dataRoot(): string {
-	const root = path.join(os.homedir(), '.ai-tools');
+	const root = path.join(os.homedir(), '.ai-agent-tools');
 	if (!migrated) {
 		migrated = true;
 		try {
 			fs.mkdirSync(root, { recursive: true });
 			const home = os.homedir();
-			// hosts registry file
-			moveLegacy(path.join(home, '.ai-agent-tools', 'hosts.json'), path.join(root, 'hosts.json'));
+			// hosts registry file (legacy: the project was named ai-tools before the rename back)
+			moveLegacy(path.join(home, '.ai-tools', 'hosts.json'), path.join(root, 'hosts.json'));
 		} catch {
 			// best-effort — leave legacy dirs in place, start fresh
 		}

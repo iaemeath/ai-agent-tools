@@ -1,27 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Search, ArrowLeft, FolderOpened } from '@element-plus/icons-vue';
+import { useRouter } from 'vue-router';
+import { Search } from '@element-plus/icons-vue';
 import { api } from '../api';
 import PluginCard from '../components/PluginCard.vue';
-import FileExplorer from '../components/FileExplorer.vue';
-import MarkdownView from '../components/MarkdownView.vue';
-import SplitPane from '../components/SplitPane.vue';
 import { useTool } from '../stores/tool';
 import { useDragOrder } from '../composables/useDragOrder';
-import type {
-	ComponentKind, PluginComponent, PluginDetail, ProjectInfo, Scope, Status, ToolInstance, ToolOverview,
-} from '../types/tool';
+import type { ProjectInfo, Scope, Status, ToolInstance, ToolOverview } from '../types/tool';
 
 const { t } = useI18n();
+const router = useRouter();
 const { tool } = useTool();
 
 // Drag-to-reorder for the plugin list (pure UI preference, persisted to localStorage).
 const drag = useDragOrder('plugins-order');
 const { dragPath, dragOverPath } = drag;
-// Separate order store for the component list inside plugin detail (each tab sorts independently).
-const compDrag = useDragOrder('plugin-components-order');
-const { dragPath: compDragPath, dragOverPath: compDragOverPath } = compDrag;
 
 const projects = ref<ProjectInfo[]>([]);
 const overview = ref<ToolOverview | null>(null);
@@ -30,11 +24,6 @@ const loading = ref(true);
 
 const selected = ref<string | null>(null); // 'user' | project path | null (all)
 const search = ref('');
-
-// Inline detail state: when selectedPlugin is set, the list hides and the detail shows.
-const selectedPlugin = ref<ToolInstance | null>(null);
-const detailData = ref<PluginDetail | null>(null);
-const detailLoading = ref(false);
 
 // 'user' or 'all' both resolve to user-level project arg; a project path selects it.
 const projectPath = computed(() => (selected.value && selected.value !== 'user' ? selected.value : null));
@@ -75,8 +64,6 @@ async function onToolChange() {
 	selected.value = null;
 	search.value = '';
 	overview.value = null;
-	selectedPlugin.value = null;
-	detailData.value = null;
 	loading.value = true;
 	await loadProjects();
 	await reload();
@@ -84,15 +71,14 @@ async function onToolChange() {
 
 onMounted(async () => {
 	drag.loadOrder();
-	compDrag.loadOrder();
 	await loadProjects();
 	await reload();
-	window.addEventListener('ai-tools:reload', reload);
-	window.addEventListener('ai-tools:tool-change', onToolChange);
+	window.addEventListener('ai-agent-tools:reload', reload);
+	window.addEventListener('ai-agent-tools:tool-change', onToolChange);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-tools:reload', reload);
-	window.removeEventListener('ai-tools:tool-change', onToolChange);
+	window.removeEventListener('ai-agent-tools:reload', reload);
+	window.removeEventListener('ai-agent-tools:tool-change', onToolChange);
 });
 
 const allPlugins = computed(() => overview.value?.items.filter((i) => i.kind === 'plugin') ?? []);
@@ -147,120 +133,10 @@ async function toggleScope(p: ToolInstance, next: Status) {
 	}
 }
 
-// ---- Detail helpers ----
-
-function shortName(full: string): string {
-	const at = full.lastIndexOf('@');
-	return at > 0 ? full.slice(0, at) : full;
+/** Card click → route-driven detail page. */
+function openDetail(p: ToolInstance): void {
+	router.push(`/plugins/${encodeURIComponent(p.name)}`);
 }
-
-async function showDetail(p: ToolInstance) {
-	selectedPlugin.value = p;
-	detailData.value = null;
-	activeTab.value = 'files';
-	selectedComponent.value = null;
-	detailLoading.value = true;
-	try {
-		detailData.value = await api.getPluginDetail(p.name, projectPath.value, tool.value);
-	} catch (e) {
-		errorMsg.value = (e as Error).message;
-		selectedPlugin.value = null;
-	} finally {
-		detailLoading.value = false;
-	}
-}
-
-function closeDetail() {
-	selectedPlugin.value = null;
-	detailData.value = null;
-	activeTab.value = 'files';
-	selectedComponent.value = null;
-}
-
-// ---- Tab navigation (files / skill / command / agent / hook / mcp / lsp) ----
-
-type TabKind = 'files' | ComponentKind;
-const activeTab = ref<TabKind>('files');
-
-/** Component kinds in display order for the tab buttons. */
-const KIND_TABS: ComponentKind[] = ['skill', 'command', 'agent', 'hook', 'mcp', 'lsp'];
-
-/** Kind → i18n label key map. */
-const KIND_LABELS: Record<ComponentKind, string> = {
-	skill: 'plugin.kindSkill',
-	command: 'plugin.kindCommand',
-	agent: 'plugin.kindAgent',
-	hook: 'plugin.kindHook',
-	mcp: 'plugin.kindMcp',
-	lsp: 'plugin.kindLsp',
-	monitor: 'plugin.kindMonitor',
-};
-
-/** Set of kinds this plugin actually has (drives button enabled/disabled). */
-const availableKinds = computed<Set<ComponentKind>>(() => {
-	const s = new Set<ComponentKind>();
-	for (const c of detailData.value?.components ?? []) s.add(c.kind);
-	return s;
-});
-
-/** Components filtered by the active tab kind. */
-/** Group key for component ordering: per plugin + per tab (each tab sorts independently). */
-const compGroupKey = computed(() => 'comp:' + (detailData.value?.name ?? '') + ':' + activeTab.value);
-const tabComponents = computed<PluginComponent[]>(() => {
-	if (activeTab.value === 'files') return [];
-	const base = (detailData.value?.components ?? []).filter((c) => c.kind === activeTab.value);
-	return compDrag.sortByOrder(base, compDrag.orderMap.value[compGroupKey.value] ?? [], (c) => c.name);
-});
-/** Drop wrapper for the component list. */
-function compDropAt(e: DragEvent, targetName: string) {
-	compDrag.onDrop(e, compGroupKey.value, targetName, tabComponents.value.map((c) => c.name));
-}
-
-// ---- Component detail (right pane when a type tab is active) ----
-
-const selectedComponent = ref<PluginComponent | null>(null);
-const componentContent = ref('');
-const componentLoading = ref(false);
-
-/** Load the content for a selected component. For skill → read SKILL.md via file-content API. */
-async function selectComponent(c: PluginComponent) {
-	selectedComponent.value = c;
-	componentContent.value = '';
-	componentLoading.value = true;
-	try {
-		if (c.kind === 'skill') {
-			// Skills have a SKILL.md inside skills/<name>/ — read it directly.
-			const res = await api.readPluginFile(detailData.value!.name, `skills/${c.name}/SKILL.md`, projectPath.value, tool.value);
-			componentContent.value = res.raw;
-		}
-		// Other kinds (command/agent/hook/mcp/lsp) only have a name — no file to read.
-	} catch {
-		componentContent.value = '';
-	} finally {
-		componentLoading.value = false;
-	}
-}
-
-/** Auto-select first component when switching to a type tab. */
-function switchTab(tab: TabKind) {
-	activeTab.value = tab;
-	selectedComponent.value = null;
-	componentContent.value = '';
-	if (tab !== 'files') {
-		const first = (detailData.value?.components ?? []).find((c) => c.kind === tab);
-		if (first) selectComponent(first);
-	}
-}
-
-// ---- Draggable splitter for component-view left/right panes ----
-// Initial width matches the other split views: 30% of viewport, clamped [260, 40%].
-const compListWidth = ref(Math.min(window.innerWidth * 0.4, Math.max(260, window.innerWidth * 0.3)));
-
-/** el-segmented options for the kind switcher (disabled when the plugin lacks the kind). */
-const kindOptions = computed(() => [
-	{ label: '📁 ' + t('plugin.filesTab'), value: 'files' },
-	...KIND_TABS.map((kind) => ({ label: t(KIND_LABELS[kind]), value: kind, disabled: !availableKinds.value.has(kind) })),
-]);
 
 async function openInExplorer(p: ToolInstance) {
 	try {
@@ -273,8 +149,8 @@ async function openInExplorer(p: ToolInstance) {
 
 <template>
   <div class="plugins-view">
-    <!-- Toolbar: search + scope — only in list mode (hidden in detail) -->
-    <div v-if="!selectedPlugin" class="toolbar">
+    <!-- Toolbar: search + scope -->
+    <div class="toolbar">
       <el-input
         v-model="search"
         :placeholder="t('scope.searchPlaceholderPlugin')"
@@ -302,10 +178,10 @@ async function openInExplorer(p: ToolInstance) {
     </div>
 
     <el-alert v-if="errorMsg" class="state" type="error" :closable="false" :title="errorMsg" />
-    <el-empty v-else-if="!loading && plugins.length === 0 && !selectedPlugin" :description="t('plugin.empty')" />
+    <el-empty v-else-if="!loading && plugins.length === 0" :description="t('plugin.empty')" />
 
-    <!-- List mode: card grid grouped by marketplace -->
-    <template v-else-if="!selectedPlugin" v-loading="loading">
+    <!-- Card grid grouped by marketplace -->
+    <template v-else v-loading="loading">
       <section v-for="[mp, list] in marketplaceGroups" :key="mp" class="group">
         <div class="group-head">
           <h2 class="group-title">{{ t('plugin.groupMarketplace') }} — {{ mp }}</h2>
@@ -325,99 +201,13 @@ async function openInExplorer(p: ToolInstance) {
             <PluginCard
               :plugin="p"
               @toggle="(s) => toggleScope(p, s)"
-              @detail="showDetail(p)"
+              @detail="openDetail(p)"
               @open="openInExplorer(p)"
             />
           </div>
         </div>
       </section>
     </template>
-
-    <!-- Detail mode: tab navigation + content -->
-    <div v-else class="detail-panel">
-      <!-- Toolbar: back + name/version + kind tabs + open (all one row) -->
-      <div class="detail-toolbar">
-        <el-button text :icon="ArrowLeft" @click="closeDetail">{{ t('plugin.backToList') }}</el-button>
-        <span v-if="detailData" class="detail-plugin-info">
-          <span class="detail-plugin-name">{{ shortName(detailData.name) }}</span>
-          <el-tag v-if="detailData.version" size="small" type="info">v{{ detailData.version }}</el-tag>
-        </span>
-
-        <!-- Kind switcher (inline, after name) -->
-        <el-segmented
-          v-if="detailData && !detailLoading"
-          :model-value="activeTab"
-          :options="kindOptions"
-          size="small"
-          @change="(v: string | number | boolean) => switchTab(v as TabKind)"
-        />
-
-        <el-button v-if="detailData" text :icon="FolderOpened" size="small" class="open-btn" @click="openInExplorer(selectedPlugin!)">{{ t('plugin.openInExplorer') }}</el-button>
-      </div>
-
-      <div v-if="detailLoading" v-loading="true" class="state" style="min-height: 120px" />
-
-      <!-- Tab content: file explorer -->
-      <FileExplorer
-        v-else-if="detailData && activeTab === 'files'"
-        :root-label="shortName(detailData.name)"
-        :list-fn="(sp: string) => api.listPluginFiles(detailData!.name, sp, projectPath, tool)"
-        :read-fn="(sp: string) => api.readPluginFile(detailData!.name, sp, projectPath, tool)"
-      />
-
-      <!-- Tab content: component list + detail (left-right split, draggable splitter) -->
-      <SplitPane
-        v-else-if="detailData && activeTab !== 'files'"
-        v-model="compListWidth"
-        :min="180"
-        :max-ratio="0.6"
-        class="component-view"
-      >
-        <!-- Left: component cards -->
-        <template #left>
-        <div class="comp-list-pane">
-          <div
-            v-for="c in tabComponents"
-            :key="c.name"
-            class="comp-card"
-            :class="{ selected: selectedComponent?.name === c.name, dragging: compDragPath === c.name, 'drag-over': compDragOverPath === c.name && compDragPath !== c.name }"
-            draggable="true"
-            @dragstart="compDrag.onDragStart($event, c.name)"
-            @dragover="compDrag.onDragOver($event, c.name)"
-            @drop="compDropAt($event, c.name)"
-            @dragend="compDrag.onDragEnd"
-            @click="selectComponent(c)"
-          >
-            <div class="comp-card-name">{{ c.name }}</div>
-            <div v-if="c.detail" class="comp-card-desc" :title="c.detail">{{ c.detail }}</div>
-          </div>
-          <div v-if="tabComponents.length === 0" class="state">{{ t('plugin.noComponents') }}</div>
-        </div>
-        </template>
-
-        <!-- Right: component detail -->
-        <template #right>
-        <div class="comp-detail-pane">
-          <div v-if="componentLoading" class="state">{{ t('common.loading') }}</div>
-          <template v-else-if="selectedComponent">
-            <div class="comp-detail-header">{{ selectedComponent.name }}</div>
-            <div class="comp-detail-body">
-              <!-- skill: render SKILL.md content -->
-              <MarkdownView v-if="selectedComponent.kind === 'skill' && componentContent" :raw="componentContent" />
-              <!-- no content loaded (non-skill kinds have no file) -->
-              <div v-else-if="selectedComponent.kind !== 'skill'" class="comp-name-only">
-                <p class="comp-name-only-hint">{{ selectedComponent.name }}</p>
-                <p class="comp-name-only-desc" v-if="selectedComponent.detail">{{ selectedComponent.detail }}</p>
-              </div>
-              <!-- skill but content failed to load -->
-              <div v-else class="state">{{ t('plugin.contentUnavailable') }}</div>
-            </div>
-          </template>
-          <div v-else class="state">{{ t('plugin.selectComponentHint') }}</div>
-        </div>
-        </template>
-      </SplitPane>
-    </div>
   </div>
 </template>
 
@@ -428,6 +218,7 @@ async function openInExplorer(p: ToolInstance) {
   flex-direction: column;
   height: 100%;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 .toolbar {
   display: flex;
@@ -482,132 +273,5 @@ async function openInExplorer(p: ToolInstance) {
   outline: 2px dashed var(--el-color-primary);
   outline-offset: 2px;
   border-radius: 8px;
-}
-
-/* ---- Inline detail panel ---- */
-.detail-panel {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  /* Fill edge-to-edge: cancel .plugins-view's 24px side padding so the inner split
-     lines up with the other split views. Vertical position unchanged. */
-  margin: 0 -24px;
-}
-.detail-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  flex-shrink: 0;
-  /* Inset toolbar content since .detail-panel now spans full width. */
-  padding: 0 24px;
-}
-.detail-plugin-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.detail-plugin-name {
-  font-size: 15px;
-  font-weight: 600;
-}
-.open-btn {
-  margin-left: auto;
-}
-
-/* ---- Component view (left list + splitter + right detail; skeleton in SplitPane) ---- */
-.component-view {
-  flex: 1;
-  min-height: 0;
-}
-.comp-list-pane {
-  overflow-y: auto;
-  /* 16px horizontal padding matches the card-to-sidebar distance of the other split
-     views. The pane is edge-to-edge (detail-panel cancels .plugins-view padding). */
-  padding: 8px 16px;
-  display: grid;
-  gap: 6px;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  align-content: start;
-}
-.comp-list-pane > .state {
-  grid-column: 1 / -1;
-}
-.comp-card {
-  padding: 8px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-lighter);
-  /* Uniform height: cards with and without a description render the same size. */
-  min-height: 52px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
-}
-.comp-card.dragging {
-  opacity: 0.4;
-}
-.comp-card.drag-over {
-  outline: 2px dashed var(--el-color-primary);
-  outline-offset: -2px;
-}
-.comp-card:hover {
-  background: var(--el-fill-color-light);
-}
-.comp-card.selected {
-  background: var(--el-color-primary-light-9);
-}
-.comp-card-name {
-  font-size: 13px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.comp-card-desc {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.comp-detail-pane {
-  flex: 1;
-  background: var(--el-bg-color);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-width: 0;
-}
-.comp-detail-header {
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  font-size: 13px;
-  font-weight: 600;
-  font-family: 'Consolas', 'Monaco', monospace;
-  background: var(--el-fill-color-blank);
-}
-.comp-detail-body {
-  flex: 1;
-  overflow: auto;
-  padding: 16px;
-}
-.comp-name-only {
-  text-align: center;
-  padding: 40px 16px;
-}
-.comp-name-only-hint {
-  font-size: 16px;
-  font-weight: 500;
-  margin: 0 0 8px;
-}
-.comp-name-only-desc {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  margin: 0;
 }
 </style>

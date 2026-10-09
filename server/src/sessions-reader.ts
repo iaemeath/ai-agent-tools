@@ -1,25 +1,30 @@
 // Sessions reader — session-history listing + full-session reading (read-only).
 //
 // Tool-agnostic entry points (listSessions / readSession) that dispatch on the
-// profile's TranscriptLocator. Currently one modeled layout:
+// profile's TranscriptLocator. Two modeled layouts:
 //   zcode-transcripts — the sqlite session table (already located by the projects
 //   locator) is the INDEX; turn CONTENT comes from two sibling stores:
 //     rollout/model-io-<sessionId>.jsonl            main-session model IO
 //     agents/<sessionId>/agent_*/transcript.jsonl   subagent runs (with thinking)
+//   claude-jsonl — <configRoot>/projects/<dash-encoded-cwd>/<session-uuid>.jsonl
+//   holds the whole conversation per session (index title = ai-title lines; Task
+//   subagents are inline isSidechain lines, parsed into a merged sidechain flow).
 //
 // All file access goes through the FsBackend (getFs), and parsing is delegated to
 // the pure transcript-parser — so the remote-exec mirror works unchanged.
 
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { DatabaseSync } from 'node:sqlite';
 import { configRoot } from './paths.js';
+import { decodeProjectFolder } from './decode.js';
 import { getFs } from './hosts/context.js';
-import { parseAgentTranscript, parseRollout, parseSqliteMessages } from './transcript-parser.js';
-import type { ToolProfile } from './profiles.js';
+import { parseAgentTranscript, parseClaudeTranscript, parseRollout, parseSqliteMessages } from './transcript-parser.js';
+import type { ToolProfile, TranscriptLocator } from './profiles.js';
 import type { SessionFlow, SessionRead, SessionSummary } from './model.js';
 
-/** Session ids we accept from clients: sess_ + uuid-ish chars incl. underscore (defeats traversal). */
-const SESSION_ID_RE = /^sess_[A-Za-z0-9_-]+$/;
+/** Session ids we accept from clients: zcode "sess_*" or a bare UUID (claude) — defeats traversal. */
+const SESSION_ID_RE = /^(sess_[A-Za-z0-9_-]+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
 
 export function isValidSessionId(id: string): boolean {
 	return SESSION_ID_RE.test(id);
@@ -34,7 +39,10 @@ function msToIso(ms: unknown): string | null {
 /** List a project's top-level sessions (subagent children are folded into the read view). */
 export async function listSessions(profile: ToolProfile, projectPath: string): Promise<SessionSummary[]> {
 	const loc = profile.transcripts;
-	if (!loc || loc.source !== 'zcode-transcripts') return [];
+	if (!loc) return [];
+	if (loc.source === 'claude-jsonl') return listClaudeSessions(profile, loc, projectPath);
+	if (loc.source === 'dsh-zstd') return listDshSessions(profile, loc, projectPath);
+	if (loc.source !== 'zcode-transcripts') return [];
 	const proj = profile.projects;
 	if (proj.source !== 'sqlite') return [];
 	const dbPath = path.join(configRoot(profile), ...proj.dbRelative);
@@ -83,7 +91,7 @@ async function sessionHasTranscript(profile: ToolProfile, sessionId: string): Pr
 	if (!loc || loc.source !== 'zcode-transcripts') return false;
 	if (await sessionMessageCount(profile, sessionId) > 0) return true;
 	const fs = getFs();
-	if (await fs.exists(rolloutPath(profile, sessionId))) return true;
+	if (await fs.exists(rolloutPath(profile, loc, sessionId))) return true;
 	return await fs.exists(path.join(configRoot(profile), ...loc.agentsRelative, sessionId));
 }
 
@@ -109,8 +117,7 @@ async function sessionMessageCount(profile: ToolProfile, sessionId: string): Pro
 	}
 }
 
-function rolloutPath(profile: ToolProfile, sessionId: string): string {
-	const loc = profile.transcripts!;
+function rolloutPath(profile: ToolProfile, loc: Extract<TranscriptLocator, { source: 'zcode-transcripts' }>, sessionId: string): string {
 	return path.join(configRoot(profile), ...loc.rolloutRelative, `model-io-${sessionId}.jsonl`);
 }
 
@@ -193,7 +200,9 @@ async function sessionRow(profile: ToolProfile, sessionId: string): Promise<Sess
  */
 export async function readSession(profile: ToolProfile, sessionId: string): Promise<SessionRead | null> {
 	const loc = profile.transcripts;
-	if (!loc || loc.source !== 'zcode-transcripts') return null;
+	if (!loc) return null;
+	if (loc.source === 'claude-jsonl') return readClaudeSession(profile, loc, sessionId);
+	if (loc.source !== 'zcode-transcripts') return null;
 	if (!isValidSessionId(sessionId)) return null;
 
 	// Index row for the header (works for every task type, not just listed ones).
@@ -209,7 +218,7 @@ export async function readSession(profile: ToolProfile, sessionId: string): Prom
 
 /** Rollout fallback for main flows when the sqlite store has nothing (legacy). */
 async function readRolloutFlow(profile: ToolProfile, sessionId: string): Promise<SessionFlow | null> {
-	const file = rolloutPath(profile, sessionId);
+	const file = rolloutPath(profile, profile.transcripts as Extract<TranscriptLocator, { source: 'zcode-transcripts' }>, sessionId);
 	if (!(await getFs().exists(file))) return null;
 	let text: string;
 	try {
@@ -255,7 +264,8 @@ async function readSubagentFlows(profile: ToolProfile, sessionId: string): Promi
 		}
 	}
 
-	const loc = profile.transcripts!;
+	const loc = profile.transcripts;
+	if (!loc || loc.source !== 'zcode-transcripts') return out;
 	const sessDir = path.join(configRoot(profile), ...loc.agentsRelative, sessionId);
 	if (!(await getFs().exists(sessDir))) return out;
 	const fs = getFs();
@@ -303,6 +313,77 @@ async function subagentChildren(profile: ToolProfile, sessionId: string): Promis
 	}
 }
 
+/* ==================== dsh-zstd: ~/.dsh/sessions/<encoded>/session-<uuid>/session.v3.jsonl.zstd ==================== */
+
+/**
+ * Decompress a DSH multi-frame zstd stream — each frame holds ONE jsonl event line.
+ * Uses Node 24's built-in zlib zstd (experimental). Bad frames are skipped, never fatal.
+ */
+function dshDecompress(buf: Buffer): string {
+	const magic = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
+	const offsets: number[] = [];
+	for (let i = 0; i + 4 <= buf.length; i++) {
+		if (buf[i] === 0x28 && buf[i + 1] === 0xb5 && buf[i + 2] === 0x2f && buf[i + 3] === 0xfd) offsets.push(i);
+	}
+	const parts: string[] = [];
+	for (let f = 0; f < offsets.length; f++) {
+		const end = f + 1 < offsets.length ? offsets[f + 1] : buf.length;
+		try {
+			parts.push(zlib.zstdDecompressSync(buf.subarray(offsets[f], end)).toString('utf8'));
+		} catch { /* skip bad frame */ }
+	}
+	return parts.join('');
+}
+
+/** Best-effort session title: the LAST session/title event's data.title. */
+function dshTitle(text: string): string | null {
+	let title: string | null = null;
+	for (const line of text.split('\n')) {
+		if (!line.includes('session/title')) continue;
+		try {
+			const j = JSON.parse(line) as { type?: string; data?: { title?: unknown } };
+			if (j.type === 'session/title' && typeof j.data?.title === 'string' && j.data.title.trim()) {
+				title = j.data.title.trim();
+			}
+		} catch { /* skip */ }
+	}
+	return title;
+}
+
+/** DSH session list: one summary per session-<uuid>/ dir, newest mtime first. */
+async function listDshSessions(profile: ToolProfile, loc: Extract<TranscriptLocator, { source: 'dsh-zstd' }>, project: string): Promise<SessionSummary[]> {
+	const fs = getFs();
+	const folder = path.join(configRoot(profile), loc.dirRelative, project);
+	if (!(await fs.exists(folder))) return [];
+	const out: SessionSummary[] = [];
+	for (const entry of await fs.readDir(folder)) {
+		if (!entry.isDirectory || !entry.name.startsWith('session-')) continue;
+		const id = entry.name.slice('session-'.length);
+		if (!isValidSessionId(id)) continue;
+		const zfile = path.join(folder, entry.name, 'session.v3.jsonl.zstd');
+		if (!(await fs.exists(zfile))) continue;
+		let title: string | null = null;
+		let timeUpdated: string | null = null;
+		try {
+			title = dshTitle(dshDecompress(await fs.readFileBytes(zfile)));
+		} catch { /* unreadable — list without title */ }
+		try {
+			timeUpdated = new Date((await fs.stat(zfile)).mtimeMs).toISOString();
+		} catch { /* ignore */ }
+		out.push({
+			id,
+			title,
+			taskType: null,
+			parentId: null,
+			timeCreated: null,
+			timeUpdated,
+			hasTranscript: true,
+		});
+	}
+	out.sort((a, b) => (b.timeUpdated ?? '').localeCompare(a.timeUpdated ?? ''));
+	return out;
+}
+
 /** metadata.json description next to a subagent transcript, when present. */
 async function agentDescription(agentDir: string): Promise<string> {
 	try {
@@ -313,4 +394,111 @@ async function agentDescription(agentDir: string): Promise<string> {
 	} catch {
 		return '';
 	}
+}
+
+/* ==================== claude-jsonl: ~/.claude/projects/<encoded>/<uuid>.jsonl ==================== */
+
+/**
+ * Resolve the encoded project folder for a list request. The UI passes the encoded
+ * folder name (Projects page navigates with p.encoded); a decoded real path is also
+ * accepted by matching decodeProjectFolder() (lossy decode → best-effort).
+ */
+async function claudeProjectFolder(profile: ToolProfile, loc: Extract<TranscriptLocator, { source: 'claude-jsonl' }>, project: string): Promise<string | null> {
+	const fs = getFs();
+	const root = path.join(configRoot(profile), loc.dirRelative);
+	if (!(await fs.exists(root))) return null;
+	const direct = path.join(root, project);
+	if (await fs.exists(direct)) return direct;
+	for (const entry of await fs.readDir(root)) {
+		if (!entry.isDirectory) continue;
+		if ((await decodeProjectFolder(entry.name)) === project) return path.join(root, entry.name);
+	}
+	return null;
+}
+
+/** Claude session list: one summary per <session-uuid>.jsonl, newest activity first. */
+async function listClaudeSessions(profile: ToolProfile, loc: Extract<TranscriptLocator, { source: 'claude-jsonl' }>, project: string): Promise<SessionSummary[]> {
+	const folder = await claudeProjectFolder(profile, loc, project);
+	if (!folder) return [];
+	const fs = getFs();
+	const out: SessionSummary[] = [];
+	for (const entry of await fs.readDir(folder)) {
+		if (!entry.isFile || !entry.name.endsWith('.jsonl')) continue;
+		const id = entry.name.slice(0, -'.jsonl'.length);
+		if (!isValidSessionId(id)) continue;
+		const file = path.join(folder, entry.name);
+		let parsed;
+		try {
+			parsed = parseClaudeTranscript(await fs.readFile(file));
+		} catch {
+			continue; // unreadable transcript — skip, never fail the whole list
+		}
+		out.push({
+			id,
+			title: parsed.title,
+			taskType: null,
+			parentId: null,
+			timeCreated: parsed.main.stats.firstTs ?? parsed.sidechain.stats.firstTs,
+			timeUpdated: parsed.main.stats.lastTs ?? parsed.sidechain.stats.lastTs,
+			hasTranscript: parsed.main.turns.length > 0 || parsed.sidechain.turns.length > 0,
+		});
+	}
+	out.sort((a, b) => (b.timeUpdated ?? '').localeCompare(a.timeUpdated ?? ''));
+	return out;
+}
+
+/**
+ * Read one Claude session: locate <encoded>/<id>.jsonl across project folders,
+ * parse main flow + merged Task-sidechain flow (no per-agent grouping key exists
+ * in this format, so inline subagent content surfaces as one subagent flow).
+ */
+async function readClaudeSession(profile: ToolProfile, loc: Extract<TranscriptLocator, { source: 'claude-jsonl' }>, sessionId: string): Promise<SessionRead | null> {
+	if (!isValidSessionId(sessionId)) return null;
+	const fs = getFs();
+	const root = path.join(configRoot(profile), loc.dirRelative);
+	if (!(await fs.exists(root))) return null;
+	for (const entry of await fs.readDir(root)) {
+		if (!entry.isDirectory) continue;
+		const file = path.join(root, entry.name, `${sessionId}.jsonl`);
+		if (!(await fs.exists(file))) continue;
+		let parsed;
+		try {
+			parsed = parseClaudeTranscript(await fs.readFile(file));
+		} catch {
+			return null;
+		}
+		if (parsed.main.turns.length === 0 && parsed.sidechain.turns.length === 0) return null;
+		const summary: SessionSummary = {
+			id: sessionId,
+			title: parsed.title,
+			taskType: null,
+			parentId: null,
+			timeCreated: parsed.main.stats.firstTs ?? parsed.sidechain.stats.firstTs,
+			timeUpdated: parsed.main.stats.lastTs ?? parsed.sidechain.stats.lastTs,
+			hasTranscript: true,
+		};
+		const main: SessionFlow | null = parsed.main.turns.length
+			? {
+				id: `${sessionId}__main`,
+				kind: 'main',
+				description: parsed.main.turns[0]?.user.slice(0, 60) ?? '',
+				sourcePath: file,
+				turns: parsed.main.turns,
+				stats: parsed.main.stats,
+			}
+			: null;
+		const subagents: SessionFlow[] = parsed.sidechain.turns.length
+			? [{
+				id: `${sessionId}__sidechain`,
+				kind: 'subagent',
+				description: 'Task 子代理（内联合并）',
+				sourcePath: file,
+				startedAt: parsed.sidechain.stats.firstTs,
+				turns: parsed.sidechain.turns,
+				stats: parsed.sidechain.stats,
+			}]
+			: [];
+		return { session: summary, main, subagents };
+	}
+	return null;
 }

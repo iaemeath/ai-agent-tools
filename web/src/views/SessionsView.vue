@@ -66,10 +66,10 @@ async function reload() {
 
 onMounted(async () => {
 	await reload();
-	window.addEventListener('ai-tools:tool-change', reload);
+	window.addEventListener('ai-agent-tools:tool-change', reload);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-tools:tool-change', reload);
+	window.removeEventListener('ai-agent-tools:tool-change', reload);
 });
 watch(() => [project.value, sessionId.value], reload);
 

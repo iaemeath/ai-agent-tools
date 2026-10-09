@@ -12,6 +12,8 @@ const props = defineProps<{
 	deleting?: boolean;
 	/** Skill-tool invocation count from transcripts; undefined = stats unavailable (hide badge). */
 	usage?: number;
+	/** True = the tool has no user-level toggle/delete mechanism (DSH) — hide actions. */
+	readonly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -58,7 +60,7 @@ function stop(e: Event) {
     </div>
     <div class="card-desc">{{ skill.description ?? '—' }}</div>
 
-    <div class="card-foot">
+    <div v-if="!readonly" class="card-foot">
       <!-- Left → right: switch, then more menu. -->
       <el-switch
         :model-value="isEnabled"

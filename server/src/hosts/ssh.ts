@@ -46,6 +46,11 @@ export class SshFs implements FsBackend {
 		return buf.toString('utf8');
 	}
 
+	async readFileBytes(p: string): Promise<Buffer> {
+		// Binary read (DSH session zstd): same SFTP fetch, no utf8 decode.
+		return this.p<Buffer>((cb) => this.session.sftp.readFile(this.n(p), cb));
+	}
+
 	async writeFile(p: string, data: string): Promise<void> {
 		await this.p<void>((cb) => this.session.sftp.writeFile(this.n(p), data, 'utf8', cb));
 	}

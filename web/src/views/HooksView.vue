@@ -68,12 +68,12 @@ onMounted(async () => {
 	leftWidth.value = Math.min(window.innerWidth * 0.4, Math.max(260, window.innerWidth * 0.3));
 	drag.loadOrder();
 	await reload();
-	window.addEventListener('ai-tools:reload', reload);
-	window.addEventListener('ai-tools:tool-change', reload);
+	window.addEventListener('ai-agent-tools:reload', reload);
+	window.addEventListener('ai-agent-tools:tool-change', reload);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-tools:reload', reload);
-	window.removeEventListener('ai-tools:tool-change', reload);
+	window.removeEventListener('ai-agent-tools:reload', reload);
+	window.removeEventListener('ai-agent-tools:tool-change', reload);
 });
 
 // ---- Grouping by event (each group sorted by saved drag order) ----

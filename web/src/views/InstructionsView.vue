@@ -150,12 +150,12 @@ onMounted(async () => {
 	drag.loadOrder();
 	leftWidth.value = Math.min(window.innerWidth * 0.7, Math.max(240, window.innerWidth * 0.4));
 	await reload();
-	window.addEventListener('ai-tools:reload', reload);
-	window.addEventListener('ai-tools:tool-change', reload);
+	window.addEventListener('ai-agent-tools:reload', reload);
+	window.addEventListener('ai-agent-tools:tool-change', reload);
 });
 onUnmounted(() => {
-	window.removeEventListener('ai-tools:reload', reload);
-	window.removeEventListener('ai-tools:tool-change', reload);
+	window.removeEventListener('ai-agent-tools:reload', reload);
+	window.removeEventListener('ai-agent-tools:tool-change', reload);
 });
 
 const projectItems = computed(() =>

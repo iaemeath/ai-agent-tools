@@ -29,29 +29,36 @@ function preview(text: string): string {
 	return oneLine.slice(0, 120) + (oneLine.length > 120 ? '…' : '');
 }
 
-interface ProcStep extends TranscriptStep { kind: 'thinking' | 'text'; }
+interface ProcStep extends TranscriptStep { kind: TranscriptStep['type']; /** 1-based display number within its own kind (thinking/text only). */ no?: number; }
 interface ProcRow { steps: ProcStep[]; tools: TranscriptTurn['tools']; think: number; text: number; }
 
 /**
  * Proc parts: thinking/text steps (text steps that merely duplicate the final
- * response are dropped) + tool list + aggregate counts for the summary line.
+ * response are dropped) + compaction/file markers + tool list + aggregate counts
+ * for the summary line. Thinking and text number independently (思考 #1/#2…、说明 #1/#2…).
  */
 const row = computed<ProcRow>(() => {
 	const resp = props.turn.response;
 	const steps: ProcStep[] = [];
+	let think = 0;
+	let text = 0;
 	for (const s of props.turn.steps) {
-		if (resp && (s.text === resp || resp.startsWith(s.text) || s.text.startsWith(resp))) continue;
-		steps.push({ ...s, kind: s.type });
+		if (s.type === 'thinking' || s.type === 'text') {
+			if (resp && (s.text === resp || resp.startsWith(s.text) || s.text.startsWith(resp))) continue;
+			steps.push({ ...s, kind: s.type, no: s.type === 'thinking' ? ++think : ++text });
+		} else {
+			steps.push({ ...s, kind: s.type });
+		}
 	}
 	return {
 		steps,
 		tools: props.turn.tools,
-		think: steps.filter((s) => s.kind === 'thinking').length,
-		text: steps.filter((s) => s.kind === 'text').length,
+		think,
+		text,
 	};
 });
 
-const hasProc = computed(() => row.value.think + row.value.text + row.value.tools.length > 0);
+const hasProc = computed(() => row.value.steps.length + row.value.tools.length > 0);
 
 function fmtTs(ts: string | null): string {
 	if (!ts) return '';
@@ -81,13 +88,21 @@ function fmtTs(ts: string | null): string {
 				<span class="proc-arrow">{{ procOpen ? '▾' : '▸' }}</span>
 			</button>
 			<template v-if="procOpen">
-				<details v-for="(s, si) in row.steps" :key="'s' + si" class="sub" :class="s.kind" :open="s.kind === 'text'">
-					<summary v-if="s.kind === 'thinking'" class="sub-sum">
-						<el-icon><Brain /></el-icon>{{ t('session.thinking') }} #{{ si + 1 }}（{{ s.text.length }} {{ t('session.chars') }}）
-					</summary>
-					<pre v-if="s.kind === 'thinking'" class="think-text">{{ s.text }}</pre>
-					<MarkdownView v-else :raw="s.text" />
-				</details>
+				<template v-for="(s, si) in row.steps" :key="'s' + si">
+					<!-- thinking/text fold with a styled summary; 说明 stays open by default -->
+					<details v-if="s.kind === 'thinking' || s.kind === 'text'" class="sub" :class="s.kind" :open="s.kind === 'text'">
+						<summary class="sub-sum">
+							<el-icon v-if="s.kind === 'thinking'"><Brain /></el-icon>
+							{{ s.kind === 'thinking' ? t('session.thinking') : t('session.text') }} #{{ s.no }}（{{ s.text.length }} {{ t('session.chars') }}）
+						</summary>
+						<pre v-if="s.kind === 'thinking'" class="think-text">{{ s.text }}</pre>
+						<MarkdownView v-else :raw="s.text" />
+					</details>
+					<!-- compaction/file markers: one-line separators, no fold -->
+					<div v-else class="proc-mark">
+						<span class="mark-icon">{{ s.kind === 'compaction' ? '🗜' : '📎' }}</span>{{ s.text }}
+					</div>
+				</template>
 				<details v-if="row.tools.length" class="sub tools">
 					<summary class="sub-sum">🔧 {{ t('session.tools') }}（{{ row.tools.length }}）</summary>
 					<div class="tool-line" v-for="(tool, ti) in row.tools" :key="ti">
@@ -217,6 +232,15 @@ function fmtTs(ts: string | null): string {
 	word-break: break-word;
 	color: var(--el-text-color-regular);
 }
+.proc-mark {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 12px;
+	color: var(--el-text-color-secondary);
+	padding: 2px 10px;
+}
+.mark-icon { font-size: 11px; }
 .tool-line {
 	font-size: 12px;
 	padding: 3px 0;

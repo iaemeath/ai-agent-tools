@@ -1,5 +1,5 @@
 {
-  "name": "@ai-tools/server",
+  "name": "@ai-agent-tools/server",
   "version": "0.3.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,8 @@
   "dependencies": {
     "@hono/node-server": "^1.13.0",
     "hono": "^4.6.0",
-    "ssh2": "^1.17.0"
+    "ssh2": "^1.17.0",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

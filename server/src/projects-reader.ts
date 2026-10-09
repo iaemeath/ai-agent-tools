@@ -42,13 +42,19 @@ async function listFromFs(profile: ToolProfile, loc: Extract<ProjectsLocator, { 
 		if (!entry.isDirectory) continue;
 		const encoded = entry.name;
 		const folder = path.join(dir, encoded);
-		const decoded = await decodeProjectFolder(encoded);
+		// dsh encoding: the folder IS the project key (sessions root) — decode skipped.
+		const decoded = loc.encoding === 'dsh' ? encoded : await decodeProjectFolder(encoded);
 
 		let sessionCount = 0;
 		let newestMtime: number | null = null;
 		try {
 			for (const f of await getFs().readDir(folder)) {
-				if (!f.isFile || !f.name.endsWith('.jsonl')) continue;
+				// dsh: one session per session-<uuid>/ SUBDIR (holding session.v3.jsonl.zstd);
+				// dash: one session per <uuid>.jsonl file directly in the folder.
+				const isSession = loc.encoding === 'dsh'
+					? f.isDirectory && f.name.startsWith('session-')
+					: f.isFile && f.name.endsWith('.jsonl');
+				if (!isSession) continue;
 				sessionCount += 1;
 				try {
 					const mt = (await getFs().stat(path.join(folder, f.name))).mtimeMs;

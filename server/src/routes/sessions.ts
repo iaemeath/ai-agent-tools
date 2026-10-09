@@ -1,6 +1,6 @@
 // Session routes — list a project's sessions + read one session's full transcript.
 // Read-only. Tools without a transcripts locator get a clean 400 the UI renders
-// as an unsupported state (Phase A: ZCode only).
+// as an unsupported state (modeled: ZCode + Claude Code).
 
 import { Hono } from 'hono';
 import { profileOf } from '../profiles.js';
@@ -33,6 +33,10 @@ sessions.get('/:id', async (c) => {
 	}
 	const profile = profileOf(tool);
 	if (!profile.transcripts) return c.json({ error: 'unsupported', reason: 'this tool has no transcript support yet' }, 400);
+	// DSH content parsing is a later phase — the list works, reading returns unsupported.
+	if (profile.transcripts.source === 'dsh-zstd') {
+		return c.json({ error: 'unsupported', reason: 'dsh 会话内容解析尚未支持（当前仅提供会话列表）' }, 400);
+	}
 	const read = await readSession(profile, id);
 	if (!read) return c.json({ error: 'session not found or no transcript content' }, 404);
 	return c.json(read);

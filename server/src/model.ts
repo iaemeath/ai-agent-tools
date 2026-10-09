@@ -43,12 +43,17 @@ export interface ToolContent {
 	raw: string;
 }
 
+/** Component kinds across tools (Claude/ZCode plugin components + DSH composition rows). */
+export type ComponentKind = 'skill' | 'command' | 'agent' | 'hook' | 'mcp' | 'lsp' | 'monitor' | 'tool' | 'persona' | 'group';
+
 /** Structured component inventory item for plugin detail. */
 export interface PluginComponent {
-	kind: 'skill' | 'command' | 'agent' | 'hook' | 'mcp' | 'lsp' | 'monitor';
+	kind: ComponentKind;
 	name: string;
 	/** One-line summary, e.g. skill description or MCP server command. */
 	detail?: string;
+	/** Pretty-printed row config (DSH composition rows) for the level-2 JSON view. */
+	configJson?: string;
 }
 
 /** Structured plugin detail — returned by the dedicated plugin detail endpoint. */

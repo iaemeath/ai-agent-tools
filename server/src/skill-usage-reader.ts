@@ -21,7 +21,7 @@
 import path from 'node:path';
 import { getFs } from './hosts/context.js';
 import { configRoot } from './paths.js';
-import type { ToolProfile } from './profiles.js';
+import type { ToolProfile, TranscriptLocator } from './profiles.js';
 import type { SkillUsage } from './model.js';
 
 const CALL_AHEAD = /"name":\s*"Skill"[^}]*?"skill":\s*"([^"]+)"/g;
@@ -46,13 +46,13 @@ async function countInFile(file: string, counts: Map<string, number>): Promise<v
  * All transcript jsonl files, derived from the profile's transcript locator:
  * rollout/model-io-<id>.jsonl + agents/sess_<id>/agent_<id>/transcript.jsonl.
  */
-async function collectTranscriptFiles(profile: ToolProfile): Promise<string[]> {
+async function collectTranscriptFiles(profile: ToolProfile, loc: Extract<TranscriptLocator, { source: 'zcode-transcripts' }>): Promise<string[]> {
 	const fs = getFs();
 	const root = configRoot(profile);
 	const files: string[] = [];
 
 	// Main-session rollouts.
-	const rolloutDir = path.join(root, ...profile.transcripts!.rolloutRelative);
+	const rolloutDir = path.join(root, ...loc.rolloutRelative);
 	for (const e of await fs.readDir(rolloutDir)) {
 		if (e.isFile && e.name.startsWith('model-io-') && e.name.endsWith('.jsonl')) {
 			files.push(path.join(rolloutDir, e.name));
@@ -60,7 +60,7 @@ async function collectTranscriptFiles(profile: ToolProfile): Promise<string[]> {
 	}
 
 	// Subagent transcripts: agents/<sess>/agent_<id>/transcript.jsonl (two dir levels).
-	const agentsDir = path.join(root, ...profile.transcripts!.agentsRelative);
+	const agentsDir = path.join(root, ...loc.agentsRelative);
 	for (const sess of await fs.readDir(agentsDir)) {
 		if (!sess.isDirectory || !sess.name.startsWith('sess_')) continue;
 		for (const agent of await fs.readDir(path.join(agentsDir, sess.name))) {
@@ -75,11 +75,12 @@ async function collectTranscriptFiles(profile: ToolProfile): Promise<string[]> {
 
 /** Aggregate Skill-tool invocation counts (see module comment for limits). */
 export async function readSkillUsage(profile: ToolProfile): Promise<SkillUsage> {
-	// Capability gap: no transcript locator modeled (Claude Code) → unsupported.
-	if (!profile.transcripts) {
+	// ZCode-only by design: the line-level Skill-call regex targets the zcode
+	// rollout/transcript layout. Claude (claude-jsonl) → unsupported, UI hides badges.
+	if (profile.transcripts?.source !== 'zcode-transcripts') {
 		return { supported: false, filesScanned: 0, totalCalls: 0, counts: {} };
 	}
-	const files = await collectTranscriptFiles(profile);
+	const files = await collectTranscriptFiles(profile, profile.transcripts);
 	const counts = new Map<string, number>();
 	for (const f of files) await countInFile(f, counts);
 	let totalCalls = 0;

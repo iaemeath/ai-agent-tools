@@ -1,5 +1,5 @@
 {
-  "name": "@ai-tools/web",
+  "name": "@ai-agent-tools/web",
   "version": "0.3.0",
   "private": true,
   "type": "module",

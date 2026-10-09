@@ -1,6 +1,6 @@
 // Host registry — the persisted list of configured remote SSH hosts.
 //
-// Stored at <dataRoot>/hosts.json (i.e. ~/.ai-tools/hosts.json). This is the MAIN machine's
+// Stored at <dataRoot>/hosts.json (i.e. ~/.ai-agent-tools/hosts.json). This is the MAIN machine's
 // own bookkeeping file, NOT a remote config — so it uses node:fs/promises directly (never
 // the FsBackend/SSH path), and is therefore unaffected by which host a request is operating on.
 // A legacy ~/.ccc-ui/hosts.json (pre-rename) is migrated once on first read.

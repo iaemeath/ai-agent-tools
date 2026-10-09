@@ -1,7 +1,7 @@
 // Ported 1:1 from the previous Svelte version (src/lib/types/tool.ts).
 // These mirror the server's wire format exactly (camelCase, level-tagged scope union).
 
-export type ToolId = 'claude' | 'zcode';
+export type ToolId = 'claude' | 'zcode' | 'dsh';
 export type ToolKind = 'skill' | 'plugin';
 export type Status = 'enabled' | 'disabled' | 'name-only' | 'user-only' | 'inherited';
 export type Mechanism = 'nativeToggle';
@@ -35,12 +35,14 @@ export interface ToolContent {
 	raw: string;
 }
 
-export type ComponentKind = 'skill' | 'command' | 'agent' | 'hook' | 'mcp' | 'lsp' | 'monitor';
+export type ComponentKind = 'skill' | 'command' | 'agent' | 'hook' | 'mcp' | 'lsp' | 'monitor' | 'tool' | 'persona' | 'group';
 
 export interface PluginComponent {
 	kind: ComponentKind;
 	name: string;
 	detail?: string;
+	/** Pretty-printed row config (DSH composition rows) for the level-2 JSON view. */
+	configJson?: string;
 }
 
 export interface PluginDetail {
@@ -81,7 +83,7 @@ export interface ProjectInfo {
 // ---- Session reading (mirror of server model.ts + transcript-parser.ts) ----
 
 export interface TranscriptStep {
-	type: 'thinking' | 'text';
+	type: 'thinking' | 'text' | 'compaction' | 'file';
 	text: string;
 }
 
