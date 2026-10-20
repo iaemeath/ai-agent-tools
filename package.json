@@ -1,6 +1,6 @@
 {
   "name": "ai-agent-tools",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Manage AI coding-agent configs across tools (Claude Code, ZCode) — skills, plugins, projects, instructions, rules, commands, agents, hooks, MCP (Config-as-SSOT). Node + Hono + Vue 3 + Element Plus.",
